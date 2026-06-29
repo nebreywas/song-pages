@@ -1,0 +1,29 @@
+appId: com.sawyerhouse.electron-starter
+productName: Electron Template
+copyright: Copyright © SawyerHouse
+
+directories:
+  output: build
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+
+# Native SQLite bindings must live outside the asar archive.
+asarUnpack:
+  - "**/*.node"
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+
+win:
+  target:
+    - nsis
+
+linux:
+  target:
+    - AppImage

@@ -1,0 +1,83 @@
+/**
+ * SQLite persistence layer (main process only).
+ *
+ * SQLite is the canonical local store for settings, caches, and metadata.
+ * Large binary assets should remain on the filesystem, not in the database.
+ */
+const fs = require('fs');
+const path = require('path');
+const Database = require('better-sqlite3');
+const { app } = require('electron');
+const logger = require('./logger');
+
+let db = null;
+
+/**
+ * Open (or create) the application database under userData.
+ */
+function initDatabase() {
+  const dbDir = path.join(app.getPath('userData'), 'database');
+  fs.mkdirSync(dbDir, { recursive: true });
+
+  const dbPath = path.join(dbDir, 'app.db');
+  db = new Database(dbPath);
+
+  // WAL mode is a safe default for desktop apps with concurrent reads.
+  db.pragma('journal_mode = WAL');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+
+  logger.info('SQLite database ready', { path: dbPath });
+  return db;
+}
+
+function getDatabase() {
+  if (!db) {
+    throw new Error('Database not initialized');
+  }
+  return db;
+}
+
+function getSetting(key, defaultValue = null) {
+  const row = getDatabase().prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  if (!row) {
+    return defaultValue;
+  }
+
+  try {
+    return JSON.parse(row.value);
+  } catch {
+    return row.value;
+  }
+}
+
+function setSetting(key, value) {
+  const serialized = JSON.stringify(value);
+  getDatabase()
+    .prepare(
+      `INSERT INTO settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    )
+    .run(key, serialized);
+}
+
+function closeDatabase() {
+  if (db) {
+    db.close();
+    db = null;
+    logger.info('SQLite database closed');
+  }
+}
+
+module.exports = {
+  initDatabase,
+  getDatabase,
+  getSetting,
+  setSetting,
+  closeDatabase,
+};

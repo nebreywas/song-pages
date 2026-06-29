@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    />
+    <title>Electron Template</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">SawyerHouse</p>
+        <h1>Electron Template</h1>
+        <p class="subtitle">Hello World</p>
+      </header>
+
+      <section class="card">
+        <p class="lede">
+          This is the canonical starting point for SawyerHouse desktop applications.
+          The renderer is a standard web app; native capabilities are exposed only
+          through the preload bridge.
+        </p>
+
+        <div class="actions">
+          <button id="load-example" type="button" class="button primary">
+            Load Example Web Site
+          </button>
+        </div>
+
+        <p id="version" class="meta" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
