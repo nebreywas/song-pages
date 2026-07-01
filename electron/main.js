@@ -33,6 +33,8 @@ function createMainWindow() {
       sandbox: false,
       nodeIntegration: false,
       webviewTag: true,
+      // Keep playback + visualizer FFT polling running when projection window has focus.
+      backgroundThrottling: false,
       // Allow hls.js to fetch .m3u8/.ts from artist CDNs (no CORS headers on static hosts).
       webSecurity: false,
     },

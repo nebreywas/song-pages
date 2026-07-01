@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { renderMarkdownToHtml } from '@shared/markdown';
+import { renderMarkdownPreview } from '../lib/markdownPreview';
 
 type MarkdownFieldProps = {
   label: string;
@@ -23,7 +23,7 @@ export function MarkdownField({
   const [mode, setMode] = useState<'write' | 'preview'>('write');
 
   const previewHtml = useMemo(() => {
-    const html = renderMarkdownToHtml(value);
+    const html = renderMarkdownPreview(value);
     return html || '<p class="markdown-empty">Nothing to preview.</p>';
   }, [value]);
 

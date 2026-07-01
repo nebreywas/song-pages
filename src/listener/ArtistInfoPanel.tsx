@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { renderMarkdownToHtml } from '@shared/markdown';
+import { renderMarkdownPreview } from '../lib/markdownPreview';
 import { getApp } from '../lib/bridge';
 import type { ArtistRow } from '../types/app';
 import {
@@ -59,7 +59,7 @@ export function ArtistInfoPanel({ artist, busy, onRemove, onProfileUpdated }: Ar
   const socialLinks = listArtistSocialLinks(parseArtistSocial(profileArtist.artist_social_json));
   const songLabel = formatArtistSongCount(profileArtist.song_count);
   const bio = profileArtist.artist_bio?.trim() ?? '';
-  const bioHtml = useMemo(() => (bio ? renderMarkdownToHtml(bio) : ''), [bio]);
+  const bioHtml = useMemo(() => (bio ? renderMarkdownPreview(bio) : ''), [bio]);
   const siteUrl = subscriptionSiteUrl(profileArtist);
 
   const openArtistSite = () => {

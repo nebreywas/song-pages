@@ -18,6 +18,12 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'src/index.html'),
+        visualizer: path.resolve(__dirname, 'src/visualizer-window/visualizer.html'),
+      },
+    },
   },
   server: {
     port: 5173,

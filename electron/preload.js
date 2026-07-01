@@ -63,4 +63,44 @@ contextBridge.exposeInMainWorld('app', {
     checkFfmpeg: () => ipcRenderer.invoke('artist:checkFfmpeg'),
     readMp3Bytes: (filePath) => ipcRenderer.invoke('artist:readMp3Bytes', filePath),
   },
+
+  visualizer: {
+    open: (options) => ipcRenderer.invoke('visualizer:open', options),
+    close: () => ipcRenderer.invoke('visualizer:close'),
+    setFullScreen: (fullscreen) => ipcRenderer.invoke('visualizer:setFullScreen', fullscreen),
+    status: () => ipcRenderer.invoke('visualizer:status'),
+    listDisplays: () => ipcRenderer.invoke('visualizer:listDisplays'),
+    sendConfig: (payload) => ipcRenderer.send('visualizer:sendConfig', payload),
+    sendFrame: (payload) => ipcRenderer.send('visualizer:sendFrame', payload),
+    onConfig: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('visualizer:config', handler);
+      return () => ipcRenderer.removeListener('visualizer:config', handler);
+    },
+    onFrame: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('visualizer:frame', handler);
+      return () => ipcRenderer.removeListener('visualizer:frame', handler);
+    },
+    onOpened: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('visualizer:opened', handler);
+      return () => ipcRenderer.removeListener('visualizer:opened', handler);
+    },
+    onClosed: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('visualizer:closed', handler);
+      return () => ipcRenderer.removeListener('visualizer:closed', handler);
+    },
+    onFullScreenChanged: (callback) => {
+      const handler = (_event, fullscreen) => callback(fullscreen);
+      ipcRenderer.on('visualizer:fullscreen-changed', handler);
+      return () => ipcRenderer.removeListener('visualizer:fullscreen-changed', handler);
+    },
+    onRequestSync: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('visualizer:request-sync', handler);
+      return () => ipcRenderer.removeListener('visualizer:request-sync', handler);
+    },
+  },
 });

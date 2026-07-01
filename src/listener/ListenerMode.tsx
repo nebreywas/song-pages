@@ -24,6 +24,10 @@ import {
   LIKED_SONGS_ARTIST_ID,
 } from './likedSongs';
 import type { ArtistRow, SongRow } from '../types/app';
+import { EmbeddedVisualizerHost } from '../visualizers/EmbeddedVisualizerHost';
+import { VisualizerControls } from '../visualizers/VisualizerControls';
+import { useVisualizerManager } from '../visualizers/useVisualizerManager';
+import '../styles/visualizer.css';
 
 type MainContentView = 'welcome' | 'artist' | 'song';
 
@@ -118,6 +122,14 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     () => sortPlaylistSongs(songs, sortColumn, sortDirection, sortDurationsSnapshot),
     [songs, sortColumn, sortDirection, sortDurationsSnapshot],
   );
+
+  const visualizer = useVisualizerManager({
+    audioRef,
+    playingSong,
+    isPlaying,
+    currentTime,
+    duration,
+  });
 
   const buildDurationSnapshot = useCallback(() => {
     const snapshot: Record<number, number> = {};
@@ -747,6 +759,21 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   }, []);
 
   const renderMainContent = () => {
+    if (visualizer.embeddedActive && visualizer.canVisualize) {
+      return (
+        <EmbeddedVisualizerHost
+          pluginId={visualizer.embeddedPluginId}
+          analyser={visualizer.analyser}
+          frequencyData={visualizer.frequencyData}
+          timeDomainData={visualizer.timeDomainData}
+          isPlaying={isPlaying}
+          currentTime={currentTime}
+          duration={duration}
+          song={visualizer.songInfo}
+        />
+      );
+    }
+
     if (mainContentView === 'song' && pageUrl) {
       return (
         <>
@@ -819,8 +846,20 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
         <div className="listener-main" ref={mainColumnRef}>
           <section className="song-page-panel panel" style={{ height: contentHeight, flex: 'none' }}>
+            <VisualizerControls
+              embeddedActive={visualizer.embeddedActive}
+              activePluginId={visualizer.activePluginId}
+              windowOpen={visualizer.windowOpen}
+              windowFullscreen={visualizer.windowFullscreen}
+              canVisualize={visualizer.canVisualize}
+              onToggleEmbedded={visualizer.toggleEmbedded}
+              onSelectPlugin={visualizer.selectPlugin}
+              onOpenWindow={() => void visualizer.openWindow(false)}
+              onCloseWindow={() => void visualizer.closeWindow()}
+              onToggleFullscreen={() => void visualizer.toggleFullscreen()}
+            />
             <h2 className="sr-only">Listener content</h2>
-            {mainContentView === 'song' && pageUrl && !coverModalOpen ? (
+            {mainContentView === 'song' && pageUrl && !coverModalOpen && !visualizer.embeddedActive ? (
               <SongLikeButton
                 liked={currentSongLiked}
                 disabled={!canToggleLike || likeBusy}

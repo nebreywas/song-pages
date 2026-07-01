@@ -147,6 +147,29 @@ declare global {
           error?: string;
         }>;
       };
+      visualizer: {
+        open: (options?: { fullscreen?: boolean; displayId?: number | null }) => Promise<{ ok: boolean; error?: string }>;
+        close: () => Promise<{ ok: boolean; error?: string }>;
+        setFullScreen: (fullscreen: boolean) => Promise<{ ok: boolean; error?: string }>;
+        status: () => Promise<{
+          ok: boolean;
+          data?: { open: boolean; fullscreen: boolean };
+          error?: string;
+        }>;
+        listDisplays: () => Promise<{
+          ok: boolean;
+          data?: Array<{ id: number; label: string; primary: boolean; bounds: { x: number; y: number; width: number; height: number } }>;
+          error?: string;
+        }>;
+        sendConfig: (payload: import('@shared/visualizerMessages').VisualizerStreamConfig) => void;
+        sendFrame: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void;
+        onConfig: (callback: (payload: import('@shared/visualizerMessages').VisualizerStreamConfig) => void) => () => void;
+        onFrame: (callback: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void) => () => void;
+        onOpened: (callback: () => void) => () => void;
+        onClosed: (callback: () => void) => () => void;
+        onFullScreenChanged: (callback: (fullscreen: boolean) => void) => () => void;
+        onRequestSync?: (callback: () => void) => () => void;
+      };
     };
   }
 }

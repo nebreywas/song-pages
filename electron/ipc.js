@@ -1,7 +1,7 @@
 /**
  * IPC handlers — bridge between renderer and main-process capabilities.
  */
-const { app, dialog, ipcMain, shell } = require('electron');
+const { app, dialog, ipcMain, shell, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const database = require('./database');
@@ -9,6 +9,7 @@ const logger = require('./logger');
 const listenerLibrary = require('./listener/library');
 const listenerSubscribe = require('./listener/subscribe');
 const { bindSongPageGuestById } = require('./listener/guestSecurity');
+const visualizerWindow = require('./visualizerWindow');
 
 function registerIpcHandlers() {
   ipcMain.handle('app:getVersion', () => app.getVersion());
@@ -327,6 +328,41 @@ function registerIpcHandlers() {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message };
     }
+  });
+
+  // --- Visualizer projection window ---
+
+  ipcMain.handle('visualizer:open', (event, options = {}) => {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!mainWindow) return { ok: false, error: 'Main window not found.' };
+    return visualizerWindow.openVisualizerWindow(mainWindow, options);
+  });
+
+  ipcMain.handle('visualizer:close', () => visualizerWindow.closeVisualizerWindow());
+
+  ipcMain.handle('visualizer:setFullScreen', (_event, fullscreen) =>
+    visualizerWindow.setVisualizerFullScreen(fullscreen),
+  );
+
+  ipcMain.handle('visualizer:status', () => ({
+    ok: true,
+    data: {
+      open: visualizerWindow.isVisualizerWindowOpen(),
+      fullscreen: visualizerWindow.isVisualizerFullScreen(),
+    },
+  }));
+
+  ipcMain.handle('visualizer:listDisplays', () => ({
+    ok: true,
+    data: visualizerWindow.listDisplays(),
+  }));
+
+  ipcMain.on('visualizer:sendConfig', (_event, payload) => {
+    visualizerWindow.sendVisualizerConfig(payload);
+  });
+
+  ipcMain.on('visualizer:sendFrame', (_event, payload) => {
+    visualizerWindow.sendVisualizerFrame(payload);
   });
 }
 
