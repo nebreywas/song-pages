@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": false,
+    "outDir": "electron/compiler-dist",
+    "declaration": false,
+    "allowImportingTsExtensions": false
+  },
+  "include": ["compiler/**/*", "shared/**/*"],
+  "exclude": ["node_modules"]
+}

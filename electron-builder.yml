@@ -1,6 +1,6 @@
-appId: com.sawyerhouse.electron-starter
-productName: Electron Template
-copyright: Copyright © SawyerHouse
+appId: com.sawyerhouse.song-pages
+productName: Song Pages
+copyright: Copyright © Ben Sawyer
 
 directories:
   output: build
@@ -9,14 +9,17 @@ directories:
 files:
   - dist/**/*
   - electron/**/*
+  - compiler/**/*
+  - artist-page-templates/**/*
+  - shared/**/*
+  - node_modules/hls.js/**/*
   - package.json
 
-# Native SQLite bindings must live outside the asar archive.
 asarUnpack:
   - "**/*.node"
 
 mac:
-  category: public.app-category.developer-tools
+  category: public.app-category.music
   target:
     - dmg
 

@@ -32,6 +32,10 @@ function initDatabase() {
     )
   `);
 
+  // Listener Mode tables (artists, songs) — see electron/listener/library.js
+  const { initListenerSchema } = require('./listener/library');
+  initListenerSchema();
+
   logger.info('SQLite database ready', { path: dbPath });
   return db;
 }

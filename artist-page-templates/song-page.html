@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noai, noimageai" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>{{SONG_TITLE}} — {{ARTIST_NAME}}</title>
+{{SHARE_META_HTML}}
+    <script src="../js/site-app-mode.js"></script>
+    <link rel="stylesheet" href="../css/site.css" />
+  </head>
+  <body data-site-base="../" data-song-index="{{SONG_INDEX}}">
+    <main class="site-shell">
+      <a class="icon-btn icon-btn-home" href="../index.html" aria-label="Home" data-songpages-client-chrome>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 8h-3v10h-5v-6H11v6H6V11H3l9-8z"/></svg>
+      </a>
+
+      <div class="song-hero">
+        {{COVER_HTML}}
+        <div class="song-hero-meta">
+          <div class="song-title-row">
+            <h1 class="song-title">{{SONG_TITLE}}</h1>
+            <button
+              type="button"
+              class="icon-btn song-page-play"
+              data-songpages-client-chrome
+              data-play-index="0"
+              aria-label="Play {{SONG_TITLE}}"
+            >
+              {{PLAY_ICON_SVG}}
+            </button>
+          </div>
+          <p class="caption">{{SONG_CAPTION}}</p>
+          {{STREAM_LINKS_HTML}}
+        </div>
+      </div>
+
+      {{EXTRA_IMAGE_HTML}}
+
+      <section class="song-about">
+        <h2>About</h2>
+        <div class="markdown-body">{{SONG_ABOUT}}</div>
+      </section>
+
+      <section class="lyrics-block">
+        <h2>Lyrics</h2>
+        <div class="markdown-body">{{SONG_LYRICS}}</div>
+      </section>
+    </main>
+
+    <div id="cover-modal" class="cover-modal hidden" role="dialog" aria-modal="true" aria-label="Cover art">
+      <button type="button" class="cover-modal-close" aria-label="Close">&times;</button>
+      <img id="cover-modal-img" alt="" />
+    </div>
+
+    {{PLAYER_FOOTER_HTML}}
+
+    <script type="application/json" id="site-playlist">{{PLAYLIST_JSON}}</script>
+    <script src="../js/hls.light.min.js"></script>
+    <script src="../js/site-player.js"></script>
+    <script src="../js/site-cover-modal.js"></script>
+  </body>
+</html>

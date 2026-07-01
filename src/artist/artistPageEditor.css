@@ -1,0 +1,354 @@
+.artist-editor-page {
+  min-height: 100vh;
+  background: #0c1018;
+  color: #e8ecf4;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.artist-editor-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 0.75rem;
+  min-height: calc(100vh - 56px);
+  padding: 0.75rem;
+  background: var(--bg, #0c1018);
+  color: var(--text, #e8ecf4);
+}
+
+.artist-editor-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.artist-editor-sidebar-brand {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem;
+}
+
+.artist-editor-sidebar-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.artist-editor-sidebar-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted, #8b95a8);
+  line-height: 1.4;
+}
+
+.artist-projects-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.artist-projects-panel .artist-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.artist-project-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border, #2a3344);
+}
+
+.artist-project-actions .btn {
+  flex: 1;
+  font-size: 0.82rem;
+}
+
+.artist-editor-main {
+  min-height: 0;
+  overflow: auto;
+}
+
+.artist-editor-shell {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 0.5rem 1rem 3rem;
+}
+
+.artist-editor-kicker {
+  margin: 0 0 0.25rem;
+  color: #8b95a8;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.artist-editor-shell h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+}
+
+.artist-editor-lead {
+  margin: 0 0 1.25rem;
+  color: #b7c0d1;
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+
+.editor-panel {
+  border: 1px solid #2a3344;
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: rgba(21, 27, 40, 0.9);
+}
+
+.editor-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.65rem;
+}
+
+.editor-field span {
+  font-size: 0.82rem;
+  color: #b7c0d1;
+}
+
+.editor-field input,
+.editor-field textarea,
+.editor-field select {
+  font: inherit;
+  color: inherit;
+  border: 1px solid #2a3344;
+  border-radius: 6px;
+  background: #0f1420;
+  padding: 0.45rem 0.55rem;
+}
+
+.editor-field textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
+.editor-grid-2 {
+  display: grid;
+  gap: 0.65rem;
+}
+
+@media (min-width: 640px) {
+  .editor-grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.song-slot {
+  border: 1px solid #2a3344;
+  border-radius: 8px;
+  margin-bottom: 0.65rem;
+  overflow: hidden;
+}
+
+.song-slot summary {
+  cursor: pointer;
+  padding: 0.55rem 0.75rem;
+  background: #151b28;
+  font-weight: 600;
+  list-style: none;
+}
+
+.song-slot summary::-webkit-details-marker {
+  display: none;
+}
+
+.song-slot-body {
+  padding: 0.75rem;
+}
+
+.song-slot-meta {
+  font-size: 0.78rem;
+  color: #8b95a8;
+  margin-left: 0.5rem;
+  font-weight: 400;
+}
+
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.editor-btn {
+  appearance: none;
+  border: 1px solid #3a4a62;
+  border-radius: 999px;
+  background: #1a2438;
+  color: inherit;
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.editor-btn-primary {
+  border-color: color-mix(in srgb, #6ea8ff 50%, #2a3344);
+  background: color-mix(in srgb, #6ea8ff 18%, #151b28);
+  font-weight: 600;
+}
+
+.editor-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editor-error {
+  color: #ff8f8f;
+  margin-top: 0.75rem;
+}
+
+.editor-success {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid #2a3344;
+  border-radius: 8px;
+  background: rgba(21, 27, 40, 0.75);
+  font-size: 0.9rem;
+}
+
+.editor-success a {
+  color: #6ea8ff;
+}
+
+.editor-hint {
+  font-size: 0.78rem;
+  color: #8b95a8;
+  margin-top: 0.2rem;
+}
+
+.editor-hint code {
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+
+.editor-path {
+  margin-top: 0.25rem;
+}
+
+.editor-status {
+  font-size: 0.78rem;
+  color: #8b95a8;
+  margin-bottom: 0.75rem;
+}
+
+/* ── Markdown fields (bio, about, lyrics) ── */
+.markdown-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.markdown-field-header > span {
+  font-size: 0.82rem;
+  color: #b7c0d1;
+}
+
+.markdown-field-tabs {
+  display: inline-flex;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  border-radius: 999px;
+  border: 1px solid #2a3344;
+  background: #0f1420;
+}
+
+.markdown-field-tabs button {
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #8b95a8;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+
+.markdown-field-tabs button.active {
+  background: #1a2438;
+  color: #e8ecf4;
+}
+
+.markdown-field-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #8b95a8;
+}
+
+.markdown-preview {
+  min-height: 4.5rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #2a3344;
+  border-radius: 6px;
+  background: #0f1420;
+  line-height: 1.5;
+  overflow: auto;
+}
+
+.markdown-field .markdown-body p {
+  margin: 0 0 0.75rem;
+}
+
+.markdown-field .markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-field .markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-field .markdown-body h1,
+.markdown-field .markdown-body h2,
+.markdown-field .markdown-body h3 {
+  margin: 1rem 0 0.4rem;
+  font-size: 1rem;
+  color: #e8ecf4;
+}
+
+.markdown-field .markdown-body ul,
+.markdown-field .markdown-body ol {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.markdown-field .markdown-body blockquote {
+  margin: 0 0 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid #3a4a62;
+  color: #b7c0d1;
+}
+
+.markdown-field .markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+  background: #151b28;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+
+.markdown-field .markdown-body a {
+  color: #6ea8ff;
+}
+
+.markdown-empty {
+  color: #8b95a8;
+  font-style: italic;
+}

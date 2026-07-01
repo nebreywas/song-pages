@@ -1,0 +1,22 @@
+<footer id="site-player-footer" class="hidden" aria-label="Player">
+  <button type="button" id="footer-play-btn" class="icon-btn" aria-label="Play">
+    <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+    <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z"/></svg>
+  </button>
+  <div class="footer-title-wrap">
+    <span id="footer-track-title">—</span>
+  </div>
+  <div id="footer-scrub" role="slider" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" tabindex="0">
+    <div id="footer-scrub-fill"></div>
+  </div>
+  <span id="footer-time">0:00 / 0:00</span>
+  <button type="button" id="footer-repeat-btn" class="icon-btn" aria-label="Repeat off" aria-pressed="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h12v3l4-4-4-4v3H5v6h2V7zm10 10H5v-3l-4 4 4 4v-3h14v-6h-2v4z"/></svg>
+  </button>
+  <button type="button" id="footer-mute-btn" class="icon-btn" aria-label="Mute">
+    <svg class="icon-volume" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 5V5L7 10H3zm13.5 2a4.5 4.5 0 000-3l1.46-1.46a6.5 6.5 0 010 5.92L16.5 12zm2.89-2.89a8 8 0 010 5.78l1.42 1.42a10 10 0 000-7.2l-1.42 1.42z"/></svg>
+    <svg class="icon-mute" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M16.5 12l2.89 2.89 1.41-1.42L17.91 12l2.89-2.89-1.41-1.41L16.5 10.59 13.61 7.7 12.2 9.11 14.09 11H3v2h11.09l-1.89 1.89 1.41 1.41 2.89-2.89 3.39 3.39 1.41-1.41L16.5 12z"/></svg>
+  </button>
+  <input type="range" id="footer-volume" min="0" max="1" step="0.01" value="1" aria-label="Volume" />
+  <audio id="footer-audio" controlsList="nodownload" preload="none"></audio>
+</footer>
