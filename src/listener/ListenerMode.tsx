@@ -25,9 +25,11 @@ import {
 } from './likedSongs';
 import type { ArtistRow, SongRow } from '../types/app';
 import { EmbeddedVisualizerHost } from '../visualizers/EmbeddedVisualizerHost';
-import { VisualizerControls } from '../visualizers/VisualizerControls';
 import { useVisualizerManager } from '../visualizers/useVisualizerManager';
+import { VcModeModal } from '../vc-mode/VcModeModal';
+import { useVcModeManager } from '../vc-mode/useVcModeManager';
 import '../styles/visualizer.css';
+import '../vc-mode/vcMode.css';
 
 type MainContentView = 'welcome' | 'artist' | 'song';
 
@@ -129,6 +131,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     isPlaying,
     currentTime,
     duration,
+    pageUrl,
   });
 
   const buildDurationSnapshot = useCallback(() => {
@@ -336,6 +339,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     },
     [repeatMode, shuffle, sortedSongs],
   );
+
+  const vc = useVcModeManager({
+    audioRef,
+    playingSong,
+    sortedSongs,
+    playingSongId,
+    pickNextSongId,
+    artists,
+    isPlaying,
+    currentTime,
+    duration,
+  });
 
   const markSongAvailability = useCallback(
     async (song: SongRow, unavailable: boolean) => {
@@ -838,6 +853,17 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             onCycleRepeat={cycleRepeat}
             onVolumeChange={setVolume}
             onSeek={handleSeek}
+            embeddedVisualizerActive={visualizer.embeddedActive}
+            canUseVisualizer={visualizer.canVisualize && !vc.vcOpen}
+            onToggleEmbeddedVisualizer={visualizer.toggleEmbedded}
+            projectionOpen={visualizer.windowOpen}
+            onToggleProjection={() => void visualizer.toggleProjection()}
+            onVcClick={() => {
+              if (vc.vcOpen) void vc.closeVcMode();
+              else vc.openModal();
+            }}
+            vcLive={vc.vcOpen}
+            vcDisabled={!songs.length}
           />
           <audio ref={audioRef} preload="metadata" />
         </section>
@@ -846,18 +872,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
         <div className="listener-main" ref={mainColumnRef}>
           <section className="song-page-panel panel" style={{ height: contentHeight, flex: 'none' }}>
-            <VisualizerControls
-              embeddedActive={visualizer.embeddedActive}
-              activePluginId={visualizer.activePluginId}
-              windowOpen={visualizer.windowOpen}
-              windowFullscreen={visualizer.windowFullscreen}
-              canVisualize={visualizer.canVisualize}
-              onToggleEmbedded={visualizer.toggleEmbedded}
-              onSelectPlugin={visualizer.selectPlugin}
-              onOpenWindow={() => void visualizer.openWindow(false)}
-              onCloseWindow={() => void visualizer.closeWindow()}
-              onToggleFullscreen={() => void visualizer.toggleFullscreen()}
-            />
             <h2 className="sr-only">Listener content</h2>
             {mainContentView === 'song' && pageUrl && !coverModalOpen && !visualizer.embeddedActive ? (
               <SongLikeButton
@@ -993,6 +1007,20 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           onClose={() => setPlaylistContextMenu(null)}
         />
       ) : null}
+
+      <VcModeModal
+        open={vc.modalOpen}
+        onClose={vc.closeModal}
+        onStart={(config) => {
+          if (playingSongId == null) {
+            setError('Play a song before starting VC Mode.');
+            vc.closeModal();
+            return;
+          }
+          visualizer.dismissVisualizer();
+          void vc.startVcMode(config);
+        }}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 build/
+electron/compiler-dist/
 *.log
 .DS_Store
 *.db

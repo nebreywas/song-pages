@@ -14,10 +14,15 @@ export type VisualizerStreamFrame = {
   isPlaying: boolean;
 };
 
+export type ProjectionMode = 'page' | 'visualizer';
+
 export type VisualizerStreamConfig = {
   type: 'config';
   pluginId: string;
   song: VisualizerSongInfo | null;
+  /** What the projection window shows — song page webview or FFT visualizer. */
+  projectionMode?: ProjectionMode;
+  pageUrl?: string | null;
 };
 
 export type VisualizerStreamMessage = VisualizerStreamFrame | VisualizerStreamConfig;

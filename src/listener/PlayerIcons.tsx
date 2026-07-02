@@ -123,6 +123,17 @@ export function IconAdd({ className }: IconProps) {
   );
 }
 
+/** images/menu-bar-icons2.svg — hamburger / options menu. */
+export function IconMenu({ className }: IconProps) {
+  return (
+    <PlayerIcon className={className} viewBox="0 0 1600 1600">
+      <path d="M0 700h440v200H0z" />
+      <path d="M579 700h441v200H579z" />
+      <path d="M1159 700h441v200h-441z" />
+    </PlayerIcon>
+  );
+}
+
 export function IconChevronLeft({ className }: IconProps) {
   return (
     <PlayerIcon className={className} viewBox="0 0 24 24">

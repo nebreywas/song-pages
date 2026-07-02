@@ -13,6 +13,8 @@ type StreamState = {
   isPlaying: boolean;
   pluginId: string;
   song: VisualizerStreamConfig['song'];
+  projectionMode: VisualizerStreamConfig['projectionMode'];
+  pageUrl: string | null;
   frame: number;
 };
 
@@ -20,9 +22,16 @@ type StreamState = {
 export function useVisualizerIpcStream(): { stream: StreamState | null; connected: boolean } {
   const [state, setState] = useState<StreamState | null>(null);
   const [connected, setConnected] = useState(false);
-  const metaRef = useRef<{ pluginId: string; song: VisualizerStreamConfig['song'] }>({
+  const metaRef = useRef<{
+    pluginId: string;
+    song: VisualizerStreamConfig['song'];
+    projectionMode: VisualizerStreamConfig['projectionMode'];
+    pageUrl: string | null;
+  }>({
     pluginId: 'bars',
     song: null,
+    projectionMode: 'visualizer',
+    pageUrl: null,
   });
 
   useEffect(() => {
@@ -34,7 +43,12 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
 
     const offConfig = app.visualizer.onConfig((message: VisualizerStreamConfig) => {
       setConnected(true);
-      metaRef.current = { pluginId: message.pluginId, song: message.song };
+      metaRef.current = {
+        pluginId: message.pluginId,
+        song: message.song,
+        projectionMode: message.projectionMode ?? 'visualizer',
+        pageUrl: message.pageUrl ?? null,
+      };
       setState((prev) => ({
         frequencyData: prev?.frequencyData ?? frequencyData,
         timeDomainData: prev?.timeDomainData ?? timeDomainData,
@@ -43,6 +57,8 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
         isPlaying: prev?.isPlaying ?? false,
         pluginId: message.pluginId,
         song: message.song,
+        projectionMode: message.projectionMode ?? 'visualizer',
+        pageUrl: message.pageUrl ?? null,
         frame: prev?.frame ?? 0,
       }));
     });
@@ -62,6 +78,8 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
         isPlaying: message.isPlaying,
         pluginId: metaRef.current.pluginId,
         song: metaRef.current.song,
+        projectionMode: metaRef.current.projectionMode,
+        pageUrl: metaRef.current.pageUrl,
         frame: Date.now(),
       });
     });
@@ -79,17 +97,31 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
 /** ~60fps polling — setInterval keeps running when another window has focus (rAF does not). */
 const FRAME_INTERVAL_MS = 16;
 
-/** Main window: push analyser frames to the projection window via IPC. */
+/** Main window: push config/FFT frames to the projection window via IPC. */
 export function useVisualizerIpcSender(options: {
   enabled: boolean;
+  sendFrames: boolean;
   analyser: AnalyserNode | null;
   pluginId: string;
   song: VisualizerStreamConfig['song'];
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  projectionMode: VisualizerStreamConfig['projectionMode'];
+  pageUrl: string | null;
 }): void {
-  const { enabled, analyser, pluginId, song, isPlaying, currentTime, duration } = options;
+  const {
+    enabled,
+    sendFrames,
+    analyser,
+    pluginId,
+    song,
+    isPlaying,
+    currentTime,
+    duration,
+    projectionMode,
+    pageUrl,
+  } = options;
   const intervalRef = useRef<number | null>(null);
   const timingRef = useRef({ currentTime, duration, isPlaying });
 
@@ -102,7 +134,13 @@ export function useVisualizerIpcSender(options: {
     if (!enabled || !app?.visualizer?.sendConfig) return;
 
     const sendConfig = () => {
-      const config: VisualizerStreamConfig = { type: 'config', pluginId, song };
+      const config: VisualizerStreamConfig = {
+        type: 'config',
+        pluginId,
+        song,
+        projectionMode,
+        pageUrl,
+      };
       app.visualizer!.sendConfig(config);
     };
 
@@ -114,11 +152,11 @@ export function useVisualizerIpcSender(options: {
       window.clearInterval(intervalId);
       offSync?.();
     };
-  }, [enabled, pluginId, song]);
+  }, [enabled, pageUrl, pluginId, projectionMode, song]);
 
   useEffect(() => {
     const app = getApp();
-    if (!enabled || !analyser || !app?.visualizer?.sendFrame) {
+    if (!enabled || !sendFrames || !analyser || !app?.visualizer?.sendFrame) {
       if (intervalRef.current != null) {
         window.clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -148,5 +186,5 @@ export function useVisualizerIpcSender(options: {
         intervalRef.current = null;
       }
     };
-  }, [analyser, enabled]);
+  }, [analyser, enabled, sendFrames]);
 }

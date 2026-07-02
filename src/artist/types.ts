@@ -67,7 +67,7 @@ export const MAX_CAPTION = 120;
 export const MAX_ABOUT = 1000;
 export const MAX_ARTIST_BIO = 5000;
 export const SONG_IMAGE_MAX_EDGE = 1000;
-export const ARTIST_PHOTO_MAX_EDGE = 500;
+export { ARTIST_PHOTO_MAX_EDGE } from "../../shared/artistConstants";
 
 export const DRAFT_STORAGE_KEY = 'song-pages-artist-draft';
 

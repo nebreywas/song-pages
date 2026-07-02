@@ -11,6 +11,7 @@ type VisualizerControlsProps = {
   windowOpen: boolean;
   windowFullscreen: boolean;
   canVisualize: boolean;
+  vcModeActive?: boolean;
   onToggleEmbedded: () => void;
   onSelectPlugin: (pluginId: string) => void;
   onOpenWindow: () => void;
@@ -25,6 +26,7 @@ export function VisualizerControls({
   windowOpen,
   windowFullscreen,
   canVisualize,
+  vcModeActive,
   onToggleEmbedded,
   onSelectPlugin,
   onOpenWindow,
@@ -61,6 +63,10 @@ export function VisualizerControls({
 
   return (
     <div className="visualizer-controls">
+      {vcModeActive ? (
+        <p className="visualizer-controls-hint">Visualizer controls disabled while VC Mode is live.</p>
+      ) : (
+        <>
       <div className="visualizer-controls-group">
         <button
           type="button"
@@ -143,6 +149,8 @@ export function VisualizerControls({
         Panel or projection — one at a time.
         {windowOpen ? ' Projection active.' : embeddedActive ? ' Panel visualizer active.' : ''}
       </p>
+        </>
+      )}
     </div>
   );
 }

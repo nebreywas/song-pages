@@ -15,8 +15,11 @@ files:
   - node_modules/hls.js/**/*
   - package.json
 
+# Exclude dev-only vite middleware from packaged compiler output.
 asarUnpack:
-  - "**/*.node"
+  - "**/better_sqlite3.node"
+
+# compiler-dist is emitted under electron/ by `npm run build:compiler`.
 
 mac:
   category: public.app-category.music
@@ -24,8 +27,25 @@ mac:
     - dmg
 
 win:
+  # No spaces in the exe name — avoids broken Start Menu shortcuts on some Windows builds.
+  executableName: SongPages
   target:
-    - nsis
+    - target: nsis
+      arch: x64
+    - target: portable
+      arch: x64
+    - target: zip
+      arch: x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  shortcutName: Song Pages
+  artifactName: SongPages-Setup-${version}.${ext}
+
+portable:
+  artifactName: SongPages-Portable-${version}.${ext}
 
 linux:
   target:

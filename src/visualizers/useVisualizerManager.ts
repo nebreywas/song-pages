@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DEFAULT_VISUALIZER_ID,
   VISUALIZER_SETTINGS_KEY,
+  type ProjectionMode,
   type VisualizerSongInfo,
 } from '@shared/visualizerMessages';
 
@@ -18,6 +19,8 @@ type UseVisualizerManagerOptions = {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  /** Current song page URL — used when projection opens in page mode. */
+  pageUrl?: string | null;
 };
 
 export function useVisualizerManager({
@@ -26,11 +29,13 @@ export function useVisualizerManager({
   isPlaying,
   currentTime,
   duration,
+  pageUrl,
 }: UseVisualizerManagerOptions) {
   const [embeddedActive, setEmbeddedActive] = useState(false);
   const [activePluginId, setActivePluginId] = useState(DEFAULT_VISUALIZER_ID);
   const [windowOpen, setWindowOpen] = useState(false);
   const [windowFullscreen, setWindowFullscreen] = useState(false);
+  const [projectionMode, setProjectionMode] = useState<ProjectionMode>('page');
 
   const canVisualize = playingSong != null;
 
@@ -43,8 +48,8 @@ export function useVisualizerManager({
     };
   }, [playingSong]);
 
-  // Panel and projection are mutually exclusive — only one surface active at a time.
-  const analyserEnabled = canVisualize && (embeddedActive || windowOpen);
+  const visualizerProjectionActive = windowOpen && projectionMode === 'visualizer';
+  const analyserEnabled = canVisualize && (embeddedActive || visualizerProjectionActive);
 
   const { analyser, frequencyData, timeDomainData } = useAudioAnalyser({
     audioRef,
@@ -66,12 +71,15 @@ export function useVisualizerManager({
 
   useVisualizerIpcSender({
     enabled: windowOpen,
+    sendFrames: visualizerProjectionActive && analyserEnabled,
     analyser,
     pluginId: windowPluginId,
     song: songInfo,
     isPlaying,
     currentTime,
     duration,
+    projectionMode,
+    pageUrl: pageUrl ?? null,
   });
 
   useEffect(() => {
@@ -105,7 +113,6 @@ export function useVisualizerManager({
     refreshStatus();
     const offOpened = app.visualizer.onOpened(() => {
       setWindowOpen(true);
-      setEmbeddedActive(false);
     });
     const offClosed = app.visualizer.onClosed(() => {
       setWindowOpen(false);
@@ -122,12 +129,17 @@ export function useVisualizerManager({
     };
   }, []);
 
+  // Keep projection content in sync with panel visualizer state.
+  useEffect(() => {
+    if (!windowOpen) return;
+    setProjectionMode(embeddedActive ? 'visualizer' : 'page');
+  }, [embeddedActive, windowOpen]);
+
   const toggleEmbedded = useCallback(() => {
     setEmbeddedActive((value) => {
       const next = !value;
       if (next) {
-        void getApp()?.visualizer?.close();
-        setWindowOpen(false);
+        void getApp()?.vc?.close();
       }
       return next;
     });
@@ -139,13 +151,19 @@ export function useVisualizerManager({
     }
   }, []);
 
-  const openWindow = useCallback(async (fullscreen = false) => {
-    const app = getApp();
-    if (!app?.visualizer) return;
-    setEmbeddedActive(false);
-    setWindowOpen(true);
-    await app.visualizer.open({ fullscreen });
-  }, []);
+  const openWindow = useCallback(
+    async (options: { mode?: ProjectionMode; fullscreen?: boolean } = {}) => {
+      const app = getApp();
+      if (!app?.visualizer) return;
+
+      const mode = options.mode ?? (embeddedActive ? 'visualizer' : 'page');
+      await app.vc?.close();
+      setProjectionMode(mode);
+      setWindowOpen(true);
+      await app.visualizer.open({ fullscreen: options.fullscreen ?? false });
+    },
+    [embeddedActive],
+  );
 
   const closeWindow = useCallback(async () => {
     const app = getApp();
@@ -153,11 +171,26 @@ export function useVisualizerManager({
     await app.visualizer.close();
   }, []);
 
+  const toggleProjection = useCallback(async () => {
+    if (windowOpen) {
+      await closeWindow();
+      return;
+    }
+    const mode: ProjectionMode = embeddedActive ? 'visualizer' : 'page';
+    await openWindow({ mode });
+  }, [closeWindow, embeddedActive, openWindow, windowOpen]);
+
   const toggleFullscreen = useCallback(async () => {
     const app = getApp();
     if (!app?.visualizer) return;
     await app.visualizer.setFullScreen(!windowFullscreen);
   }, [windowFullscreen]);
+
+  const dismissVisualizer = useCallback(() => {
+    setEmbeddedActive(false);
+    setWindowOpen(false);
+    void getApp()?.visualizer?.close();
+  }, []);
 
   return {
     embeddedActive,
@@ -166,6 +199,7 @@ export function useVisualizerManager({
     windowPluginId,
     windowOpen,
     windowFullscreen,
+    projectionMode,
     canVisualize,
     analyser,
     frequencyData,
@@ -175,6 +209,8 @@ export function useVisualizerManager({
     selectPlugin,
     openWindow,
     closeWindow,
+    toggleProjection,
     toggleFullscreen,
+    dismissVisualizer,
   };
 }

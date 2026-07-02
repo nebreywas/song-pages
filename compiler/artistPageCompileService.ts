@@ -11,7 +11,7 @@ import {
   type StaticSiteBuildInfo,
 } from "./staticSiteBuild";
 import { escapeHtmlText, slugifySiteText, socialLinksHtml, streamLinksHtml } from "./staticSiteUtils";
-import { ARTIST_PHOTO_MAX_EDGE } from "../src/artist/types";
+import { ARTIST_PHOTO_MAX_EDGE } from "../shared/artistConstants";
 import {
   buildArtistManifestJson,
   buildCatalogManifestJson,

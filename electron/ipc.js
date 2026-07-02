@@ -10,6 +10,7 @@ const listenerLibrary = require('./listener/library');
 const listenerSubscribe = require('./listener/subscribe');
 const { bindSongPageGuestById } = require('./listener/guestSecurity');
 const visualizerWindow = require('./visualizerWindow');
+const vcWindow = require('./vcWindow');
 
 function registerIpcHandlers() {
   ipcMain.handle('app:getVersion', () => app.getVersion());
@@ -363,6 +364,31 @@ function registerIpcHandlers() {
 
   ipcMain.on('visualizer:sendFrame', (_event, payload) => {
     visualizerWindow.sendVisualizerFrame(payload);
+  });
+
+  // --- VC Mode window ---
+
+  ipcMain.handle('vc:open', (event, options = {}) => {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!mainWindow) return { ok: false, error: 'Main window not found.' };
+    return vcWindow.openVcWindow(mainWindow, options);
+  });
+
+  ipcMain.handle('vc:close', () => vcWindow.closeVcWindow());
+
+  ipcMain.handle('vc:setFullScreen', (_event, fullscreen) => vcWindow.setVcFullScreen(fullscreen));
+
+  ipcMain.handle('vc:status', () => ({
+    ok: true,
+    data: { open: vcWindow.isVcWindowOpen(), fullscreen: vcWindow.isVcFullScreen() },
+  }));
+
+  ipcMain.on('vc:sendState', (_event, payload) => {
+    vcWindow.sendVcState(payload);
+  });
+
+  ipcMain.on('vc:sendFrame', (_event, payload) => {
+    vcWindow.sendVcFrame(payload);
   });
 }
 

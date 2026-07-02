@@ -9,5 +9,5 @@
     "allowImportingTsExtensions": false
   },
   "include": ["compiler/**/*", "shared/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "compiler/**/*.test.ts", "compiler/artistPageCompileApi.ts"]
 }

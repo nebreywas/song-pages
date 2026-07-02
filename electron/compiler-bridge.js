@@ -28,10 +28,15 @@ function buildFileMapFromManifest(manifest) {
 }
 
 async function runCompile(payload) {
-  // Load TypeScript compile service at runtime.
-  require('tsx/cjs/api').register();
+  let compileArtistPage;
 
-  const { compileArtistPage } = require('../compiler/artistPageCompileService.ts');
+  if (app.isPackaged) {
+    // Single CJS bundle — marked v18 is ESM-only and cannot be require()'d from tsc output.
+    ({ compileArtistPage } = require('./compiler-dist/bundle.cjs'));
+  } else {
+    require('tsx/cjs/api').register();
+    ({ compileArtistPage } = require('../compiler/artistPageCompileService.ts'));
+  }
 
   const projectRoot = path.join(__dirname, '..');
   const manifest = payload.manifest;

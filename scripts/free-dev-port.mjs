@@ -9,22 +9,44 @@ import { execSync } from 'child_process';
 const port = process.argv[2] || '5173';
 
 function freePortUnix(targetPort) {
+  let pids = [];
+
   try {
     const output = execSync(`lsof -ti:${targetPort}`, { encoding: 'utf8' }).trim();
-    if (!output) {
-      return;
-    }
+    pids = output.split('\n').filter(Boolean);
+  } catch {
+    // lsof exits non-zero when nothing is listening on the port.
+    return;
+  }
 
-    for (const pid of output.split('\n').filter(Boolean)) {
+  if (pids.length === 0) {
+    return;
+  }
+
+  for (const pid of pids) {
+    try {
+      process.kill(Number(pid), 'SIGTERM');
+      console.log(`Freed port ${targetPort} (stopped PID ${pid})`);
+    } catch {
+      // Process may have already exited.
+    }
+  }
+
+  // SIGTERM is async — give listeners a moment to release the port before Vite starts.
+  execSync('sleep 0.3');
+
+  try {
+    const remaining = execSync(`lsof -ti:${targetPort}`, { encoding: 'utf8' }).trim();
+    for (const pid of remaining.split('\n').filter(Boolean)) {
       try {
-        process.kill(Number(pid), 'SIGTERM');
-        console.log(`Freed port ${targetPort} (stopped PID ${pid})`);
+        process.kill(Number(pid), 'SIGKILL');
+        console.log(`Freed port ${targetPort} (force-killed PID ${pid})`);
       } catch {
         // Process may have already exited.
       }
     }
   } catch {
-    // lsof exits non-zero when nothing is listening on the port.
+    // Port is free.
   }
 }
 

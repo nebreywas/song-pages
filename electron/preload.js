@@ -103,4 +103,43 @@ contextBridge.exposeInMainWorld('app', {
       return () => ipcRenderer.removeListener('visualizer:request-sync', handler);
     },
   },
+
+  vc: {
+    open: (options) => ipcRenderer.invoke('vc:open', options),
+    close: () => ipcRenderer.invoke('vc:close'),
+    setFullScreen: (fullscreen) => ipcRenderer.invoke('vc:setFullScreen', fullscreen),
+    status: () => ipcRenderer.invoke('vc:status'),
+    sendState: (payload) => ipcRenderer.send('vc:sendState', payload),
+    sendFrame: (payload) => ipcRenderer.send('vc:sendFrame', payload),
+    onState: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('vc:state', handler);
+      return () => ipcRenderer.removeListener('vc:state', handler);
+    },
+    onFrame: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('vc:frame', handler);
+      return () => ipcRenderer.removeListener('vc:frame', handler);
+    },
+    onHotkey: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('vc:hotkey', handler);
+      return () => ipcRenderer.removeListener('vc:hotkey', handler);
+    },
+    onOpened: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('vc:opened', handler);
+      return () => ipcRenderer.removeListener('vc:opened', handler);
+    },
+    onClosed: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('vc:closed', handler);
+      return () => ipcRenderer.removeListener('vc:closed', handler);
+    },
+    onRequestSync: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('vc:request-sync', handler);
+      return () => ipcRenderer.removeListener('vc:request-sync', handler);
+    },
+  },
 });

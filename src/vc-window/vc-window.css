@@ -1,0 +1,287 @@
+.vc-window-body {
+  margin: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+.vc-window-shell {
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  position: relative;
+  overflow: hidden;
+}
+
+.vc-window-waiting {
+  display: grid;
+  place-content: center;
+  text-align: center;
+  color: #b7c0d1;
+  padding: 2rem;
+}
+
+.vc-window-hint {
+  color: #8b95a8;
+  font-size: 0.9rem;
+}
+
+.vc-grid {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: 2px;
+  background: #111;
+}
+
+.vc-grid-full {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.vc-grid-quarters {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.vc-grid-halves-vertical {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
+}
+
+.vc-grid-main-plus-2 {
+  grid-template-columns: 1fr;
+  grid-template-rows: 15fr 70fr 15fr;
+}
+
+.vc-cell {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: #06080f;
+}
+
+.vc-cell-blank {
+  background: #04060c;
+}
+
+.vc-cell-clickable {
+  cursor: pointer;
+}
+
+.vc-cell-empty {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #5c677a;
+  font-size: 0.85rem;
+}
+
+.vc-cover-fit,
+.vc-host-fit {
+  display: block;
+  max-width: 60%;
+  max-height: 60%;
+  margin: auto;
+  position: absolute;
+  inset: 0;
+  object-fit: contain;
+}
+
+.vc-lyrics-scroll {
+  height: 100%;
+  overflow: hidden;
+  padding: 1rem 1.25rem;
+}
+
+.vc-lyrics-inner {
+  white-space: pre-wrap;
+  line-height: 1.55;
+  font-size: clamp(1rem, 2.2vw, 1.35rem);
+  color: #e8ecf4;
+  transition: transform 0.35s linear;
+}
+
+.vc-about-stack,
+.vc-artist-stack {
+  height: 100%;
+  overflow: auto;
+  padding: 0.85rem 1rem;
+  color: #e8ecf4;
+}
+
+.vc-about-cover {
+  display: block;
+  max-width: 40%;
+  max-height: 40%;
+  object-fit: contain;
+  margin-bottom: 0.65rem;
+}
+
+.vc-about-caption {
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.vc-about-text {
+  white-space: pre-wrap;
+  line-height: 1.5;
+  color: #b7c0d1;
+}
+
+.vc-artist-photo {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 999px;
+  object-fit: cover;
+  margin-bottom: 0.5rem;
+}
+
+.vc-artist-name {
+  margin: 0 0 0.35rem;
+}
+
+.vc-artist-bio {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  color: #b7c0d1;
+  font-size: 0.92rem;
+}
+
+.vc-cell .visualizer-host-window {
+  width: 100%;
+  height: 100%;
+}
+
+.vc-overlay {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.vc-overlay-remaining {
+  top: 1rem;
+  right: 1rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.vc-overlay-next {
+  left: 1rem;
+  bottom: 1rem;
+  max-width: min(28rem, 70vw);
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f0f2f6;
+  font-size: 0.95rem;
+}
+
+.vc-overlay-center-box {
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 10vh 10vw;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.vc-overlay-cover-img {
+  max-height: 60vh;
+  max-width: 80vw;
+  object-fit: contain;
+  border: 10vh solid #000;
+  box-sizing: content-box;
+}
+
+.vc-overlay-host-img {
+  max-height: 40vh;
+  max-width: 70vw;
+  object-fit: contain;
+  border: 10vh solid #000;
+  box-sizing: content-box;
+}
+
+.vc-overlay-info-box,
+.vc-overlay-upcoming-box {
+  width: min(36rem, 86vw);
+  max-height: 70vh;
+  overflow: auto;
+  padding: 1rem 1.15rem;
+  border-radius: 12px;
+  background: rgba(10, 14, 22, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e8ecf4;
+}
+
+.vc-overlay-info-box h2 {
+  margin: 0 0 0.35rem;
+}
+
+.vc-overlay-year {
+  margin: 0 0 0.35rem;
+  color: #8b95a8;
+}
+
+.vc-overlay-caption {
+  margin: 0 0 0.65rem;
+  font-weight: 600;
+}
+
+.vc-overlay-about {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.vc-overlay-upcoming-box ul {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.vc-overlay-upcoming-box li {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.88rem;
+}
+
+.vc-praise-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.vc-praise-heart {
+  position: absolute;
+  color: #ff6b8a;
+  opacity: 0.85;
+  animation: vc-heart-float 2.8s ease-out forwards;
+  text-shadow: 0 0 12px rgba(255, 80, 120, 0.45);
+}
+
+@keyframes vc-heart-float {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translateY(calc(-80px + var(--drift, 0px))) scale(1.05);
+    opacity: 0;
+  }
+}

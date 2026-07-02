@@ -170,6 +170,24 @@ declare global {
         onFullScreenChanged: (callback: (fullscreen: boolean) => void) => () => void;
         onRequestSync?: (callback: () => void) => () => void;
       };
+      vc: {
+        open: (options?: { fullscreen?: boolean }) => Promise<{ ok: boolean; error?: string }>;
+        close: () => Promise<{ ok: boolean; error?: string }>;
+        setFullScreen: (fullscreen: boolean) => Promise<{ ok: boolean; error?: string }>;
+        status: () => Promise<{
+          ok: boolean;
+          data?: { open: boolean; fullscreen: boolean };
+          error?: string;
+        }>;
+        sendState: (payload: import('@shared/vcModeTypes').VcStatePayload) => void;
+        sendFrame: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void;
+        onState: (callback: (payload: import('@shared/vcModeTypes').VcStatePayload) => void) => () => void;
+        onFrame: (callback: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void) => () => void;
+        onHotkey: (callback: (payload: { action: import('@shared/vcModeTypes').VcHotkeyAction }) => void) => () => void;
+        onOpened: (callback: () => void) => () => void;
+        onClosed: (callback: () => void) => () => void;
+        onRequestSync: (callback: () => void) => () => void;
+      };
     };
   }
 }
