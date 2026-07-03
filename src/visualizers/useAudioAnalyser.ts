@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { FFT_SIZE, getOrCreateAudioGraph, resumeAudioContext } from './audioGraph';
+import {
+  FFT_SIZE,
+  type ButterchurnAudioSettings,
+  getOrCreateAudioGraph,
+  resumeAudioContext,
+} from './audioGraph';
 
 type UseAudioAnalyserOptions = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -10,6 +15,8 @@ type UseAudioAnalyserOptions = {
 
 type UseAudioAnalyserResult = {
   analyser: AnalyserNode | null;
+  butterchurnTap: GainNode | null;
+  applyButterchurnAudioSettings: ((settings: ButterchurnAudioSettings) => void) | null;
   frequencyData: Uint8Array;
   timeDomainData: Uint8Array;
   audioContext: AudioContext | null;
@@ -22,6 +29,10 @@ export function useAudioAnalyser({
   enabled,
 }: UseAudioAnalyserOptions): UseAudioAnalyserResult {
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+  const [butterchurnTap, setButterchurnTap] = useState<GainNode | null>(null);
+  const [applyButterchurnAudioSettings, setApplyButterchurnAudioSettings] = useState<
+    ((settings: ButterchurnAudioSettings) => void) | null
+  >(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const frequencyDataRef = useRef(new Uint8Array(FFT_SIZE / 2));
   const timeDomainDataRef = useRef(new Uint8Array(FFT_SIZE));
@@ -29,6 +40,8 @@ export function useAudioAnalyser({
   useEffect(() => {
     if (!enabled) {
       setAnalyser(null);
+      setButterchurnTap(null);
+      setApplyButterchurnAudioSettings(null);
       setAudioContext(null);
       return;
     }
@@ -38,6 +51,8 @@ export function useAudioAnalyser({
 
     const graph = getOrCreateAudioGraph(audio);
     setAnalyser(graph.analyser);
+    setButterchurnTap(graph.butterchurnTap);
+    setApplyButterchurnAudioSettings(() => graph.applyButterchurnAudioSettings);
     setAudioContext(graph.context);
     frequencyDataRef.current = new Uint8Array(graph.analyser.frequencyBinCount);
     timeDomainDataRef.current = new Uint8Array(graph.analyser.fftSize);
@@ -50,6 +65,8 @@ export function useAudioAnalyser({
 
   return {
     analyser,
+    butterchurnTap,
+    applyButterchurnAudioSettings,
     frequencyData: frequencyDataRef.current,
     timeDomainData: timeDomainDataRef.current,
     audioContext,

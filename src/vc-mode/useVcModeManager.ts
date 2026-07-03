@@ -6,6 +6,9 @@ import { normalizeVcConfig } from '@shared/vcModeTypes';
 
 import { getApp } from '../lib/bridge';
 import type { ArtistRow, SongRow } from '../types/app';
+import { isButterchurnExperienceId } from '../visualizers/butterchurn/presets/approved/presetKeys';
+import { normalizeExperienceId } from '../visualizers/native/registry';
+import { useExperienceSettings } from '../visualizers/settings/useExperienceSettings';
 import { useAudioAnalyser } from '../visualizers/useAudioAnalyser';
 import { createDefaultVcConfig } from './vcModeDefaults';
 
@@ -50,11 +53,24 @@ export function useVcModeManager({
   const [modalOpen, setModalOpen] = useState(false);
   const [vcOpen, setVcOpen] = useState(false);
   const [activeConfig, setActiveConfig] = useState<VcModeConfig>(() => createDefaultVcConfig());
+  const [canvasMirrorFrame, setCanvasMirrorFrame] = useState<string | null>(null);
   const [songManifest, setSongManifest] = useState<SongPagesSongManifest | null>(null);
   const [artistProfile, setArtistProfile] = useState<ArtistRow | null>(null);
 
   const manifestCacheRef = useRef(new Map<string, SongPagesSongManifest>());
   const timingRef = useRef({ currentTime, duration, isPlaying });
+  const canvasMirrorFrameRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    canvasMirrorFrameRef.current = canvasMirrorFrame;
+  }, [canvasMirrorFrame]);
+
+  const vcVisualizerId = useMemo(
+    () => normalizeExperienceId(activeConfig.visualizerId),
+    [activeConfig.visualizerId],
+  );
+  const vcUsesButterchurn = isButterchurnExperienceId(vcVisualizerId);
+  const vcVisualizerSettings = useExperienceSettings(vcVisualizerId);
 
   useEffect(() => {
     timingRef.current = { currentTime, duration, isPlaying };
@@ -62,11 +78,13 @@ export function useVcModeManager({
 
   const analyserEnabled = vcOpen && configUsesVisualizer(activeConfig) && playingSong != null;
 
-  const { analyser } = useAudioAnalyser({
+  const { analyser, butterchurnTap, applyButterchurnAudioSettings, audioContext } = useAudioAnalyser({
     audioRef,
     isPlaying,
     enabled: analyserEnabled,
   });
+
+  const butterchurnVcMirrorActive = vcOpen && analyserEnabled && vcUsesButterchurn;
 
   const nextSongPreview = useMemo(() => {
     if (playingSongId == null) return null;
@@ -205,13 +223,14 @@ export function useVcModeManager({
         currentTime: timing.currentTime,
         duration: timing.duration,
         isPlaying: timing.isPlaying,
+        canvasFrame: vcUsesButterchurn ? canvasMirrorFrameRef.current : null,
       });
     };
 
     tick();
     const frameId = window.setInterval(tick, FRAME_INTERVAL_MS);
     return () => window.clearInterval(frameId);
-  }, [analyser, vcOpen]);
+  }, [analyser, vcOpen, vcUsesButterchurn]);
 
   useEffect(() => {
     const app = getApp();
@@ -254,6 +273,7 @@ export function useVcModeManager({
     if (!app?.vc) return;
     await app.vc.close();
     setVcOpen(false);
+    setCanvasMirrorFrame(null);
   }, []);
 
   const openModal = useCallback(() => setModalOpen(true), []);
@@ -262,6 +282,13 @@ export function useVcModeManager({
   return {
     modalOpen,
     vcOpen,
+    vcVisualizerId,
+    vcVisualizerSettings,
+    butterchurnVcMirrorActive,
+    butterchurnTap,
+    applyButterchurnAudioSettings,
+    audioContext,
+    setCanvasMirrorFrame,
     openModal,
     closeModal,
     startVcMode,

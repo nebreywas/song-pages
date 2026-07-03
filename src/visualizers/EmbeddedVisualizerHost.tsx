@@ -1,36 +1,45 @@
 import { useRef } from 'react';
 
-import type { VisualizerSongInfo } from '@shared/visualizerMessages';
-
-import { getVisualizer } from './registry';
-import type { VisualizerSurface } from './types';
+import { buildVisualizerContext } from './core/context/buildContext';
+import { getExperience, resolveExperienceForTarget } from './registry';
+import { useExperienceSettings } from './settings/useExperienceSettings';
 import { useVisualizerFrameLoop, VisualizerCanvasHost } from './useVisualizerFrameLoop';
+import type { SongRow } from '../types/app';
 
 type EmbeddedVisualizerHostProps = {
   pluginId: string;
+  playingSong: SongRow | null;
   analyser: AnalyserNode | null;
+  butterchurnTap: GainNode | null;
+  applyButterchurnAudioSettings: ((settings: import('../audioGraph').ButterchurnAudioSettings) => void) | null;
+  audioContext: AudioContext | null;
   frequencyData: Uint8Array;
   timeDomainData: Uint8Array;
   isPlaying: boolean;
   currentTime: number;
   duration: number;
-  song: VisualizerSongInfo | null;
+  settingsDialogOpen: boolean;
 };
 
-/** Renders the active plugin inside the listener content panel. */
+/** Renders the active experience inside the listener content panel. */
 export function EmbeddedVisualizerHost({
   pluginId,
+  playingSong,
   analyser,
+  butterchurnTap,
+  applyButterchurnAudioSettings,
+  audioContext,
   frequencyData,
   timeDomainData,
   isPlaying,
   currentTime,
   duration,
-  song,
+  settingsDialogOpen,
 }: EmbeddedVisualizerHostProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const plugin = getVisualizer(pluginId);
-  const surface: VisualizerSurface = 'embedded';
+  const experience = resolveExperienceForTarget(pluginId, 'main-embedded');
+  const settings = useExperienceSettings(experience.id, { settingsDialogOpen });
+  const context = buildVisualizerContext(playingSong);
 
   const frame = useVisualizerFrameLoop({
     analyser,
@@ -39,7 +48,7 @@ export function EmbeddedVisualizerHost({
     enabled: Boolean(analyser),
   });
 
-  if (!plugin) {
+  if (!getExperience(pluginId) && !experience) {
     return (
       <div className="visualizer-host visualizer-host-empty">
         <p>Unknown visualizer.</p>
@@ -47,7 +56,7 @@ export function EmbeddedVisualizerHost({
     );
   }
 
-  const Component = plugin.component;
+  const Component = experience.component;
 
   return (
     <div ref={containerRef} className="visualizer-host">
@@ -55,17 +64,22 @@ export function EmbeddedVisualizerHost({
         containerRef={containerRef}
         component={Component}
         analyser={analyser}
+        butterchurnTap={butterchurnTap}
+        applyButterchurnAudioSettings={applyButterchurnAudioSettings}
+        audioContext={audioContext ?? analyser?.context ?? null}
         frequencyData={frequencyData}
         timeDomainData={timeDomainData}
         isPlaying={isPlaying}
         currentTime={currentTime}
         duration={duration}
-        song={song}
+        song={context.song}
         frame={frame}
+        context={context}
+        settings={settings}
       />
       <div className="visualizer-host-caption">
-        <strong>{plugin.name}</strong>
-        <span>{surface === 'embedded' ? 'Panel mode' : ''}</span>
+        <strong>{experience.name}</strong>
+        <span>Panel mode</span>
       </div>
     </div>
   );

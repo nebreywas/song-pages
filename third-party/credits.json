@@ -1,0 +1,97 @@
+{
+  "entries": {
+    "butterchurn": {
+      "id": "butterchurn",
+      "name": "Butterchurn",
+      "description": "WebGL audio visualization engine based on Milkdrop-style presets.",
+      "license": "MIT",
+      "url": "https://github.com/jberg/butterchurn"
+    },
+    "butterchurn-presets": {
+      "id": "butterchurn-presets",
+      "name": "Butterchurn Presets",
+      "description": "Curated Milkdrop preset collection for Butterchurn.",
+      "license": "MIT",
+      "url": "https://github.com/jberg/butterchurn-presets"
+    },
+    "preset-flexi-martin-geiss": {
+      "id": "preset-flexi-martin-geiss",
+      "name": "Flexi, martin + geiss",
+      "description": "Milkdrop preset authors — Deep Space.",
+      "license": "See preset pack"
+    },
+    "preset-flexi-martin": {
+      "id": "preset-flexi-martin",
+      "name": "Flexi + Martin",
+      "description": "Milkdrop preset authors — Pulse.",
+      "license": "See preset pack"
+    },
+    "preset-cope": {
+      "id": "preset-cope",
+      "name": "Cope",
+      "description": "Milkdrop preset author — Liquid.",
+      "license": "See preset pack"
+    },
+    "preset-rovastar-geiss": {
+      "id": "preset-rovastar-geiss",
+      "name": "Rovastar + Geiss",
+      "description": "Milkdrop preset authors — Nebula.",
+      "license": "See preset pack"
+    },
+    "preset-flexi-geiss": {
+      "id": "preset-flexi-geiss",
+      "name": "flexi + geiss",
+      "description": "Milkdrop preset authors — Color Flow.",
+      "license": "See preset pack"
+    },
+    "three-js": {
+      "id": "three-js",
+      "name": "Three.js",
+      "description": "JavaScript 3D library used for native Song Pages visualizers.",
+      "license": "MIT",
+      "url": "https://threejs.org/"
+    }
+  },
+  "experiences": {
+    "spectrum": {
+      "id": "spectrum",
+      "name": "Spectrum",
+      "creditRefs": []
+    },
+    "album-flow": {
+      "id": "album-flow",
+      "name": "Album Flow",
+      "creditRefs": []
+    },
+    "aurora": {
+      "id": "aurora",
+      "name": "Aurora",
+      "creditRefs": []
+    },
+    "deep-space": {
+      "id": "deep-space",
+      "name": "Deep Space",
+      "creditRefs": ["butterchurn", "butterchurn-presets", "preset-flexi-martin-geiss"]
+    },
+    "pulse": {
+      "id": "pulse",
+      "name": "Pulse",
+      "creditRefs": ["butterchurn", "butterchurn-presets", "preset-flexi-martin"]
+    },
+    "liquid": {
+      "id": "liquid",
+      "name": "Liquid",
+      "creditRefs": ["butterchurn", "butterchurn-presets", "preset-cope"]
+    },
+    "nebula": {
+      "id": "nebula",
+      "name": "Nebula",
+      "creditRefs": ["butterchurn", "butterchurn-presets", "preset-rovastar-geiss"]
+    },
+    "color-flow": {
+      "id": "color-flow",
+      "name": "Color Flow",
+      "creditRefs": ["butterchurn", "butterchurn-presets", "preset-flexi-geiss"]
+    }
+  }
+}

@@ -68,6 +68,7 @@ export function VisualizerWindowApp() {
         duration={stream.duration}
         song={stream.song}
         frame={stream.frame}
+        canvasFrame={stream.canvasFrame}
       />
     </div>
   );

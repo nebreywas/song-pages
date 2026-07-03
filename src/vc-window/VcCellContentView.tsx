@@ -8,9 +8,16 @@ type VcCellContentViewProps = {
   state: VcStatePayload;
   frequencyData: Uint8Array;
   frame: number;
+  canvasFrame: string | null;
 };
 
-export function VcCellContentView({ content, state, frequencyData, frame }: VcCellContentViewProps) {
+export function VcCellContentView({
+  content,
+  state,
+  frequencyData,
+  frame,
+  canvasFrame,
+}: VcCellContentViewProps) {
   const song = state.currentSong;
   const playback = state.playback;
 
@@ -82,6 +89,7 @@ export function VcCellContentView({ content, state, frequencyData, frame }: VcCe
         duration={playback.duration}
         song={{ title: song.title, artist: song.artist, coverUrl: song.coverUrl }}
         frame={frame}
+        canvasFrame={canvasFrame}
       />
     );
   }

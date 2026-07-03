@@ -16,6 +16,7 @@ type StreamState = {
   projectionMode: VisualizerStreamConfig['projectionMode'];
   pageUrl: string | null;
   frame: number;
+  canvasFrame: string | null;
 };
 
 /** Projection window: receive FFT frames forwarded by the main process over IPC. */
@@ -28,7 +29,7 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
     projectionMode: VisualizerStreamConfig['projectionMode'];
     pageUrl: string | null;
   }>({
-    pluginId: 'bars',
+    pluginId: 'spectrum',
     song: null,
     projectionMode: 'visualizer',
     pageUrl: null,
@@ -60,6 +61,7 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
         projectionMode: message.projectionMode ?? 'visualizer',
         pageUrl: message.pageUrl ?? null,
         frame: prev?.frame ?? 0,
+        canvasFrame: prev?.canvasFrame ?? null,
       }));
     });
 
@@ -81,6 +83,7 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
         projectionMode: metaRef.current.projectionMode,
         pageUrl: metaRef.current.pageUrl,
         frame: Date.now(),
+        canvasFrame: message.canvasFrame ?? null,
       });
     });
 
@@ -97,7 +100,7 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
 /** ~60fps polling — setInterval keeps running when another window has focus (rAF does not). */
 const FRAME_INTERVAL_MS = 16;
 
-/** Main window: push config/FFT frames to the projection window via IPC. */
+/** Main window: push config/FFT/canvas frames to the projection window via IPC. */
 export function useVisualizerIpcSender(options: {
   enabled: boolean;
   sendFrames: boolean;
@@ -109,6 +112,7 @@ export function useVisualizerIpcSender(options: {
   duration: number;
   projectionMode: VisualizerStreamConfig['projectionMode'];
   pageUrl: string | null;
+  canvasFrame?: string | null;
 }): void {
   const {
     enabled,
@@ -121,9 +125,15 @@ export function useVisualizerIpcSender(options: {
     duration,
     projectionMode,
     pageUrl,
+    canvasFrame = null,
   } = options;
   const intervalRef = useRef<number | null>(null);
   const timingRef = useRef({ currentTime, duration, isPlaying });
+  const canvasFrameRef = useRef<string | null>(canvasFrame);
+
+  useEffect(() => {
+    canvasFrameRef.current = canvasFrame;
+  }, [canvasFrame]);
 
   useEffect(() => {
     timingRef.current = { currentTime, duration, isPlaying };
@@ -175,6 +185,7 @@ export function useVisualizerIpcSender(options: {
         currentTime: timing.currentTime,
         duration: timing.duration,
         isPlaying: timing.isPlaying,
+        canvasFrame: canvasFrameRef.current,
       });
     };
 

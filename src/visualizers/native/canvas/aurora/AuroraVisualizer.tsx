@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import type { VisualizerFrameProps } from '../types';
+import type { VisualizerFrameProps } from '../../../core/types';
 
 type AuroraBlob = {
   x: number;
@@ -11,17 +11,20 @@ type AuroraBlob = {
   vy: number;
 };
 
-/** Flowing aurora field — tuned for fullscreen projection window. */
+/** Flowing aurora field — tuned for external projection and VC regions. */
 export function AuroraVisualizer({
   frequencyData,
   width,
   height,
   isPlaying,
-  song,
+  context,
   frame,
+  settings,
 }: VisualizerFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const blobsRef = useRef<AuroraBlob[]>([]);
+  const song = context.song;
+  const speed = typeof settings.speed === 'number' ? settings.speed : 1;
 
   useEffect(() => {
     blobsRef.current = Array.from({ length: 5 }, (_, index) => ({
@@ -54,8 +57,8 @@ export function AuroraVisualizer({
     const energy = isPlaying ? bass * 0.5 + mid * 0.35 + treble * 0.15 : 0.05;
 
     for (const blob of blobsRef.current) {
-      blob.x += blob.vx * (1 + energy * 3);
-      blob.y += blob.vy * (1 + energy * 3);
+      blob.x += blob.vx * (1 + energy * 3) * speed;
+      blob.y += blob.vy * (1 + energy * 3) * speed;
       if (blob.x < -blob.radius) blob.x = width + blob.radius;
       if (blob.x > width + blob.radius) blob.x = -blob.radius;
       if (blob.y < -blob.radius) blob.y = height + blob.radius;
@@ -82,7 +85,7 @@ export function AuroraVisualizer({
         ctx.fillText(song.artist, width / 2, height - 22);
       }
     }
-  }, [frame, frequencyData, height, isPlaying, song, width]);
+  }, [frame, frequencyData, height, isPlaying, song, speed, width]);
 
   return <canvas ref={canvasRef} className="visualizer-canvas visualizer-canvas-fullscreen" aria-hidden="true" />;
 }

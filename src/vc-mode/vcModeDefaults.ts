@@ -6,6 +6,7 @@ import {
   VC_SETTINGS_KEY,
 } from '@shared/vcModeTypes';
 import { DEFAULT_VISUALIZER_ID } from '@shared/visualizerMessages';
+import { normalizeExperienceId } from '../visualizers/native/registry';
 
 export function createDefaultVcConfig(gridStyle: VcGridStyle = 'quarters'): VcModeConfig {
   return {
@@ -34,7 +35,7 @@ export function migrateVcConfig(raw: unknown): VcModeConfig {
   return {
     gridStyle,
     cells,
-    visualizerId: value.visualizerId ?? DEFAULT_VISUALIZER_ID,
+    visualizerId: normalizeExperienceId(value.visualizerId ?? DEFAULT_VISUALIZER_ID),
     hostGraphicPath: value.hostGraphicPath ?? null,
   };
 }

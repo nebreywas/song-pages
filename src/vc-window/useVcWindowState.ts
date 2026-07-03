@@ -14,6 +14,7 @@ export type VcWindowContext = {
   state: VcStatePayload | null;
   frequencyData: Uint8Array;
   frame: number;
+  canvasFrame: string | null;
   activeOverlay: VcOverlayId | null;
   praiseToken: number;
 };
@@ -22,6 +23,7 @@ export function useVcWindowState(): VcWindowContext {
   const [state, setState] = useState<VcStatePayload | null>(null);
   const [frequencyData, setFrequencyData] = useState(() => new Uint8Array(FFT_SIZE / 2));
   const [frame, setFrame] = useState(0);
+  const [canvasFrame, setCanvasFrame] = useState<string | null>(null);
   const [activeOverlay, setActiveOverlay] = useState<VcOverlayId | null>(null);
   const [praiseToken, setPraiseToken] = useState(0);
   const praiseBusyRef = useRef(false);
@@ -42,6 +44,7 @@ export function useVcWindowState(): VcWindowContext {
         return next;
       });
       setFrame(Date.now());
+      setCanvasFrame(message.canvasFrame ?? null);
     });
 
     const offHotkey = app.vc.onHotkey(({ action }: { action: VcHotkeyAction }) => {
@@ -80,7 +83,7 @@ export function useVcWindowState(): VcWindowContext {
     };
   }, []);
 
-  return { state, frequencyData, frame, activeOverlay, praiseToken };
+  return { state, frequencyData, frame, canvasFrame, activeOverlay, praiseToken };
 }
 
 export function useCellClickCooldown(): () => boolean {

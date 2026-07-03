@@ -4,7 +4,8 @@ copyright: Copyright © Ben Sawyer
 
 directories:
   output: build
-  buildResources: build
+  # Icons live here (icon.icns, icon.ico); installers go to build/.
+  buildResources: build-resources
 
 files:
   - dist/**/*

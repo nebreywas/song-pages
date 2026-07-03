@@ -4,7 +4,7 @@ import { useVcWindowState } from './useVcWindowState';
 
 /** VC Mode display surface — grid mixer + host hotkey overlays. */
 export function VcWindowApp() {
-  const { state, frequencyData, frame, activeOverlay, praiseToken } = useVcWindowState();
+  const { state, frequencyData, frame, canvasFrame, activeOverlay, praiseToken } = useVcWindowState();
 
   if (!state) {
     return (
@@ -17,7 +17,7 @@ export function VcWindowApp() {
 
   return (
     <div className="vc-window-shell">
-      <VcGrid state={state} frequencyData={frequencyData} frame={frame} />
+      <VcGrid state={state} frequencyData={frequencyData} frame={frame} canvasFrame={canvasFrame} />
       <VcOverlays state={state} activeOverlay={activeOverlay} praiseToken={praiseToken} />
     </div>
   );

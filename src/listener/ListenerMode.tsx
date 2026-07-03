@@ -28,6 +28,9 @@ import {
 } from './likedSongs';
 import type { ArtistRow, SongRow } from '../types/app';
 import { EmbeddedVisualizerHost } from '../visualizers/EmbeddedVisualizerHost';
+import { VisualizerSettingsDialog } from '../visualizers/settings/ui/VisualizerSettingsDialog';
+import { ButterchurnMirrorHost } from '../visualizers/butterchurn/adapter/ButterchurnMirrorHost';
+import { useExperienceSettings } from '../visualizers/settings/useExperienceSettings';
 import { useVisualizerManager } from '../visualizers/useVisualizerManager';
 import { VcModeModal } from '../vc-mode/VcModeModal';
 import { VcCloseConfirmModal } from '../vc-mode/VcCloseConfirmModal';
@@ -142,6 +145,17 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     duration,
     pageUrl,
   });
+
+  const butterchurnSettings = useExperienceSettings(visualizer.windowExperienceId, {
+    settingsDialogOpen: visualizer.settingsDialogOpen,
+  });
+
+  const handleButterchurnMirrorFrame = useCallback(
+    (dataUrl: string) => {
+      visualizer.setCanvasMirrorFrame(dataUrl);
+    },
+    [visualizer],
+  );
 
   usePlaybackEffects({
     audioRef,
@@ -811,13 +825,17 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       return (
         <EmbeddedVisualizerHost
           pluginId={visualizer.embeddedPluginId}
+          playingSong={playingSong}
           analyser={visualizer.analyser}
+          butterchurnTap={visualizer.butterchurnTap}
+          applyButterchurnAudioSettings={visualizer.applyButterchurnAudioSettings}
+          audioContext={visualizer.audioContext}
           frequencyData={visualizer.frequencyData}
           timeDomainData={visualizer.timeDomainData}
           isPlaying={isPlaying}
           currentTime={currentTime}
           duration={duration}
-          song={visualizer.songInfo}
+          settingsDialogOpen={visualizer.settingsDialogOpen}
         />
       );
     }
@@ -889,6 +907,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             embeddedVisualizerActive={visualizer.embeddedActive}
             canUseVisualizer={visualizer.canVisualize && !vc.vcOpen}
             onToggleEmbeddedVisualizer={visualizer.toggleEmbedded}
+            onOpenVisualizerSettings={visualizer.openSettingsDialog}
             projectionOpen={visualizer.windowOpen}
             onToggleProjection={() => void visualizer.toggleProjection()}
             onVcClick={() => {
@@ -1071,6 +1090,38 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           void vc.startVcMode(config);
         }}
       />
+
+      <VisualizerSettingsDialog
+        open={visualizer.settingsDialogOpen}
+        selectedExperienceId={visualizer.activeExperienceId}
+        canLaunch={visualizer.canVisualize}
+        onSelectExperience={visualizer.selectExperience}
+        onClose={visualizer.closeSettingsDialog}
+        onLaunch={visualizer.launchEmbedded}
+      />
+
+      {visualizer.butterchurnMirrorActive || vc.butterchurnVcMirrorActive ? (
+        <ButterchurnMirrorHost
+          experienceId={
+            vc.butterchurnVcMirrorActive ? vc.vcVisualizerId : visualizer.windowExperienceId
+          }
+          audioContext={vc.butterchurnVcMirrorActive ? vc.audioContext : visualizer.audioContext}
+          butterchurnTap={vc.butterchurnVcMirrorActive ? vc.butterchurnTap : visualizer.butterchurnTap}
+          analyser={vc.butterchurnVcMirrorActive ? null : visualizer.analyser}
+          applyButterchurnAudioSettings={
+            vc.butterchurnVcMirrorActive
+              ? vc.applyButterchurnAudioSettings
+              : visualizer.applyButterchurnAudioSettings
+          }
+          settings={
+            vc.butterchurnVcMirrorActive ? vc.vcVisualizerSettings : butterchurnSettings
+          }
+          enabled
+          onFrame={
+            vc.butterchurnVcMirrorActive ? vc.setCanvasMirrorFrame : handleButterchurnMirrorFrame
+          }
+        />
+      ) : null}
     </div>
   );
 }

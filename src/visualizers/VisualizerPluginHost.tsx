@@ -1,19 +1,27 @@
 import { useEffect, useRef } from 'react';
 
-import { getVisualizer, visualizerSupportsSurface } from './registry';
+import { ButterchurnMirrorView } from './butterchurn/adapter/ButterchurnMirrorView';
+import { buildVisualizerContext } from './core/context/buildContext';
+import { getExperience, resolveExperienceForTarget, visualizerSupportsSurface } from './registry';
+import type { VisualizerContext } from './core/context/types';
 import type { VisualizerFrameProps, VisualizerSurface } from './types';
+import { useExperienceSettings } from './settings/useExperienceSettings';
 import { useVisualizerFrameLoop, VisualizerCanvasHost } from './useVisualizerFrameLoop';
 
-type VisualizerPluginHostProps = Omit<VisualizerFrameProps, 'width' | 'height'> & {
+type VisualizerPluginHostProps = Omit<VisualizerFrameProps, 'width' | 'height' | 'context' | 'settings'> & {
   surface: VisualizerSurface;
   pluginId: string;
+  context?: VisualizerContext;
+  canvasFrame?: string | null;
+  audioContext?: AudioContext | null;
 };
 
-/** Shared host for embedded or window surfaces. */
+/** Shared host for embedded, projection, or VC surfaces. */
 export function VisualizerPluginHost({
   surface,
   pluginId,
   analyser,
+  audioContext,
   frequencyData,
   timeDomainData,
   isPlaying,
@@ -21,9 +29,17 @@ export function VisualizerPluginHost({
   duration,
   song,
   frame: externalFrame,
+  context,
+  canvasFrame,
 }: VisualizerPluginHostProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const plugin = getVisualizer(pluginId);
+  const target = surface === 'embedded' ? 'main-embedded' : 'external-projection';
+  const experience = resolveExperienceForTarget(pluginId, target);
+  const settings = useExperienceSettings(experience.id);
+  const resolvedContext = context ?? buildVisualizerContext(null);
+  if (resolvedContext.song == null && song) {
+    resolvedContext.song = song;
+  }
 
   const internalFrame = useVisualizerFrameLoop({
     analyser,
@@ -34,13 +50,13 @@ export function VisualizerPluginHost({
   const frame = analyser ? internalFrame : externalFrame;
 
   useEffect(() => {
-    if (!plugin) return;
-    if (!visualizerSupportsSurface(plugin, surface)) {
-      // Window may receive an embedded-only id briefly during switch — parent should reconcile.
+    if (!experience) return;
+    if (!visualizerSupportsSurface(experience, surface)) {
+      // Remote surfaces may receive a brief incompatible id during handoff.
     }
-  }, [plugin, surface]);
+  }, [experience, surface]);
 
-  if (!plugin) {
+  if (!getExperience(pluginId) && !experience) {
     return (
       <div className="visualizer-host visualizer-host-empty">
         <p>Unknown visualizer: {pluginId}</p>
@@ -48,15 +64,22 @@ export function VisualizerPluginHost({
     );
   }
 
-  if (!visualizerSupportsSurface(plugin, surface)) {
+  if (!visualizerSupportsSurface(experience, surface)) {
     return (
       <div className="visualizer-host visualizer-host-empty">
-        <p>{plugin.name} is not available in this surface.</p>
+        <p>{experience.name} is not available in this surface.</p>
       </div>
     );
   }
 
-  const Component = surface === 'window' ? (plugin.windowComponent ?? plugin.component) : plugin.component;
+  if (experience.implementation === 'butterchurn' && !analyser) {
+    return <ButterchurnMirrorView canvasFrame={canvasFrame ?? null} />;
+  }
+
+  const Component =
+    surface === 'window'
+      ? (experience.windowComponent ?? experience.component)
+      : experience.component;
 
   return (
     <div ref={containerRef} className="visualizer-host visualizer-host-window">
@@ -64,6 +87,7 @@ export function VisualizerPluginHost({
         containerRef={containerRef}
         component={Component}
         analyser={analyser}
+        audioContext={audioContext ?? analyser?.context ?? null}
         frequencyData={frequencyData}
         timeDomainData={timeDomainData}
         isPlaying={isPlaying}
@@ -71,6 +95,8 @@ export function VisualizerPluginHost({
         duration={duration}
         song={song}
         frame={frame}
+        context={resolvedContext}
+        settings={settings}
       />
     </div>
   );

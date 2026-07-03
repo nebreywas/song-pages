@@ -1,6 +1,7 @@
 node_modules/
 dist/
 build/
+releases/
 electron/compiler-dist/
 *.log
 .DS_Store
@@ -8,3 +9,4 @@ electron/compiler-dist/
 *.db-journal
 .env
 .env.*
+!.env.release.example

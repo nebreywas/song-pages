@@ -1,27 +1,31 @@
 import { useEffect, useRef } from 'react';
 
-import type { VisualizerFrameProps } from '../types';
+import type { VisualizerFrameProps } from '../../../core/types';
 
-/** Subtle cover-art pulse with a small spectrum ring — embedded panel only. */
+/** Subtle cover-art pulse with a reactive spectrum ring — main player only. */
 export function CoverPulseVisualizer({
   frequencyData,
   width,
   height,
   isPlaying,
-  song,
+  context,
   frame,
+  settings,
 }: VisualizerFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const coverRef = useRef<HTMLImageElement | null>(null);
+  const song = context.song;
+  const ringIntensity = typeof settings.ringIntensity === 'number' ? settings.ringIntensity : 1;
 
   useEffect(() => {
-    if (!song?.coverUrl) {
+    const coverUrl = song?.coverUrl;
+    if (!coverUrl) {
       coverRef.current = null;
       return;
     }
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.src = song.coverUrl;
+    img.src = coverUrl;
     img.onload = () => {
       coverRef.current = img;
     };
@@ -46,7 +50,7 @@ export function CoverPulseVisualizer({
 
     const bass =
       frequencyData.slice(0, 8).reduce((sum, value) => sum + value, 0) / (8 * 255);
-    const pulse = isPlaying ? 1 + bass * 0.12 : 1;
+    const pulse = isPlaying ? 1 + bass * 0.12 * ringIntensity : 1;
     const size = Math.min(width, height) * 0.42 * pulse;
     const cx = width / 2;
     const cy = height * 0.42;
@@ -71,7 +75,7 @@ export function CoverPulseVisualizer({
       const value = frequencyData[i * 4] / 255;
       const angle = (i / ringCount) * Math.PI * 2 - Math.PI / 2;
       const inner = size / 2 + 8;
-      const outer = inner + 6 + value * 22;
+      const outer = inner + (6 + value * 22) * ringIntensity;
       ctx.strokeStyle = `rgba(110, 168, 255, ${0.35 + value * 0.55})`;
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -91,7 +95,7 @@ export function CoverPulseVisualizer({
         ctx.fillText(song.artist, cx, height - 16);
       }
     }
-  }, [frame, frequencyData, height, isPlaying, song, width]);
+  }, [frame, frequencyData, height, isPlaying, ringIntensity, song, width]);
 
   return <canvas ref={canvasRef} className="visualizer-canvas" aria-hidden="true" />;
 }

@@ -10,6 +10,7 @@ type VcCellProps = {
   state: VcStatePayload;
   frequencyData: Uint8Array;
   frame: number;
+  canvasFrame: string | null;
 };
 
 function activeContents(cell: VcCellAssignment): VcCellContent[] {
@@ -20,7 +21,7 @@ function activeContents(cell: VcCellAssignment): VcCellContent[] {
 }
 
 /** One grid area — optional A/B cycling by timer or click. */
-export function VcCell({ cell, state, frequencyData, frame }: VcCellProps) {
+export function VcCell({ cell, state, frequencyData, frame, canvasFrame }: VcCellProps) {
   const contents = useMemo(() => activeContents(cell), [cell]);
   const [index, setIndex] = useState(0);
   const tryClick = useCellClickCooldown();
@@ -63,7 +64,13 @@ export function VcCell({ cell, state, frequencyData, frame }: VcCellProps) {
       role={cell.cycleTime === 'click' && contents.length > 1 ? 'button' : undefined}
       tabIndex={cell.cycleTime === 'click' && contents.length > 1 ? 0 : undefined}
     >
-      <VcCellContentView content={current} state={state} frequencyData={frequencyData} frame={frame} />
+      <VcCellContentView
+        content={current}
+        state={state}
+        frequencyData={frequencyData}
+        frame={frame}
+        canvasFrame={canvasFrame}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatTime } from './formatTime';
 import { ScrollingNowPlaying } from './ScrollingNowPlaying';
+import { usePressHold } from '../visualizers/settings/ui/usePressHold';
 import {
   IconNext,
   IconPause,
@@ -35,6 +36,7 @@ type PlayerBarProps = {
   embeddedVisualizerActive?: boolean;
   canUseVisualizer?: boolean;
   onToggleEmbeddedVisualizer?: () => void;
+  onOpenVisualizerSettings?: () => void;
   projectionOpen?: boolean;
   onToggleProjection?: () => void;
   onVcClick?: () => void;
@@ -79,6 +81,7 @@ export function PlayerBar({
   embeddedVisualizerActive,
   canUseVisualizer,
   onToggleEmbeddedVisualizer,
+  onOpenVisualizerSettings,
   projectionOpen,
   onToggleProjection,
   onVcClick,
@@ -204,6 +207,12 @@ export function PlayerBar({
     onVolumeChange(nextVolume);
   };
 
+  const visualizerPressHold = usePressHold({
+    disabled: visualizerDisabled,
+    onTap: () => handleMenuOption(() => onToggleEmbeddedVisualizer?.()),
+    onHold: () => handleMenuOption(() => onOpenVisualizerSettings?.()),
+  });
+
   return (
     <div className="player-bar">
       <div className="player-transport-controls">
@@ -287,8 +296,12 @@ export function PlayerBar({
                 type="button"
                 className={`player-option-btn${visualizerHighlighted ? ' active' : ''}`}
                 disabled={visualizerDisabled}
-                onClick={() => handleMenuOption(() => onToggleEmbeddedVisualizer?.())}
-                title={visualizerHighlighted ? 'Hide panel visualizer' : 'Show panel visualizer'}
+                {...visualizerPressHold}
+                title={
+                  visualizerHighlighted
+                    ? 'Hide panel visualizer · hold for settings'
+                    : 'Show panel visualizer · hold for settings'
+                }
               >
                 Visualizer
               </button>

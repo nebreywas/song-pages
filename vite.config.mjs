@@ -15,6 +15,11 @@ export default defineConfig({
       '@shared': path.resolve(__dirname, 'shared'),
     },
   },
+  optimizeDeps: {
+    include: ['butterchurn', 'butterchurn-presets'],
+    // Force default interop for legacy UMD webpack bundles.
+    needsInterop: ['butterchurn', 'butterchurn-presets'],
+  },
   build: {
     outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: true,
