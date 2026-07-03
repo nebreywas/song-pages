@@ -1,42 +1,30 @@
 import {
-  cellCountForGrid,
-  defaultCellsForGrid,
-  type VcGridStyle,
+  createDefaultSurface,
+  defaultCells,
+  normalizeVcConfig,
   type VcModeConfig,
+  type VcTemplateId,
   VC_SETTINGS_KEY,
 } from '@shared/vcModeTypes';
+import { migrateVcConfig as migrateSurfaceConfig } from '@shared/vcSurface/migrate';
 import { DEFAULT_VISUALIZER_ID } from '@shared/visualizerMessages';
 import { normalizeExperienceId } from '../visualizers/native/registry';
 
-export function createDefaultVcConfig(gridStyle: VcGridStyle = 'quarters'): VcModeConfig {
-  return {
-    gridStyle,
-    cells: defaultCellsForGrid(gridStyle),
+export function createDefaultVcConfig(templateId: VcTemplateId = 'quad'): VcModeConfig {
+  return normalizeVcConfig({
+    surface: createDefaultSurface(templateId),
+    cells: defaultCells(),
+    floatContent: {},
     visualizerId: DEFAULT_VISUALIZER_ID,
     hostGraphicPath: null,
-  };
+  });
 }
 
 export function migrateVcConfig(raw: unknown): VcModeConfig {
-  if (!raw || typeof raw !== 'object') return createDefaultVcConfig();
-  const value = raw as Partial<VcModeConfig>;
-  const gridStyle = value.gridStyle ?? 'quarters';
-  const count = cellCountForGrid(gridStyle);
-  const cells = Array.isArray(value.cells)
-    ? value.cells.slice(0, count).map((cell) => ({
-        slotA: cell?.slotA ?? '',
-        slotB: cell?.slotB ?? '',
-        cycleTime: cell?.cycleTime ?? null,
-      }))
-    : defaultCellsForGrid(gridStyle);
-  while (cells.length < count) {
-    cells.push({ slotA: '', slotB: '', cycleTime: null });
-  }
+  const migrated = migrateSurfaceConfig(raw, DEFAULT_VISUALIZER_ID);
   return {
-    gridStyle,
-    cells,
-    visualizerId: normalizeExperienceId(value.visualizerId ?? DEFAULT_VISUALIZER_ID),
-    hostGraphicPath: value.hostGraphicPath ?? null,
+    ...migrated,
+    visualizerId: normalizeExperienceId(migrated.visualizerId),
   };
 }
 

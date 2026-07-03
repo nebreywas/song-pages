@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SongPagesSongManifest } from '@shared/manifests';
 import type { VcModeConfig, VcStatePayload, VcUpcomingSong } from '@shared/vcModeTypes';
-import { normalizeVcConfig } from '@shared/vcModeTypes';
+import { configUsesVisualizer, normalizeVcConfig } from '@shared/vcModeTypes';
 
 import { getApp } from '../lib/bridge';
 import type { ArtistRow, SongRow } from '../types/app';
@@ -21,10 +21,6 @@ function localFileUrl(filePath: string | null): string | null {
   if (filePath.startsWith('file://')) return filePath;
   const normalized = filePath.replace(/\\/g, '/');
   return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
-}
-
-function configUsesVisualizer(config: VcModeConfig): boolean {
-  return config.cells.some((cell) => cell.slotA === 'visualizer' || cell.slotB === 'visualizer');
 }
 
 type UseVcModeManagerOptions = {
@@ -279,6 +275,9 @@ export function useVcModeManager({
   const openModal = useCallback(() => setModalOpen(true), []);
   const closeModal = useCallback(() => setModalOpen(false), []);
 
+  /** Song/artist context for the Surface designer preview (no live visualizer). */
+  const designerPreviewState = useMemo((): VcStatePayload => buildStatePayload(), [buildStatePayload]);
+
   return {
     modalOpen,
     vcOpen,
@@ -289,6 +288,7 @@ export function useVcModeManager({
     applyButterchurnAudioSettings,
     audioContext,
     setCanvasMirrorFrame,
+    designerPreviewState,
     openModal,
     closeModal,
     startVcMode,

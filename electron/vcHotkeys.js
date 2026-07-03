@@ -19,6 +19,8 @@ const VC_HOTKEYS = [
   { accelerator: 'CommandOrControl+Alt+R', action: 'remaining' },
   { accelerator: 'CommandOrControl+Alt+S', action: 'songInfo' },
   { accelerator: 'CommandOrControl+Alt+U', action: 'upcoming' },
+  // Toggle bright red area/float outlines on the VC surface (debug only).
+  { accelerator: 'CommandOrControl+Alt+D', action: 'debugOutlines' },
 ];
 
 function registerVcHotkeys(onHotkey) {

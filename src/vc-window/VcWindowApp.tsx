@@ -1,10 +1,11 @@
-import { VcGrid } from './VcGrid';
 import { VcOverlays } from './VcOverlays';
+import { VcSurface } from './VcSurface';
 import { useVcWindowState } from './useVcWindowState';
 
-/** VC Mode display surface — grid mixer + host hotkey overlays. */
+/** VC Mode display surface — template areas + floats + host hotkey overlays. */
 export function VcWindowApp() {
-  const { state, frequencyData, frame, canvasFrame, activeOverlay, praiseToken } = useVcWindowState();
+  const { state, frequencyData, frame, canvasFrame, activeOverlay, praiseToken, debugOutlines } =
+    useVcWindowState();
 
   if (!state) {
     return (
@@ -17,7 +18,13 @@ export function VcWindowApp() {
 
   return (
     <div className="vc-window-shell">
-      <VcGrid state={state} frequencyData={frequencyData} frame={frame} canvasFrame={canvasFrame} />
+      <VcSurface
+        state={state}
+        frequencyData={frequencyData}
+        frame={frame}
+        canvasFrame={canvasFrame}
+        debugOutlines={debugOutlines}
+      />
       <VcOverlays state={state} activeOverlay={activeOverlay} praiseToken={praiseToken} />
     </div>
   );

@@ -1080,6 +1080,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       <VcModeModal
         open={vc.modalOpen}
         onClose={vc.closeModal}
+        previewState={vc.designerPreviewState}
         onStart={(config) => {
           if (playingSongId == null) {
             setError('Play a song before starting VC Mode.');

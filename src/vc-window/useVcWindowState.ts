@@ -17,6 +17,8 @@ export type VcWindowContext = {
   canvasFrame: string | null;
   activeOverlay: VcOverlayId | null;
   praiseToken: number;
+  /** Bright red area/float outlines — toggled by ⌘⌥D / Ctrl+Alt+D. */
+  debugOutlines: boolean;
 };
 
 export function useVcWindowState(): VcWindowContext {
@@ -26,6 +28,7 @@ export function useVcWindowState(): VcWindowContext {
   const [canvasFrame, setCanvasFrame] = useState<string | null>(null);
   const [activeOverlay, setActiveOverlay] = useState<VcOverlayId | null>(null);
   const [praiseToken, setPraiseToken] = useState(0);
+  const [debugOutlines, setDebugOutlines] = useState(false);
   const praiseBusyRef = useRef(false);
 
   useEffect(() => {
@@ -58,6 +61,11 @@ export function useVcWindowState(): VcWindowContext {
         return;
       }
 
+      if (action === 'debugOutlines') {
+        setDebugOutlines((value) => !value);
+        return;
+      }
+
       const overlayMap: Partial<Record<VcHotkeyAction, VcOverlayId>> = {
         cover: 'cover',
         host: 'host',
@@ -83,7 +91,7 @@ export function useVcWindowState(): VcWindowContext {
     };
   }, []);
 
-  return { state, frequencyData, frame, canvasFrame, activeOverlay, praiseToken };
+  return { state, frequencyData, frame, canvasFrame, activeOverlay, praiseToken, debugOutlines };
 }
 
 export function useCellClickCooldown(): () => boolean {
