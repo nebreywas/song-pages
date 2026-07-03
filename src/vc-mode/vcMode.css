@@ -130,6 +130,29 @@
   padding: 0.35rem 0.75rem 0;
 }
 
+.vc-close-confirm-modal {
+  width: min(100%, 22rem);
+  padding: 1rem 1.1rem 1.05rem;
+}
+
+.vc-close-confirm-modal h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.vc-close-confirm-lead {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.vc-close-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 @media (max-width: 720px) {
   .vc-area-row {
     grid-template-columns: 1fr;

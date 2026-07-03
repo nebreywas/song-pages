@@ -27,7 +27,6 @@ import {
   type ArtistProjectsState,
   type ArtistSongDraft,
   type SongPlaybackPreviewSeconds,
-  type SongPlaybackQuality,
   type SongPlaybackScope,
 } from './types';
 import './artistPageEditor.css';
@@ -457,21 +456,11 @@ export function ArtistPageEditor() {
 
                     <fieldset className="editor-field" style={{ border: 0, padding: 0 }}>
                       <span>HLS output</span>
+                      <p className="editor-hls-profile">
+                        Standard profile — AAC-LC stereo, 96 kbps, 6s segments. Source sample rate kept at
+                        44.1 or 48 kHz when present; no loudness or EQ changes.
+                      </p>
                       <div className="editor-grid-2">
-                        <label className="editor-field">
-                          <span>Quality</span>
-                          <select
-                            value={song.playback.quality}
-                            onChange={(e) =>
-                              updateSong(song.id, {
-                                playback: { ...song.playback, quality: e.target.value as SongPlaybackQuality },
-                              })
-                            }
-                          >
-                            <option value="high">High — 192kbps AAC stereo</option>
-                            <option value="degraded">Degraded — 96kbps AAC mono</option>
-                          </select>
-                        </label>
                         <label className="editor-field">
                           <span>Scope</span>
                           <select

@@ -17,7 +17,7 @@ function normalizeSong(song: Partial<ArtistSongDraft> & { id: string }): ArtistS
     about: song.about ?? '',
     lyrics: song.lyrics ?? '',
     links: song.links ?? { youtube: '', spotify: '', soundcloud: '' },
-    playback: song.playback ?? { quality: 'high', scope: 'full', previewSeconds: 60 },
+    playback: song.playback ?? { quality: 'standard', scope: 'full', previewSeconds: 60 },
     audioLocalPath: song.audioLocalPath ?? null,
     coverLocalPath: song.coverLocalPath ?? null,
     extraImageLocalPath: song.extraImageLocalPath ?? null,

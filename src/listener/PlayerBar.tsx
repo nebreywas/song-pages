@@ -38,8 +38,15 @@ type PlayerBarProps = {
   projectionOpen?: boolean;
   onToggleProjection?: () => void;
   onVcClick?: () => void;
+  onVcLiveClick?: () => void;
   vcLive?: boolean;
   vcDisabled?: boolean;
+  bassBoost?: boolean;
+  lofi?: boolean;
+  onToggleBassBoost?: () => void;
+  onToggleLofi?: () => void;
+  crossfades?: boolean;
+  onToggleCrossfades?: () => void;
 };
 
 const MENU_IDLE_MS = 60_000;
@@ -75,16 +82,20 @@ export function PlayerBar({
   projectionOpen,
   onToggleProjection,
   onVcClick,
+  onVcLiveClick,
   vcLive,
   vcDisabled,
+  bassBoost = false,
+  lofi = false,
+  onToggleBassBoost,
+  onToggleLofi,
+  crossfades = false,
+  onToggleCrossfades,
 }: PlayerBarProps) {
   const progressRef = useRef<HTMLDivElement>(null);
   const menuIdleTimerRef = useRef<number | null>(null);
   const preMuteVolumeRef = useRef(0.85);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [bassBoost, setBassBoost] = useState(false);
-  const [lofi, setLofi] = useState(false);
-  const [crossfades, setCrossfades] = useState(false);
 
   const clearMenuIdleTimer = useCallback(() => {
     if (menuIdleTimerRef.current != null) {
@@ -152,20 +163,12 @@ export function PlayerBar({
 
   const toggleBassBoost = () => {
     touchMenuActivity();
-    setBassBoost((on) => {
-      const next = !on;
-      if (next) setLofi(false);
-      return next;
-    });
+    onToggleBassBoost?.();
   };
 
   const toggleLofi = () => {
     touchMenuActivity();
-    setLofi((on) => {
-      const next = !on;
-      if (next) setBassBoost(false);
-      return next;
-    });
+    onToggleLofi?.();
   };
 
   const handleMenuToggle = () => {
@@ -325,6 +328,7 @@ export function PlayerBar({
                   type="button"
                   className={`player-option-btn${bassBoost ? ' active' : ''}`}
                   onClick={toggleBassBoost}
+                  disabled={!onToggleBassBoost}
                   title="Bass boost"
                 >
                   Bass boost
@@ -336,6 +340,7 @@ export function PlayerBar({
                   type="button"
                   className={`player-option-btn${lofi ? ' active' : ''}`}
                   onClick={toggleLofi}
+                  disabled={!onToggleLofi}
                   title="Lo-fi"
                 >
                   Lo-fi
@@ -346,7 +351,8 @@ export function PlayerBar({
                 <button
                   type="button"
                   className={`player-option-btn${crossfades ? ' active' : ''}`}
-                  onClick={() => handleMenuOption(() => setCrossfades((on) => !on))}
+                  onClick={() => handleMenuOption(() => onToggleCrossfades?.())}
+                  disabled={!onToggleCrossfades}
                   title="Crossfades"
                 >
                   Crossfades
@@ -385,11 +391,11 @@ export function PlayerBar({
           </span>
         ) : null}
 
-        {!menuOpen && vcLive && onVcClick ? (
+        {!menuOpen && vcLive && onVcLiveClick ? (
           <button
             type="button"
             className="btn player-vc-live-btn"
-            onClick={onVcClick}
+            onClick={onVcLiveClick}
             title="End VC Mode"
           >
             VC Live

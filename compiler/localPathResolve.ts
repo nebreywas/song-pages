@@ -28,6 +28,26 @@ export async function resolveTrustedLocalPath(
   }
 }
 
+/** Fail fast with a clear artist-facing message when a compile source file is missing. */
+export async function assertReadableMediaFile(
+  filePath: string,
+  label: string,
+  songTitle?: string,
+): Promise<void> {
+  try {
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) {
+      throw new Error("not a file");
+    }
+  } catch {
+    const songHint = songTitle ? ` for "${songTitle}"` : "";
+    throw new Error(
+      `Missing ${label}${songHint}: ${filePath}\n` +
+        "The file was moved, renamed, or deleted. Re-select it in Artist Mode, then compile again.",
+    );
+  }
+}
+
 export function linkedFilePath(linkedRoot: string, key: string, originalName: string): string {
   const ext = path.extname(originalName) || ".bin";
   const safeKey = key.replace(/[^a-zA-Z0-9:_-]/g, "_");

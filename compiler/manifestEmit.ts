@@ -10,6 +10,7 @@ import {
   type SongPagesCatalogManifest,
   type SongPagesSongManifest,
 } from '../shared/manifests';
+import { normalizePlaybackQuality } from './hlsExport';
 import { slugifySiteText } from './staticSiteUtils';
 
 function normalizeDeploySiteUrl(raw: string | undefined | null, fallback: string): string {
@@ -67,7 +68,7 @@ export function buildCatalogManifestJson(
       playbackUrl: `songs/${songSlug}/manifest.m3u8`,
       songManifestUrl: `songs/${songSlug}/songpages-song.json`,
       playbackScope: song.playback.scope,
-      playbackQuality: song.playback.quality,
+      playbackQuality: normalizePlaybackQuality(song.playback.quality),
       ...(durationSeconds != null ? { durationSeconds } : {}),
     };
   });
@@ -115,7 +116,7 @@ export function buildSongManifestJson(
     playbackUrl: 'manifest.m3u8',
     streamLinks: song.links,
     playbackScope: song.playback.scope,
-    playbackQuality: song.playback.quality,
+    playbackQuality: normalizePlaybackQuality(song.playback.quality),
     buildVersion: buildInfo.buildVersion,
     ...(durationSeconds != null ? { durationSeconds } : {}),
   };

@@ -97,7 +97,7 @@ function mapCatalogSongs(catalog, siteBase) {
         ? withBuildVersion(resolveSitePath(siteBase, song.songManifestUrl), buildVersion)
         : null,
       playbackScope: song.playbackScope || 'full',
-      playbackQuality: song.playbackQuality || 'high',
+      playbackQuality: song.playbackQuality || 'standard',
       durationSeconds:
         typeof song.durationSeconds === 'number' && Number.isFinite(song.durationSeconds)
           ? Math.round(song.durationSeconds)

@@ -122,6 +122,13 @@
   color: #b7c0d1;
 }
 
+.editor-hls-profile {
+  margin: 0.15rem 0 0.65rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #8b95a8;
+}
+
 .editor-field input,
 .editor-field textarea,
 .editor-field select {

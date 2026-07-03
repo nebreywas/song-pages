@@ -4,6 +4,9 @@ import Hls from 'hls.js';
 import { SongPageWebview } from './SongPageWebview';
 import { ListenerWelcome } from './ListenerWelcome';
 import { ArtistInfoPanel } from './ArtistInfoPanel';
+import { usePlaybackEffects } from './usePlaybackEffects';
+import { ToastStack } from './ToastStack';
+import { useToasts } from './useToasts';
 import { PlayerBar, type RepeatMode } from './PlayerBar';
 import { VerticalResizeHandle } from './VerticalResizeHandle';
 import { ListenerSidebar, SIDEBAR_COLLAPSED_KEY } from './ListenerSidebar';
@@ -27,7 +30,9 @@ import type { ArtistRow, SongRow } from '../types/app';
 import { EmbeddedVisualizerHost } from '../visualizers/EmbeddedVisualizerHost';
 import { useVisualizerManager } from '../visualizers/useVisualizerManager';
 import { VcModeModal } from '../vc-mode/VcModeModal';
+import { VcCloseConfirmModal } from '../vc-mode/VcCloseConfirmModal';
 import { useVcModeManager } from '../vc-mode/useVcModeManager';
+import '../styles/toast.css';
 import '../styles/visualizer.css';
 import '../vc-mode/vcMode.css';
 
@@ -74,9 +79,10 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [mainContentView, setMainContentView] = useState<MainContentView>('welcome');
   const [siteUrl, setSiteUrl] = useState('');
   const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
+  const [vcCloseConfirmOpen, setVcCloseConfirmOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { toasts, addToast, dismissToast } = useToasts();
   const [busy, setBusy] = useState(false);
 
   const [playingSongId, setPlayingSongId] = useState<number | null>(null);
@@ -90,6 +96,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [volume, setVolume] = useState(0.85);
+  const [bassBoost, setBassBoost] = useState(false);
+  const [lofi, setLofi] = useState(false);
+  const [crossfades, setCrossfades] = useState(false);
   const [contentHeight, setContentHeight] = useState(DEFAULT_CONTENT_HEIGHT);
   const [runtimeDurations, setRuntimeDurations] = useState<Record<number, number>>({});
   const [sortColumn, setSortColumn] = useState<SortColumn>('order');
@@ -133,6 +142,29 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     duration,
     pageUrl,
   });
+
+  usePlaybackEffects({
+    audioRef,
+    isPlaying,
+    bassBoost,
+    lofi,
+  });
+
+  const toggleBassBoost = useCallback(() => {
+    setBassBoost((on) => {
+      const next = !on;
+      if (next) setLofi(false);
+      return next;
+    });
+  }, []);
+
+  const toggleLofi = useCallback(() => {
+    setLofi((on) => {
+      const next = !on;
+      if (next) setBassBoost(false);
+      return next;
+    });
+  }, []);
 
   const buildDurationSnapshot = useCallback(() => {
     const snapshot: Record<number, number> = {};
@@ -352,6 +384,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     duration,
   });
 
+  useEffect(() => {
+    if (!vc.vcOpen) {
+      setVcCloseConfirmOpen(false);
+    }
+  }, [vc.vcOpen]);
+
   const markSongAvailability = useCallback(
     async (song: SongRow, unavailable: boolean) => {
       const app = getApp();
@@ -567,7 +605,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const handleSubscribe = async () => {
     setBusy(true);
     setError(null);
-    setStatus(null);
 
     const app = getApp();
     if (!app) return;
@@ -582,9 +619,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
     setSiteUrl('');
     setSubscribeModalOpen(false);
-    setStatus(`Added ${result.data.artist.artist_name} (${result.data.songs.length} songs)`);
+    addToast(`Added ${result.data.artist.artist_name} (${result.data.songs.length} songs)`);
     if (result.data.siteRootWarning) {
-      setStatus((prev) => `${prev} — ${result.data!.siteRootWarning}`);
+      addToast(result.data.siteRootWarning);
     }
 
     setSelectedArtistId(result.data.artist.id);
@@ -605,7 +642,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       setError(result.error || 'Refresh failed.');
       return;
     }
-    setStatus('Artist refreshed.');
+    addToast('Artist refreshed.');
     await loadLibrary();
   };
 
@@ -733,11 +770,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       return next;
     });
 
-    if (result.data.liked) {
-      setStatus('Added to Liked Songs.');
-    } else {
-      setStatus('Removed from Liked Songs.');
-    }
+    addToast(result.data.liked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
 
     await loadLibrary();
 
@@ -862,12 +895,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
               if (vc.vcOpen) void vc.closeVcMode();
               else vc.openModal();
             }}
+            onVcLiveClick={() => setVcCloseConfirmOpen(true)}
             vcLive={vc.vcOpen}
             vcDisabled={!songs.length}
+            bassBoost={bassBoost}
+            lofi={lofi}
+            onToggleBassBoost={toggleBassBoost}
+            onToggleLofi={toggleLofi}
+            crossfades={crossfades}
+            onToggleCrossfades={() => setCrossfades((on) => !on)}
           />
           <audio ref={audioRef} preload="metadata" />
         </section>
-        {status ? <p className="status listener-feedback">{status}</p> : null}
         {error ? <p className="error listener-feedback">{error}</p> : null}
 
         <div className="listener-main" ref={mainColumnRef}>
@@ -985,6 +1024,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         </div>
       </div>
 
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
       <SubscribeArtistModal
         open={subscribeModalOpen}
         busy={busy}
@@ -1007,6 +1048,15 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           onClose={() => setPlaylistContextMenu(null)}
         />
       ) : null}
+
+      <VcCloseConfirmModal
+        open={vcCloseConfirmOpen}
+        onConfirm={() => {
+          setVcCloseConfirmOpen(false);
+          void vc.closeVcMode();
+        }}
+        onCancel={() => setVcCloseConfirmOpen(false)}
+      />
 
       <VcModeModal
         open={vc.modalOpen}

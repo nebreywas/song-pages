@@ -3,7 +3,7 @@
 export const MANIFEST_SCHEMA_VERSION = 1;
 
 export type SongPlaybackScope = 'full' | 'preview';
-export type SongPlaybackQuality = 'high' | 'degraded';
+export type SongPlaybackQuality = 'standard' | 'high' | 'degraded';
 
 export type ArtistSocialIds = {
   instagram: string;

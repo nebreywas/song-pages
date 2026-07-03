@@ -24,6 +24,7 @@ import { buildSongShareMetaHtml,
   SHARE_CARD_WIDTH,
 } from "./songShareMeta";
 import { renderMarkdownToHtml } from "../shared/markdown";
+import { assertReadableMediaFile } from "./localPathResolve";
 
 export type CompileSongManifest = {
   id: string;
@@ -253,6 +254,7 @@ export async function compileArtistPage(options: {
   if (manifest.hasArtistPhoto) {
     const src = files.get("artist-photo");
     if (src) {
+      await assertReadableMediaFile(src, "artist photo");
       await resizeImageSquareWithFfmpeg(
         src,
         path.join(outputRoot, "images/artist.jpg"),
@@ -279,12 +281,15 @@ export async function compileArtistPage(options: {
       throw new Error(`Missing audio upload for song "${song.title}".`);
     }
 
+    await assertReadableMediaFile(audioPath, "audio file", song.title);
+
     durationBySongId.set(song.id, await probeAudioDurationSeconds(audioPath));
     await exportHlsToDirectory(audioPath, songHlsDir, song.playback);
 
     let coverRel = "";
     const coverSrc = files.get(`cover-${song.id}`);
     if (coverSrc) {
+      await assertReadableMediaFile(coverSrc, "cover image", song.title);
       const coverOut = path.join(songHlsDir, "cover.jpg");
       await resizeImageWithFfmpeg(coverSrc, coverOut, 1000);
       coverRel = `${songSlug}/cover.jpg`;
@@ -293,6 +298,7 @@ export async function compileArtistPage(options: {
     const extraSrc = files.get(`extra-${song.id}`);
     let extraRel = "";
     if (extraSrc) {
+      await assertReadableMediaFile(extraSrc, "extra image", song.title);
       const extraOut = path.join(songHlsDir, "extra.jpg");
       await resizeImageWithFfmpeg(extraSrc, extraOut, 1000);
       extraRel = `${songSlug}/extra.jpg`;

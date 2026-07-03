@@ -1,4 +1,4 @@
-export type SongPlaybackQuality = "high" | "degraded";
+export type SongPlaybackQuality = "standard" | "high" | "degraded";
 export type SongPlaybackScope = "full" | "preview";
 export type SongPlaybackPreviewSeconds = 30 | 45 | 60;
 
@@ -88,7 +88,7 @@ export function createEmptySong(index: number): ArtistSongDraft {
     about: "",
     lyrics: "",
     links: { youtube: "", spotify: "", soundcloud: "" },
-    playback: { quality: "high", scope: "full", previewSeconds: 60 },
+    playback: { quality: "standard", scope: "full", previewSeconds: 60 },
     audioLocalPath: null,
     coverLocalPath: null,
     extraImageLocalPath: null,
