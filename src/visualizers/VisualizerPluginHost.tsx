@@ -10,7 +10,7 @@ import { useVisualizerFrameLoop, VisualizerCanvasHost } from './useVisualizerFra
 
 type VisualizerPluginHostProps = Omit<VisualizerFrameProps, 'width' | 'height' | 'context' | 'settings'> & {
   surface: VisualizerSurface;
-  pluginId: string;
+  experienceId: string;
   context?: VisualizerContext;
   canvasFrame?: string | null;
   audioContext?: AudioContext | null;
@@ -19,7 +19,7 @@ type VisualizerPluginHostProps = Omit<VisualizerFrameProps, 'width' | 'height' |
 /** Shared host for embedded, projection, or VC surfaces. */
 export function VisualizerPluginHost({
   surface,
-  pluginId,
+  experienceId,
   analyser,
   audioContext,
   frequencyData,
@@ -34,7 +34,7 @@ export function VisualizerPluginHost({
 }: VisualizerPluginHostProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const target = surface === 'embedded' ? 'main-embedded' : 'external-projection';
-  const experience = resolveExperienceForTarget(pluginId, target);
+  const experience = resolveExperienceForTarget(experienceId, target);
   const settings = useExperienceSettings(experience.id);
   const resolvedContext = context ?? buildVisualizerContext(null);
   if (resolvedContext.song == null && song) {
@@ -56,10 +56,10 @@ export function VisualizerPluginHost({
     }
   }, [experience, surface]);
 
-  if (!getExperience(pluginId) && !experience) {
+  if (!getExperience(experienceId) && !experience) {
     return (
       <div className="visualizer-host visualizer-host-empty">
-        <p>Unknown visualizer: {pluginId}</p>
+        <p>Unknown visualizer: {experienceId}</p>
       </div>
     );
   }

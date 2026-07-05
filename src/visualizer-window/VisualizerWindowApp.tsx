@@ -11,11 +11,11 @@ import { useVisualizerIpcStream } from '../visualizers/useVisualizerStream';
 export function VisualizerWindowApp() {
   const { stream, connected } = useVisualizerIpcStream();
 
-  const pluginId = useMemo(() => {
+  const experienceId = useMemo(() => {
     if (!stream) return DEFAULT_VISUALIZER_ID;
-    const plugin = getVisualizer(stream.pluginId);
-    if (plugin && visualizerSupportsSurface(plugin, 'window')) {
-      return stream.pluginId;
+    const experience = getVisualizer(stream.experienceId);
+    if (experience && visualizerSupportsSurface(experience, 'window')) {
+      return stream.experienceId;
     }
     return defaultVisualizerForSurface('window').id;
   }, [stream]);
@@ -59,7 +59,7 @@ export function VisualizerWindowApp() {
     <div className="visualizer-window-shell">
       <VisualizerPluginHost
         surface="window"
-        pluginId={pluginId}
+        experienceId={experienceId}
         analyser={null}
         frequencyData={stream.frequencyData}
         timeDomainData={stream.timeDomainData}

@@ -60,7 +60,7 @@ export function VcCellContentView({
     return (
       <VisualizerPluginHost
         surface="window"
-        pluginId={plugin.id}
+        experienceId={plugin.id}
         analyser={null}
         frequencyData={frequencyData}
         timeDomainData={timeDomain}

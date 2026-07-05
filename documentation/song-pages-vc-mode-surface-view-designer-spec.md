@@ -1,7 +1,18 @@
 # Song Pages VC Mode 1.0 --- Surface/View Designer Specification
 
-**Status:** Proposed second-pass replacement of VC Mode surface/layout
-system\
+**Status:** **Implemented** (1.0 surface designer + live VC window). This document remains the product spec; see [vc-mode-architecture.md](./vc-mode-architecture.md) for runtime architecture and [settings-and-persistence.md](./settings-and-persistence.md) for persistence keys.
+
+**Implementation deltas (code vs original proposal):**
+
+| Topic | Spec (below) | Current implementation |
+|-------|----------------|------------------------|
+| Float limit | 0–4 floats | **0–6 floats** (`VC_MAX_FLOATS` in `shared/vcSurface/constants.ts`) |
+| Save workflow | Explicit save step (§18 step 11) | **Auto-save** (500ms debounce) via `useAutoSaveVcConfig`; flush on designer close |
+| Grid appearance | Not in original spec | **`gridDesign`**: background color, default typography, separate **`gridLines`** (template dividers) and **`floatLines`** (float outlines) |
+| Host content | Referenced generically | Full **host content catalog** (`vc.hostContent`) with assignment bindings — see [Host-content-design.md](./Host-content-design.md) |
+| Song slot settings | Graphic-style rules for host | Extended to **song content** via `VcSongSlotSettings` and `SONG_CONTENT_SETTINGS_RULE` |
+| Audio for capture | Layout must not interrupt playback | **HLS audio mirror** in VC window for Discord/window capture — see [vc-mode-architecture.md](./vc-mode-architecture.md) |
+
 **Target:** Song Pages Desktop Player / VC Mode 1.0\
 **Primary runtime:** Electron desktop application\
 **Sprint scope:** Surface geometry, division templates, adjustable
@@ -79,7 +90,7 @@ VC Surface
 │   └── areas have stable identities
 │
 └── Floats
-    ├── 0–4 floating areas
+    ├── 0–6 floating areas (implementation; spec originally 0–4)
     ├── positioned above the base composition
     ├── percentage-based width and height
     ├── percentage-based X/Y position
@@ -88,7 +99,7 @@ VC Surface
     └── may overlap other content
 ```
 
-Maximum: **4 base areas + 4 floats = 8 total areas**.
+Maximum: **4 base areas + 6 floats** (implementation maximum).
 
 # 6. Initial Surface Aspect Model
 
@@ -233,7 +244,7 @@ defaults in template definitions.
 Floats are optional rectangular content areas positioned above the base
 division composition.
 
-A VC design may contain **0--4 floats**. Four is a hard MVP 1.0 limit.
+A VC design may contain **0–6 floats**. Six is the current 1.0 limit (`VC_MAX_FLOATS`).
 
 # 11. Float Geometry
 
@@ -262,7 +273,7 @@ The user should be able to create a float by defining at minimum:
 After creation, the float appears on the design surface and may be
 dragged and edited.
 
-When four floats exist, prevent creation of a fifth.
+When six floats exist, prevent creation of a seventh.
 
 # 13. Float Positioning and Boundaries
 
@@ -316,8 +327,8 @@ A complex layer-management UI is not required.
 
 ``` text
 Maximum base areas: 4
-Maximum floats:     4
-Total maximum:      8
+Maximum floats:     6
+Total maximum:      10
 ```
 
 Enforce this structurally.
@@ -336,7 +347,7 @@ The workflow should support:
 8.  Resize floats
 9.  Reposition floats
 10. Adjust float stacking where necessary
-11. Save the VC design
+11. ~~Save the VC design~~ — **auto-saved** while editing (see implementation deltas above)
 12. Use the design in VC Mode
 
 The exact UI is left to implementation. Prioritize clarity over density.

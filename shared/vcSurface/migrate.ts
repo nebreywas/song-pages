@@ -4,11 +4,9 @@
 
 import { DEFAULT_VISUALIZER_ID } from '../visualizerMessages';
 import {
+  createDefaultSurface,
   defaultCells,
-  emptyCell,
-  migrateCellContent,
   normalizeVcConfig,
-  type VcCellAssignment,
   type VcModeConfig,
 } from '../vcModeTypes';
 import { sanitizeFloats } from './floats';
@@ -37,29 +35,6 @@ function isLegacyGridStyle(value: unknown): value is LegacyGridStyle {
   );
 }
 
-function sanitizeCell(raw: unknown): VcCellAssignment {
-  if (!raw || typeof raw !== 'object') return emptyCell();
-  const cell = raw as Partial<VcCellAssignment>;
-  return {
-    slotA: migrateCellContent(cell.slotA),
-    slotB: migrateCellContent(cell.slotB),
-    hostSlotA: null,
-    hostSlotB: null,
-    cycleTime: cell.cycleTime ?? null,
-    transitionStyle: cell.transitionStyle === 'fade' ? 'fade' : 'replace',
-  };
-}
-
-function migrateCells(raw: unknown): VcCellAssignment[] {
-  const cells = Array.isArray(raw) ? raw.map(sanitizeCell) : defaultCells();
-  while (cells.length < 4) cells.push(emptyCell());
-  return cells.slice(0, 4);
-}
-
-/**
- * Map main-plus-2 stock proportions onto triple-striped-horizontal dividers.
- * Old CSS was 15fr / 70fr / 15fr → cumulative 0.15 / 0.85.
- */
 function legacyDividersFor(templateId: VcTemplateId, legacyStyle: LegacyGridStyle | null): Record<string, number> {
   if (legacyStyle === 'main-plus-2' && templateId === 'triple-striped-horizontal') {
     return resolveDividers(templateId, {
@@ -94,14 +69,14 @@ export function migrateVcConfig(raw: unknown, visualizerIdFallback: string = DEF
         dividers: (surface.dividers as Record<string, number>) ?? {},
         floats: sanitizeFloats(surface.floats),
       },
-      cells: migrateCells(value.cells),
+      cells: Array.isArray(value.cells) ? (value.cells as VcModeConfig['cells']) : defaultCells(),
       floatContent:
         value.floatContent && typeof value.floatContent === 'object'
           ? (value.floatContent as VcModeConfig['floatContent'])
           : {},
       visualizerId: typeof value.visualizerId === 'string' ? value.visualizerId : visualizerIdFallback,
       useFallbacks: value.useFallbacks !== false,
-      gridDesign: value.gridDesign,
+      gridDesign: value.gridDesign as VcModeConfig['gridDesign'],
     });
   }
 
@@ -115,7 +90,7 @@ export function migrateVcConfig(raw: unknown, visualizerIdFallback: string = DEF
       dividers: legacyDividersFor(templateId, legacyStyle),
       floats: [],
     },
-    cells: migrateCells(value.cells),
+    cells: Array.isArray(value.cells) ? (value.cells as VcModeConfig['cells']) : defaultCells(),
     floatContent: {},
     visualizerId: typeof value.visualizerId === 'string' ? value.visualizerId : visualizerIdFallback,
     useFallbacks: value.useFallbacks !== false,

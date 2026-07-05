@@ -7,56 +7,58 @@ import {
 
 type VisualizerControlsProps = {
   embeddedActive: boolean;
-  activePluginId: string;
+  activeExperienceId: string;
   windowOpen: boolean;
   windowFullscreen: boolean;
   canVisualize: boolean;
   vcModeActive?: boolean;
   onToggleEmbedded: () => void;
-  onSelectPlugin: (pluginId: string) => void;
+  onSelectExperience: (experienceId: string) => void;
   onOpenWindow: () => void;
   onCloseWindow: () => void;
   onToggleFullscreen: () => void;
 };
 
-/** Toolbar for embedded toggle, plugin picker, and projection window controls. */
+/** Toolbar for embedded toggle, experience picker, and projection window controls. */
 export function VisualizerControls({
   embeddedActive,
-  activePluginId,
+  activeExperienceId,
   windowOpen,
   windowFullscreen,
   canVisualize,
   vcModeActive,
   onToggleEmbedded,
-  onSelectPlugin,
+  onSelectExperience,
   onOpenWindow,
   onCloseWindow,
   onToggleFullscreen,
 }: VisualizerControlsProps) {
-  const activePlugin = getVisualizer(activePluginId);
+  const activeExperience = getVisualizer(activeExperienceId);
 
-  const embeddedOptions = listVisualizers().filter((plugin) =>
-    visualizerSupportsSurface(plugin, 'embedded'),
+  const embeddedOptions = listVisualizers().filter((experience) =>
+    visualizerSupportsSurface(experience, 'embedded'),
   );
-  const windowOptions = listVisualizers().filter((plugin) => visualizerSupportsSurface(plugin, 'window'));
+  const windowOptions = listVisualizers().filter((experience) =>
+    visualizerSupportsSurface(experience, 'window'),
+  );
 
-  const handleEmbeddedPluginChange = (pluginId: string) => {
-    const plugin = getVisualizer(pluginId);
-    if (plugin && visualizerSupportsSurface(plugin, 'embedded')) {
-      onSelectPlugin(pluginId);
+  const handleEmbeddedExperienceChange = (experienceId: string) => {
+    const experience = getVisualizer(experienceId);
+    if (experience && visualizerSupportsSurface(experience, 'embedded')) {
+      onSelectExperience(experienceId);
     }
   };
 
-  const handleWindowPluginChange = (pluginId: string) => {
-    const plugin = getVisualizer(pluginId);
-    if (plugin && visualizerSupportsSurface(plugin, 'window')) {
-      onSelectPlugin(pluginId);
+  const handleWindowExperienceChange = (experienceId: string) => {
+    const experience = getVisualizer(experienceId);
+    if (experience && visualizerSupportsSurface(experience, 'window')) {
+      onSelectExperience(experienceId);
     }
   };
 
   const openWindowWithDefault = () => {
-    if (!activePlugin || !visualizerSupportsSurface(activePlugin, 'window')) {
-      onSelectPlugin(defaultVisualizerForSurface('window').id);
+    if (!activeExperience || !visualizerSupportsSurface(activeExperience, 'window')) {
+      onSelectExperience(defaultVisualizerForSurface('window').id);
     }
     onOpenWindow();
   };
@@ -89,15 +91,15 @@ export function VisualizerControls({
             <span className="sr-only">Panel visualizer</span>
             <select
               value={
-                activePlugin && visualizerSupportsSurface(activePlugin, 'embedded')
-                  ? activePluginId
+                activeExperience && visualizerSupportsSurface(activeExperience, 'embedded')
+                  ? activeExperienceId
                   : defaultVisualizerForSurface('embedded').id
               }
-              onChange={(event) => handleEmbeddedPluginChange(event.target.value)}
+              onChange={(event) => handleEmbeddedExperienceChange(event.target.value)}
             >
-              {embeddedOptions.map((plugin) => (
-                <option key={plugin.id} value={plugin.id}>
-                  {plugin.name}
+              {embeddedOptions.map((experience) => (
+                <option key={experience.id} value={experience.id}>
+                  {experience.name}
                 </option>
               ))}
             </select>
@@ -122,15 +124,15 @@ export function VisualizerControls({
               <span className="sr-only">Projection visualizer</span>
               <select
                 value={
-                  activePlugin && visualizerSupportsSurface(activePlugin, 'window')
-                    ? activePluginId
+                  activeExperience && visualizerSupportsSurface(activeExperience, 'window')
+                    ? activeExperienceId
                     : defaultVisualizerForSurface('window').id
                 }
-                onChange={(event) => handleWindowPluginChange(event.target.value)}
+                onChange={(event) => handleWindowExperienceChange(event.target.value)}
               >
-                {windowOptions.map((plugin) => (
-                  <option key={plugin.id} value={plugin.id}>
-                    {plugin.name}
+                {windowOptions.map((experience) => (
+                  <option key={experience.id} value={experience.id}>
+                    {experience.name}
                   </option>
                 ))}
               </select>

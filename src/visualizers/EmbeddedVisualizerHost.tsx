@@ -7,7 +7,7 @@ import { useVisualizerFrameLoop, VisualizerCanvasHost } from './useVisualizerFra
 import type { SongRow } from '../types/app';
 
 type EmbeddedVisualizerHostProps = {
-  pluginId: string;
+  experienceId: string;
   playingSong: SongRow | null;
   analyser: AnalyserNode | null;
   butterchurnTap: GainNode | null;
@@ -23,7 +23,7 @@ type EmbeddedVisualizerHostProps = {
 
 /** Renders the active experience inside the listener content panel. */
 export function EmbeddedVisualizerHost({
-  pluginId,
+  experienceId,
   playingSong,
   analyser,
   butterchurnTap,
@@ -37,7 +37,7 @@ export function EmbeddedVisualizerHost({
   settingsDialogOpen,
 }: EmbeddedVisualizerHostProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const experience = resolveExperienceForTarget(pluginId, 'main-embedded');
+  const experience = resolveExperienceForTarget(experienceId, 'main-embedded');
   const settings = useExperienceSettings(experience.id, { settingsDialogOpen });
   const context = buildVisualizerContext(playingSong);
 
@@ -48,7 +48,7 @@ export function EmbeddedVisualizerHost({
     enabled: Boolean(analyser),
   });
 
-  if (!getExperience(pluginId) && !experience) {
+  if (!getExperience(experienceId) && !experience) {
     return (
       <div className="visualizer-host visualizer-host-empty">
         <p>Unknown visualizer.</p>

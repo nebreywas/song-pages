@@ -1,4 +1,11 @@
-Host content
+# Host content
+
+**Status:** **Partially implemented.** Catalog CRUD, media import, typography, and VC assignment bindings exist in code. This document is the product design source; see **Implementation status** at the end for code paths and gaps.
+
+**Related:** [vc-mode-architecture.md](./vc-mode-architecture.md), [settings-and-persistence.md](./settings-and-persistence.md) (`vc.hostContent` key, `{userData}/host-content/media/`).
+
+---
+
 Because host materials may remain fairly constant over time, during configuration create a specific editable tab/area for all host specific content.
 
 The goal of this design is that hosts maintain their content database separate from the surface designs they choose. Then in the surface designer the content from their Host Content database is exposed as content assignment choices.
@@ -45,7 +52,7 @@ Bounce or restart
 Default font
 Default font size
 Default font color
-Text areas	These work similar to title texts but offer more characters (max XXX chars)	Information, List, Narrative	Overflow rule: Scroll fast, medium, slow
+Text areas	These work similar to title texts but offer more characters (max 1000 chars)	Information, List, Narrative	Overflow rule: Scroll fast, medium, slow
 Bounce or restart
 Default font
 Default font size
@@ -234,7 +241,7 @@ Static - do not move or allow it to be moved [if checked no other options] [if u
 		NOTE: Bounce goes center to up, then down, then center, then left, then center, then right as needed
 Title text	A slug of text (max 36 chars) that is likely to be a headline element in VC Mode	Headline, Title	All caps or As Typed
 Remaining attributes inherited from Host Content settings for this object
-Text areas	These work similar to title texts but offer more characters (max XXX chars)	Information, List, Narrative	Plain Text always
+Text areas	These work similar to title texts but offer more characters (max 1000 chars)	Information, List, Narrative	Plain Text always
 Remaining attributes inherited from Host Content settings for this object
 Video	Host can add short <=12mb .mp4 video files	Animation, video	Inset % - you can set an inset percentage of 0 to 70%  (default is 0 most will set if anything to 10-20%)		
 Stretch - stretches x and y values to the area or float container sizes (taking into consideration the effect of Inset %) do not hold for existing ratio		
@@ -310,3 +317,28 @@ Reset to system default	Yes	No	Applies to fallback objects.
 Area/float placement	No	Yes	Surface Designer owns geometry.
 Area content assignment	No	Yes	Surface Designer owns what item is placed where.
 Runtime slot/cycle state	No	Yes	Assignment/display behavior, not Host Content identity.
+
+---
+
+## Implementation status (code)
+
+| Feature | Status | Location |
+|---------|--------|----------|
+| Catalog CRUD (add/rename/delete items) | Done | `src/vc-mode/host-content/HostContentManager.tsx`, `useHostContentCatalog.ts` |
+| Media import (graphics/video) | Done | `electron/hostContent.js`, IPC `hostContent:pickAndImportMedia` |
+| Format/size validation (graphics) | Done | 5MB, 2560px, png/jpg/heic/webp/gif |
+| Video size validation | Done | 12MB, mp4 only |
+| Video dimension validation | **Partial** | Dimension check skipped for video (`widthPx: 0` path) |
+| Typography (font style/size/color) | Done | `shared/hostContent/typography.ts`, bundled + system fonts |
+| Name rules (24 chars, normalize) | Done | `shared/hostContent/names.ts`, `HOST_CONTENT_NAME_MAX_LEN` |
+| Title text max 36 / area text max 1000 | Done | `shared/hostContent/constants.ts` |
+| Fallback content + system defaults | Done | `shared/hostContent/fallbacks.ts`, `systemDefaults.ts` |
+| Graphics groups | Done | Catalog type + group membership |
+| Assignment in Surface Designer | Done | `RegionContentPopover.tsx`, host slot bindings on cells/floats |
+| Per-assignment overrides | Done | `shared/vcMode/assignmentSettings.ts` |
+| Live VC render | Done | `VcResolvedContentView.tsx`, read-only catalog in VC window |
+| Slideshow/gallery role behaviors | **Not implemented** | Roles are metadata tags only today |
+| Scroll/bounce overflow rules | **Partial** | Basic text render; full overflow rule set not complete |
+| Wireframe UI reference | **N/A** | Original wireframe not in repo |
+
+Persistence: SQLite key `vc.hostContent`; media files under `{userData}/host-content/media/`. See [settings-and-persistence.md](./settings-and-persistence.md).

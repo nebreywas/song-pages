@@ -1,40 +1,40 @@
 /**
- * Load/save Host Content catalog with auto-persist.
+ * Host content catalog — read-only (VC window) or full manage mode (designer).
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
-  createDefaultHostContentCatalog,
   HOST_CONTENT_SETTINGS_KEY,
   migrateHostContentCatalog,
   type HostContentCatalog,
   type HostContentItem,
 } from '@shared/hostContent';
 
-import { getApp } from '../../lib/bridge';
+import { getApp } from '../lib/bridge';
+import { loadHostContentCatalog } from './loadHostContentCatalog';
 
-export function useHostContentCatalog() {
-  const [catalog, setCatalog] = useState<HostContentCatalog>(() => createDefaultHostContentCatalog());
+type UseHostContentCatalogOptions = {
+  /** When true, only load catalog — no selection or CRUD helpers. */
+  readOnly?: boolean;
+};
+
+export function useHostContentCatalog(options: UseHostContentCatalogOptions = {}) {
+  const { readOnly = false } = options;
+  const [catalog, setCatalog] = useState<HostContentCatalog>(() => migrateHostContentCatalog(null));
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
-    const app = getApp();
-    if (!app?.getSettings) {
+    let cancelled = false;
+    void loadHostContentCatalog().then((next) => {
+      if (cancelled) return;
+      setCatalog(next);
       setLoading(false);
-      return;
-    }
-    void app
-      .getSettings(HOST_CONTENT_SETTINGS_KEY)
-      .then((raw) => {
-        const next = migrateHostContentCatalog(raw);
-        setCatalog(next);
-        setLoading(false);
-      })
-      .catch(() => {
-        setLoading(false);
-      });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const persist = useCallback(async (next: HostContentCatalog) => {
@@ -70,6 +70,14 @@ export function useHostContentCatalog() {
     () => catalog.items.find((item) => item.id === selectedId) ?? null,
     [catalog.items, selectedId],
   );
+
+  if (readOnly) {
+    return {
+      catalog,
+      ready: !loading,
+      loading,
+    };
+  }
 
   return {
     catalog,

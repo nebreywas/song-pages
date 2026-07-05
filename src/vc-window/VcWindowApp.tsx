@@ -1,6 +1,6 @@
 import { VcOverlays } from './VcOverlays';
 import { VcSurface } from './VcSurface';
-import { useHostContentCatalog } from './useHostContentCatalog';
+import { useHostContentCatalog } from '../host-content/useHostContentCatalog';
 import { useVcPlaybackAudio } from './useVcPlaybackAudio';
 import { useVcWindowState } from './useVcWindowState';
 
@@ -8,7 +8,7 @@ import { useVcWindowState } from './useVcWindowState';
 export function VcWindowApp() {
   const { state, frequencyData, frame, canvasFrame, activeOverlay, praiseToken, debugOutlines } =
     useVcWindowState();
-  const { catalog: hostCatalog } = useHostContentCatalog();
+  const { catalog: hostCatalog } = useHostContentCatalog({ readOnly: true });
   const playbackAudioRef = useVcPlaybackAudio(state);
 
   return (

@@ -11,7 +11,7 @@ type StreamState = {
   currentTime: number;
   duration: number;
   isPlaying: boolean;
-  pluginId: string;
+  experienceId: string;
   song: VisualizerStreamConfig['song'];
   projectionMode: VisualizerStreamConfig['projectionMode'];
   pageUrl: string | null;
@@ -24,12 +24,12 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
   const [state, setState] = useState<StreamState | null>(null);
   const [connected, setConnected] = useState(false);
   const metaRef = useRef<{
-    pluginId: string;
+    experienceId: string;
     song: VisualizerStreamConfig['song'];
     projectionMode: VisualizerStreamConfig['projectionMode'];
     pageUrl: string | null;
   }>({
-    pluginId: 'spectrum',
+    experienceId: 'spectrum',
     song: null,
     projectionMode: 'visualizer',
     pageUrl: null,
@@ -45,7 +45,7 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
     const offConfig = app.visualizer.onConfig((message: VisualizerStreamConfig) => {
       setConnected(true);
       metaRef.current = {
-        pluginId: message.pluginId,
+        experienceId: message.experienceId,
         song: message.song,
         projectionMode: message.projectionMode ?? 'visualizer',
         pageUrl: message.pageUrl ?? null,
@@ -56,7 +56,7 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
         currentTime: prev?.currentTime ?? 0,
         duration: prev?.duration ?? 0,
         isPlaying: prev?.isPlaying ?? false,
-        pluginId: message.pluginId,
+        experienceId: message.experienceId,
         song: message.song,
         projectionMode: message.projectionMode ?? 'visualizer',
         pageUrl: message.pageUrl ?? null,
@@ -78,7 +78,7 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
         currentTime: message.currentTime,
         duration: message.duration,
         isPlaying: message.isPlaying,
-        pluginId: metaRef.current.pluginId,
+        experienceId: metaRef.current.experienceId,
         song: metaRef.current.song,
         projectionMode: metaRef.current.projectionMode,
         pageUrl: metaRef.current.pageUrl,
@@ -105,7 +105,7 @@ export function useVisualizerIpcSender(options: {
   enabled: boolean;
   sendFrames: boolean;
   analyser: AnalyserNode | null;
-  pluginId: string;
+  experienceId: string;
   song: VisualizerStreamConfig['song'];
   isPlaying: boolean;
   currentTime: number;
@@ -118,7 +118,7 @@ export function useVisualizerIpcSender(options: {
     enabled,
     sendFrames,
     analyser,
-    pluginId,
+    experienceId,
     song,
     isPlaying,
     currentTime,
@@ -146,7 +146,7 @@ export function useVisualizerIpcSender(options: {
     const sendConfig = () => {
       const config: VisualizerStreamConfig = {
         type: 'config',
-        pluginId,
+        experienceId,
         song,
         projectionMode,
         pageUrl,
@@ -162,7 +162,7 @@ export function useVisualizerIpcSender(options: {
       window.clearInterval(intervalId);
       offSync?.();
     };
-  }, [enabled, pageUrl, pluginId, projectionMode, song]);
+  }, [enabled, experienceId, pageUrl, projectionMode, song]);
 
   useEffect(() => {
     const app = getApp();

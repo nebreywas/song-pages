@@ -836,7 +836,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     if (visualizer.embeddedActive && visualizer.canVisualize) {
       return (
         <EmbeddedVisualizerHost
-          pluginId={visualizer.embeddedPluginId}
+          experienceId={visualizer.embeddedExperienceId}
           playingSong={playingSong}
           analyser={visualizer.analyser}
           butterchurnTap={visualizer.butterchurnTap}

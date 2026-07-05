@@ -79,6 +79,27 @@ The **main application window** may use relaxed settings required for PoC functi
 
 These relaxations apply **only to the trusted app shell**, not to guest webviews. Guest pages use sandboxed partition + strict webpreferences.
 
+### 7. Projection windows (Visualizer + VC Mode)
+
+Two additional **trusted** renderer windows support streaming and second-display use cases:
+
+| Window | File | Purpose |
+|--------|------|---------|
+| Visualizer | `electron/visualizerWindow.js` | External audio-reactive projection |
+| VC Mode | `electron/vcWindow.js` | Shareable listening-party surface + **mirrored HLS audio** for window capture |
+
+Both use the same preload as the main window (`electron/preload.js`) with `contextIsolation: true`, `nodeIntegration: false`, and **`webSecurity: false`** (CDN HLS without CORS). VC window additionally sets `autoplayPolicy: 'no-user-gesture-required'` so mirrored playback can start without user gesture in the capture target.
+
+These windows do **not** load artist song page guests. They render app-controlled React surfaces only. See [vc-mode-architecture.md](./vc-mode-architecture.md) and [visualizer-architecture.md](./visualizer-architecture.md).
+
+**Future hardening:** Narrow preload API surface for projection windows; media proxy instead of global `webSecurity: false`.
+
+### 8. Host content media (local imports)
+
+Host graphics and videos are imported via IPC (`hostContent:pickAndImportMedia`) into `{userData}/host-content/media/`. Validation (format, size, dimensions for graphics) runs in main process (`electron/hostContent.js`). Catalog metadata persists in SQLite key `vc.hostContent`. This is trusted local user content, not remote artist HTML.
+
+See [Host-content-design.md](./Host-content-design.md) and [settings-and-persistence.md](./settings-and-persistence.md).
+
 ---
 
 ## Currently completed actions
@@ -115,6 +136,15 @@ These relaxations apply **only to the trusted app shell**, not to guest webviews
 - [x] CSP injection at compile time
 - [x] Documentation: `guest-rendering-security.md`, this document
 
+### VC Mode, visualizers, host content
+
+- [x] VC Mode projection window with IPC state/frame stream
+- [x] VC audio mirror for window-only screen capture (Discord/Twitch)
+- [x] Surface/View Designer with auto-save persistence (`vc.lastConfig`)
+- [x] Host content catalog + local media import (`vc.hostContent`, `host-content/media/`)
+- [x] Visualizer projection window + Web Audio graph on main window
+- [x] Architecture docs: `vc-mode-architecture.md`, `visualizer-architecture.md`, `settings-and-persistence.md`
+
 ---
 
 ## Key file map
@@ -130,12 +160,16 @@ These relaxations apply **only to the trusted app shell**, not to guest webviews
 | Template app-mode CSS | `artist-page-templates/shared/css/site.css` |
 | Template app-mode script | `artist-page-templates/song-page.html`, `artist-index.html` |
 | Main window prefs | `electron/main.js` |
+| VC projection window | `electron/vcWindow.js` |
+| Visualizer projection window | `electron/visualizerWindow.js` |
+| Host content media | `electron/hostContent.js` |
 
 ---
 
 ## Not yet implemented (future work)
 
-- Replace main-window `webSecurity: false` with a safer media proxy for HLS (narrower than disabling web security globally)
+- Replace main-window `webSecurity: false` with a safer media proxy for HLS (narrower than disabling web security globally) — applies to main, visualizer, and VC windows
+- Narrow preload API exposed to projection windows (currently full `window.app`)
 - Signed manifests or manifest authenticity verification
 - Allowlist per-artist site roots beyond pathname matching
 - User-visible message when external link opens in browser

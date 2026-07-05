@@ -24,9 +24,10 @@ import {
   type HostFallbackItem,
 } from '@shared/hostContent';
 
+import { DesignerOverlayLayer } from '../designer/DesignerOverlayLayer';
 import { getApp } from '../../lib/bridge';
 import { HostContentPreview } from './HostContentPreview';
-import { useHostContentCatalog } from './useHostContentCatalog';
+import { useHostContentCatalog } from '../../host-content/useHostContentCatalog';
 
 type SortKey = 'name' | 'type' | 'date' | 'filesize';
 type SortDirection = 'asc' | 'desc';
@@ -144,31 +145,23 @@ function HostContentTypePicker({
   onClose: () => void;
 }) {
   return (
-    <div className="hc-type-picker-backdrop" role="presentation" onMouseDown={onClose}>
-      <div
-        className="hc-type-picker panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Choose content type"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="hc-type-picker-header">
-          <h3>Add content type…</h3>
-          <button type="button" className="vc-region-popover-close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </header>
-        <ul className="hc-type-picker-list">
-          {ADD_TYPES.map(([type, label]) => (
-            <li key={type}>
-              <button type="button" className="btn hc-type-picker-option" onClick={() => onPick(type)}>
-                {label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
+    <DesignerOverlayLayer ariaLabel="Choose content type" onClose={onClose} className="hc-type-picker">
+      <header className="hc-type-picker-header">
+        <h3>Add content type…</h3>
+        <button type="button" className="vc-region-popover-close" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+      </header>
+      <ul className="hc-type-picker-list">
+        {ADD_TYPES.map(([type, label]) => (
+          <li key={type}>
+            <button type="button" className="btn hc-type-picker-option" onClick={() => onPick(type)}>
+              {label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </DesignerOverlayLayer>
   );
 }
 

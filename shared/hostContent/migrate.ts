@@ -74,7 +74,7 @@ function sanitizeItem(raw: unknown): HostContentItem | null {
       fontSize: normalizeFontSizeId(value.fontSize),
       color: typeof value.color === 'string' ? value.color : '#ffffff',
       allCaps: value.allCaps === true,
-      overflow: (value.overflow as HostContentItem & { overflow: string }).overflow ?? 'restart',
+      overflow: typeof value.overflow === 'string' ? value.overflow : 'restart',
       createdAt,
       updatedAt,
     } as HostContentItem;
@@ -91,7 +91,7 @@ function sanitizeItem(raw: unknown): HostContentItem | null {
       fontSize: normalizeFontSizeId(value.fontSize),
       color: typeof value.color === 'string' ? value.color : '#ffffff',
       markdownSource: value.markdownSource === true,
-      overflow: (value.overflow as HostContentItem & { overflow: string }).overflow ?? 'restart',
+      overflow: typeof value.overflow === 'string' ? value.overflow : 'restart',
       createdAt,
       updatedAt,
     } as HostContentItem;

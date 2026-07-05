@@ -1129,16 +1129,7 @@
   white-space: nowrap;
 }
 
-.hc-type-picker-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.hc-type-picker {
+.vc-designer-overlay-panel.hc-type-picker {
   width: min(100%, 16rem);
   padding: 0.75rem;
 }

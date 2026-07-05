@@ -20,7 +20,7 @@ export type ProjectionMode = 'page' | 'visualizer';
 
 export type VisualizerStreamConfig = {
   type: 'config';
-  pluginId: string;
+  experienceId: string;
   song: VisualizerSongInfo | null;
   /** What the projection window shows — song page webview or FFT visualizer. */
   projectionMode?: ProjectionMode;
@@ -30,8 +30,5 @@ export type VisualizerStreamConfig = {
 export type VisualizerStreamMessage = VisualizerStreamFrame | VisualizerStreamConfig;
 
 export const VISUALIZER_PORT_MESSAGE = 'songpages-visualizer-port';
-
-/** @deprecated Use VISUALIZER_ACTIVE_EXPERIENCE_KEY from settings/persistence/keys */
-export const VISUALIZER_SETTINGS_KEY = 'visualizer.activePluginId';
 
 export const DEFAULT_VISUALIZER_ID = 'spectrum';

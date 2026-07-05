@@ -267,11 +267,6 @@ export function isSongConfigurableContent(content: VcCellContent): boolean {
   return content in SONG_CONTENT_SETTINGS_RULE;
 }
 
-/** @deprecated Use isSongConfigurableContent */
-export function isSongGraphicContent(content: VcCellContent): boolean {
-  return isSongConfigurableContent(content);
-}
-
 export function songSlotSettingsForContent(
   cell: VcCellAssignment,
   content: VcCellContent,
@@ -430,22 +425,6 @@ export function assignVisualizerToRegion(
   }
 
   return { ...config, cells, floatContent };
-}
-
-/** @deprecated Use assignVisualizerToRegion — kept for migration-era call sites. */
-export function assignVisualizerToCell(
-  cells: VcCellAssignment[],
-  cellIndex: number,
-  slot: 'slotA' | 'slotB',
-): VcCellAssignment[] {
-  return cells.map((cell, index) => {
-    const next = { ...cell };
-    if (index !== cellIndex) {
-      if (next.slotA === 'visualizer') next.slotA = '';
-      if (next.slotB === 'visualizer') next.slotB = '';
-    }
-    return next;
-  });
 }
 
 export function resolveCellCycleTime(cell: VcCellAssignment): VcCycleTime | null {

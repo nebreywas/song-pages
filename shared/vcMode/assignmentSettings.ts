@@ -381,9 +381,6 @@ export function resolveSongGraphicPresentation(overrides: VcAssignmentOverrides)
   };
 }
 
-/** @deprecated Use resolveSongGraphicPresentation */
-export const resolveSongCoverPresentation = resolveSongGraphicPresentation;
-
 /** Resolve song video presentation (video cover) from assignment overrides. */
 export function resolveSongVideoPresentation(overrides: VcAssignmentOverrides): EffectiveVideoPresentation {
   const defaults = getAssignmentDefaults('video-cover', null, { version: 1, items: [] });
