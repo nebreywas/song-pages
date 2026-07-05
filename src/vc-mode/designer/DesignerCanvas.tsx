@@ -1,12 +1,14 @@
 /**
- * Interactive 16:9 surface canvas for Designer mode.
- * Shows live content previews with editing chrome layered on top.
+ * Interactive surface canvas for Designer mode.
+ * Uses normalized 0–1 geometry (same as live VC); preview box fills available modal space.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { applyDividerDrag, computeSurfaceLayout } from '@shared/vcSurface/geometry';
 import { moveFloat, resizeFloat } from '@shared/vcSurface/floats';
+import { gridDividerCss, floatOutlineCss } from '@shared/vcMode/gridDesign';
+import type { HostContentCatalog } from '@shared/hostContent';
 import {
   emptyCell,
   type VcCellAssignment,
@@ -14,7 +16,9 @@ import {
   type VcStatePayload,
 } from '@shared/vcModeTypes';
 
-import { DesignerContentPreview } from './DesignerContentPreview';
+import { DesignerContentPreview, hostBindingForPreview, songBindingForPreview } from './DesignerContentPreview';
+import { clientToNorm } from './designerPointer';
+import type { RegionTarget } from './RegionContentPopover';
 
 export type DesignerSelection =
   | { kind: 'area'; areaNumber: number }
@@ -23,39 +27,37 @@ export type DesignerSelection =
 
 type DesignerCanvasProps = {
   config: VcModeConfig;
+  hostCatalog: HostContentCatalog;
   previewState: VcStatePayload | null;
   selection: DesignerSelection;
   onSelect: (selection: DesignerSelection) => void;
   onChangeSurface: (patch: Partial<VcModeConfig['surface']>) => void;
+  onRegionContextMenu: (target: RegionTarget, event: React.MouseEvent) => void;
 };
 
 type DragState =
-  | { type: 'divider'; key: string }
-  | { type: 'float-move'; id: string; offsetX: number; offsetY: number }
-  | { type: 'float-resize'; id: string }
+  | { type: 'divider'; key: string; pointerId: number }
+  | { type: 'float-move'; id: string; offsetX: number; offsetY: number; pointerId: number }
+  | { type: 'float-resize'; id: string; pointerId: number }
   | null;
 
 function activeContent(cell: VcCellAssignment) {
   return cell.slotA || cell.slotB || '';
 }
 
-function clientToNorm(
-  event: { clientX: number; clientY: number },
-  el: HTMLElement,
-): { x: number; y: number } {
-  const rect = el.getBoundingClientRect();
-  return {
-    x: (event.clientX - rect.left) / Math.max(rect.width, 1),
-    y: (event.clientY - rect.top) / Math.max(rect.height, 1),
-  };
+/** Width × height as rounded whole percentages for designer badges. */
+function formatRegionSize(width: number, height: number): string {
+  return `${Math.round(width * 100)}% x ${Math.round(height * 100)}%`;
 }
 
 export function DesignerCanvas({
   config,
+  hostCatalog,
   previewState,
   selection,
   onSelect,
   onChangeSurface,
+  onRegionContextMenu,
 }: DesignerCanvasProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const configRef = useRef(config);
@@ -75,11 +77,32 @@ export function DesignerCanvas({
     [config.surface.floats],
   );
 
-  // Window-level listeners so drags keep working when the pointer leaves the handle.
+  const floatNumbers = useMemo(() => {
+    const order = new Map<string, number>();
+    config.surface.floats.forEach((float, index) => order.set(float.id, index + 1));
+    return order;
+  }, [config.surface.floats]);
+
+  const endDrag = useCallback(() => {
+    setDrag(null);
+  }, []);
+
+  const handleRegionContextMenu = useCallback(
+    (target: RegionTarget, event: React.MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onRegionContextMenu(target, event);
+    },
+    [onRegionContextMenu],
+  );
+
+  // Window-level pointer listeners — keep drags alive when the cursor leaves a region.
   useEffect(() => {
     if (!drag) return;
 
     const onMove = (event: PointerEvent) => {
+      if (event.pointerId !== drag.pointerId) return;
+
       const surface = surfaceRef.current;
       if (!surface) return;
       const current = configRef.current;
@@ -123,24 +146,45 @@ export function DesignerCanvas({
       }
     };
 
-    const onUp = () => setDrag(null);
+    const onEnd = (event: PointerEvent) => {
+      if (event.pointerId !== drag.pointerId) return;
+      endDrag();
+    };
 
     window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
     return () => {
       window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
     };
-  }, [drag]);
+  }, [drag, endDrag]);
+
+  const beginPointerDrag = (event: React.PointerEvent, nextDrag: DragState) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDrag(nextDrag);
+  };
 
   return (
-    <div className="vc-designer-canvas-frame">
+    <div
+      className={`vc-designer-canvas-frame${drag ? ' is-dragging' : ''}`}
+      style={{ '--vc-grid-bg': config.gridDesign.backgroundColor } as React.CSSProperties}
+    >
       <div
         ref={surfaceRef}
         className="vc-designer-canvas"
+        style={
+          {
+            background: config.gridDesign.backgroundColor,
+            '--vc-grid-bg': config.gridDesign.backgroundColor,
+          } as React.CSSProperties
+        }
         onPointerDown={(event) => {
+          if (event.button !== 0) return;
           if (event.target === event.currentTarget) onSelect(null);
         }}
       >
@@ -159,12 +203,26 @@ export function DesignerCanvas({
                 height: `${area.height * 100}%`,
               }}
               onPointerDown={(event) => {
+                if (event.button !== 0) return;
                 event.stopPropagation();
                 onSelect({ kind: 'area', areaNumber: area.areaNumber });
               }}
+              onContextMenu={(event) =>
+                handleRegionContextMenu({ kind: 'area', areaNumber: area.areaNumber }, event)
+              }
             >
-              <DesignerContentPreview content={activeContent(cell)} state={previewState} />
-              <span className="vc-designer-area-badge">Area {area.areaNumber}</span>
+              <div className="vc-designer-region-content">
+                <DesignerContentPreview
+                  content={activeContent(cell)}
+                  hostBinding={hostBindingForPreview(cell, activeContent(cell))}
+                  songBinding={songBindingForPreview(cell, activeContent(cell))}
+                  hostCatalog={hostCatalog}
+                  state={previewState}
+                />
+              </div>
+              <span className="vc-designer-area-badge">
+                Area {area.areaNumber} ({formatRegionSize(area.width, area.height)})
+              </span>
             </div>
           );
         })}
@@ -172,40 +230,63 @@ export function DesignerCanvas({
         {floats.map((float) => {
           const cell = config.floatContent[float.id] ?? emptyCell();
           const selected = selection?.kind === 'float' && selection.id === float.id;
+          const floatNumber = floatNumbers.get(float.id) ?? 1;
+          const floatIndex = floatNumber - 1;
           return (
             <div
               key={float.id}
-              className={`vc-designer-region vc-designer-float${selected ? ' is-selected' : ''}`}
+              className={`vc-designer-region vc-designer-float${selected ? ' is-selected' : ''}${drag?.type === 'float-move' && drag.id === float.id ? ' is-dragging' : ''}`}
               style={{
                 left: `${float.x * 100}%`,
                 top: `${float.y * 100}%`,
                 width: `${float.width * 100}%`,
                 height: `${float.height * 100}%`,
-                zIndex: 20 + float.zIndex,
+                zIndex: 40 + float.zIndex,
+                ...floatOutlineCss(config.gridDesign.floatLines),
               }}
               onPointerDown={(event) => {
-                event.stopPropagation();
+                if (event.button !== 0) return;
                 onSelect({ kind: 'float', id: float.id });
                 if (!surfaceRef.current) return;
                 const norm = clientToNorm(event, surfaceRef.current);
-                setDrag({
+                beginPointerDrag(event, {
                   type: 'float-move',
                   id: float.id,
                   offsetX: norm.x - float.x,
                   offsetY: norm.y - float.y,
+                  pointerId: event.pointerId,
                 });
               }}
+              onContextMenu={(event) =>
+                handleRegionContextMenu(
+                  { kind: 'float', id: float.id, index: floatIndex },
+                  event,
+                )
+              }
             >
-              <DesignerContentPreview content={activeContent(cell)} state={previewState} />
-              <span className="vc-designer-area-badge">Float</span>
+              <div className="vc-designer-region-content">
+                <DesignerContentPreview
+                  content={activeContent(cell)}
+                  hostBinding={hostBindingForPreview(cell, activeContent(cell))}
+                  songBinding={songBindingForPreview(cell, activeContent(cell))}
+                  hostCatalog={hostCatalog}
+                  state={previewState}
+                />
+              </div>
+              <span className="vc-designer-area-badge">
+                Float {floatNumber} ({formatRegionSize(float.width, float.height)})
+              </span>
               <button
                 type="button"
                 className="vc-designer-resize-handle"
                 aria-label="Resize float"
                 onPointerDown={(event) => {
-                  event.stopPropagation();
                   onSelect({ kind: 'float', id: float.id });
-                  setDrag({ type: 'float-resize', id: float.id });
+                  beginPointerDrag(event, {
+                    type: 'float-resize',
+                    id: float.id,
+                    pointerId: event.pointerId,
+                  });
                 }}
               />
             </div>
@@ -218,8 +299,8 @@ export function DesignerCanvas({
             <div
               key={handle.key}
               className={`vc-designer-divider ${isVertical ? 'is-vertical' : 'is-horizontal'}`}
-              style={
-                isVertical
+              style={{
+                ...(isVertical
                   ? {
                       left: `${handle.position * 100}%`,
                       top: `${handle.region.y * 100}%`,
@@ -229,11 +310,15 @@ export function DesignerCanvas({
                       top: `${handle.position * 100}%`,
                       left: `${handle.region.x * 100}%`,
                       width: `${handle.region.width * 100}%`,
-                    }
-              }
+                    }),
+                ...gridDividerCss(isVertical ? 'vertical' : 'horizontal', config.gridDesign.gridLines),
+              }}
               onPointerDown={(event) => {
-                event.stopPropagation();
-                setDrag({ type: 'divider', key: handle.key });
+                beginPointerDrag(event, {
+                  type: 'divider',
+                  key: handle.key,
+                  pointerId: event.pointerId,
+                });
               }}
             />
           );

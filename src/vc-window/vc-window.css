@@ -12,6 +12,14 @@
   overflow: hidden;
 }
 
+.vc-playback-audio {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .vc-window-waiting {
   display: grid;
   place-content: center;
@@ -28,8 +36,22 @@
 .vc-surface {
   position: absolute;
   inset: 0;
-  background: #000;
   overflow: hidden;
+}
+
+.vc-surface-divider {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.vc-surface-divider.is-vertical {
+  transform: translateX(-50%);
+}
+
+.vc-surface-divider.is-horizontal {
+  transform: translateY(-50%);
 }
 
 .vc-surface-region {
@@ -41,11 +63,8 @@
   flex-direction: column;
 }
 
-.vc-surface-float {
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
-}
+/* Float outline comes from gridDesign.floatLines via inline style on .vc-surface-float */
 
-/* Debug outlines — toggled by ⌘⌥D / Ctrl+Alt+D while VC is live. */
 .vc-surface-region.vc-debug-outline {
   outline: 3px solid #ff0000;
   outline-offset: -3px;
@@ -76,15 +95,37 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  background: #06080f;
+  background: var(--vc-grid-bg, #06080f);
 }
 
 .vc-cell-blank {
-  background: #04060c;
+  background: var(--vc-grid-bg, #04060c);
 }
 
 .vc-cell-clickable {
   cursor: pointer;
+}
+
+.vc-cell-fade {
+  position: relative;
+}
+
+.vc-cell-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transition: opacity var(--vc-fade-ms, 500ms) ease-in-out;
+  pointer-events: none;
+}
+
+.vc-cell-fade.vc-cell-clickable .vc-cell-layer {
+  pointer-events: auto;
+}
+
+.vc-cell-layer .vc-cell-empty,
+.vc-cell-layer .visualizer-host {
+  width: 100%;
+  height: 100%;
 }
 
 .vc-cell-empty {
@@ -158,6 +199,28 @@
 
 .vc-artist-name {
   margin: 0 0 0.35rem;
+}
+
+.vc-host-text {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 0.85rem 1rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #e8ecf4;
+}
+
+.vc-host-text-markdown p:first-child {
+  margin-top: 0;
+}
+
+.vc-host-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
 }
 
 .vc-artist-bio {
@@ -313,4 +376,146 @@
     transform: translateY(calc(-80px + var(--drift, 0px))) scale(1.05);
     opacity: 0;
   }
+}
+
+.vc-media-shell {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.vc-media-stage {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+/* Stretch fills the inset box and does not preserve aspect ratio. */
+.vc-media-fit-mode-stretch .vc-media-stage {
+  display: block;
+  position: relative;
+}
+
+.vc-media-fit-mode-stretch .vc-media-fit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+}
+
+.vc-media-fit {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.vc-media-overflow-scroll .vc-media-stage {
+  overflow: auto;
+}
+
+.vc-media-overflow-auto-scroll .vc-media-stage {
+  overflow: hidden;
+}
+
+.vc-media-overflow-auto-scroll .vc-media-fit {
+  animation: vc-media-auto-scroll 12s linear infinite alternate;
+}
+
+.vc-media-overflow-bounce .vc-media-stage {
+  overflow: hidden;
+}
+
+.vc-media-overflow-bounce .vc-media-fit {
+  animation: vc-media-bounce 10s ease-in-out infinite;
+}
+
+@keyframes vc-media-auto-scroll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-35%);
+  }
+}
+
+@keyframes vc-media-bounce {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(0, -12%);
+  }
+  50% {
+    transform: translate(0, 12%);
+  }
+  75% {
+    transform: translate(-10%, 0);
+  }
+}
+
+.vc-group-slideshow {
+  width: 100%;
+  height: 100%;
+}
+
+.vc-group-slide-fade {
+  transition: opacity 0.22s ease;
+}
+
+.vc-group-slide-fade:not(.is-visible) {
+  opacity: 0;
+}
+
+.vc-group-slide-flip .vc-media-shell {
+  transition: transform 0.35s ease;
+}
+
+.vc-group-slide-flip:not(.is-visible) .vc-media-shell {
+  transform: rotateY(90deg);
+}
+
+.vc-group-gallery {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  box-sizing: border-box;
+}
+
+.vc-group-gallery-scroll {
+  overflow-x: auto;
+  justify-content: flex-start;
+}
+
+.vc-group-gallery-coverflow {
+  perspective: 800px;
+}
+
+.vc-group-thumb {
+  max-height: 72%;
+  max-width: 32%;
+  object-fit: contain;
+}
+
+.vc-group-coverflow-item {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.vc-group-coverflow-item img {
+  max-height: 58%;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
 }

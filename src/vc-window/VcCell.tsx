@@ -1,17 +1,36 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
-import type { VcCellAssignment, VcCellContent, VcStatePayload } from '@shared/vcModeTypes';
+import {
+  VC_TRANSITION_FADE_MS,
+  songSlotSettingsForContent,
+  type VcCellAssignment,
+  type VcCellContent,
+  type VcHostSlotBinding,
+  type VcStatePayload,
+} from '@shared/vcModeTypes';
+
+import type { HostContentCatalog } from '@shared/hostContent';
 
 import { VcCellContentView } from './VcCellContentView';
 import { useCellClickCooldown } from './useVcWindowState';
 
 type VcCellProps = {
   cell: VcCellAssignment;
+  hostCatalog: HostContentCatalog;
   state: VcStatePayload;
   frequencyData: Uint8Array;
   frame: number;
   canvasFrame: string | null;
 };
+
+function hostBindingForContent(
+  cell: VcCellAssignment,
+  content: VcCellContent,
+): VcHostSlotBinding | null {
+  if (content === cell.slotA) return cell.hostSlotA;
+  if (content === cell.slotB) return cell.hostSlotB;
+  return null;
+}
 
 function activeContents(cell: VcCellAssignment): VcCellContent[] {
   const items: VcCellContent[] = [];
@@ -20,11 +39,12 @@ function activeContents(cell: VcCellAssignment): VcCellContent[] {
   return items;
 }
 
-/** One grid area — optional A/B cycling by timer or click. */
-export function VcCell({ cell, state, frequencyData, frame, canvasFrame }: VcCellProps) {
+/** One surface region — optional primary/secondary cycling with replace or fade. */
+export function VcCell({ cell, hostCatalog, state, frequencyData, frame, canvasFrame }: VcCellProps) {
   const contents = useMemo(() => activeContents(cell), [cell]);
   const [index, setIndex] = useState(0);
   const tryClick = useCellClickCooldown();
+  const useFade = cell.transitionStyle === 'fade' && contents.length > 1;
 
   useEffect(() => {
     setIndex(0);
@@ -54,23 +74,50 @@ export function VcCell({ cell, state, frequencyData, frame, canvasFrame }: VcCel
     setIndex((value) => (value + 1) % contents.length);
   };
 
+  const sharedViewProps = {
+    hostCatalog,
+    state,
+    frequencyData,
+    frame,
+    canvasFrame,
+  };
+
   return (
     <div
-      className={`vc-cell${cell.cycleTime === 'click' && contents.length > 1 ? ' vc-cell-clickable' : ''}`}
+      className={`vc-cell${cell.cycleTime === 'click' && contents.length > 1 ? ' vc-cell-clickable' : ''}${useFade ? ' vc-cell-fade' : ''}`}
       onClick={onCellClick}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') onCellClick();
       }}
       role={cell.cycleTime === 'click' && contents.length > 1 ? 'button' : undefined}
       tabIndex={cell.cycleTime === 'click' && contents.length > 1 ? 0 : undefined}
+      style={
+        useFade ? ({ '--vc-fade-ms': `${VC_TRANSITION_FADE_MS}ms` } as CSSProperties) : undefined
+      }
     >
-      <VcCellContentView
-        content={current}
-        state={state}
-        frequencyData={frequencyData}
-        frame={frame}
-        canvasFrame={canvasFrame}
-      />
+      {useFade ? (
+        contents.map((content, layerIndex) => (
+          <div
+            key={`${content}-${layerIndex}`}
+            className="vc-cell-layer"
+            style={{ opacity: layerIndex === index ? 1 : 0 }}
+          >
+            <VcCellContentView
+              content={content}
+              hostBinding={hostBindingForContent(cell, content)}
+              songBinding={songSlotSettingsForContent(cell, content)}
+              {...sharedViewProps}
+            />
+          </div>
+        ))
+      ) : (
+        <VcCellContentView
+          content={current}
+          hostBinding={hostBindingForContent(cell, current)}
+          songBinding={songSlotSettingsForContent(cell, current)}
+          {...sharedViewProps}
+        />
+      )}
     </div>
   );
 }

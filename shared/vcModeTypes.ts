@@ -14,15 +14,80 @@ export type { VcTemplateId } from './vcSurface/templates';
 export type { VcFloatGeometry } from './vcSurface/floats';
 export type { VcAreaRect, VcDividerHandle, VcRect, VcSurfaceLayout } from './vcSurface/geometry';
 
-export type VcCellContent = '' | 'visualizer' | 'cover' | 'lyrics' | 'about' | 'artist' | 'host';
+export type VcCellContent =
+  | ''
+  | 'visualizer'
+  | 'cover'
+  | 'video-cover'
+  | 'lyrics'
+  | 'about'
+  | 'artist-name'
+  | 'artist-image'
+  | 'song-title'
+  | 'main-genre'
+  | 'additional-genres'
+  | 'host-graphic'
+  | 'host-video'
+  | 'host-title-text'
+  | 'host-area-text'
+  | 'host-graphics-group';
+
+export type { VcAssignmentOverrides } from './vcMode/assignmentSettings';
+import type { VcAssignmentOverrides } from './vcMode/assignmentSettings';
+import { sanitizeAssignmentOverrides } from './vcMode/assignmentSettings';
+export type {
+  VcGridDesignSettings,
+  VcGridDefaultTypography,
+  VcGridLineSettings,
+  VcGridLineStyle,
+} from './vcMode/gridDesign';
+export { DEFAULT_VC_GRID_DESIGN, sanitizeGridDesign } from './vcMode/gridDesign';
+import { sanitizeGridDesign, type VcGridDesignSettings } from './vcMode/gridDesign';
+
+export type VcHostSlotBinding = {
+  itemId: string;
+  overrides: VcAssignmentOverrides;
+};
+
+/** Per-slot presentation overrides for song content slots (cover, lyrics, etc.). */
+export type VcSongSlotSettings = {
+  overrides: VcAssignmentOverrides;
+};
+
+/** Which host assignment rule set applies to each song content kind. */
+export type SongContentSettingsRule = 'graphic' | 'video' | 'title-text' | 'area-text';
+
+export const SONG_CONTENT_SETTINGS_RULE: Partial<Record<VcCellContent, SongContentSettingsRule>> = {
+  cover: 'graphic',
+  'video-cover': 'video',
+  'artist-image': 'graphic',
+  lyrics: 'area-text',
+  about: 'title-text',
+  'artist-name': 'title-text',
+  'song-title': 'title-text',
+  'main-genre': 'title-text',
+  'additional-genres': 'title-text',
+};
 
 export type VcCycleTime = 'click' | 10 | 15 | 20 | 30 | 45 | 60;
+
+/** How primary/secondary content swap when cycling. */
+export type VcTransitionStyle = 'replace' | 'fade';
+
+/** Crossfade duration when transitionStyle is fade (milliseconds). */
+export const VC_TRANSITION_FADE_MS = 500;
 
 export type VcCellAssignment = {
   slotA: VcCellContent;
   slotB: VcCellContent;
+  hostSlotA: VcHostSlotBinding | null;
+  hostSlotB: VcHostSlotBinding | null;
+  songSlotA: VcSongSlotSettings | null;
+  songSlotB: VcSongSlotSettings | null;
   /** Required when both slots are set; null when blank or single slot only. */
   cycleTime: VcCycleTime | null;
+  /** Per-region transition when cycling between primary and secondary. */
+  transitionStyle: VcTransitionStyle;
 };
 
 /** Base template geometry + floats. Content is stored separately. */
@@ -45,13 +110,23 @@ export type VcModeConfig = {
   /** Content for floats, keyed by float id. */
   floatContent: Record<string, VcCellAssignment>;
   visualizerId: string;
-  hostGraphicPath: string | null;
+  /** When false, missing song content renders blank instead of host/system fallbacks. */
+  useFallbacks: boolean;
+  /** Surface background, divider lines, and default text typography. */
+  gridDesign: VcGridDesignSettings;
 };
 
 export type VcPlaybackState = {
   currentTime: number;
   duration: number;
   isPlaying: boolean;
+};
+
+/** Stream URL + volume mirrored into the VC window so screen-share captures audio from that window. */
+export type VcAudioMirror = {
+  songId: number | null;
+  playbackUrl: string | null;
+  volume: number;
 };
 
 export type VcSongPayload = {
@@ -61,9 +136,14 @@ export type VcSongPayload = {
   year: string | null;
   caption: string | null;
   coverUrl: string | null;
+  /** Song extra asset (often video) — maps to Video Cover content. */
+  videoCoverUrl?: string | null;
   about: string;
   lyrics: string;
   artistId: number;
+  /** Added soon in song JSON — optional until editor ships. */
+  mainGenre?: string | null;
+  additionalGenres?: string | null;
 };
 
 export type VcUpcomingSong = {
@@ -78,6 +158,8 @@ export type VcOverlayId = 'cover' | 'host' | 'next' | 'songInfo' | 'upcoming' | 
 export type VcStatePayload = {
   config: VcModeConfig;
   playback: VcPlaybackState;
+  /** Audible playback in the VC Electron window (main window speakers are muted while VC is open). */
+  audioMirror: VcAudioMirror;
   currentSong: VcSongPayload | null;
   nextSong: { title: string; artist: string } | null;
   upcoming: VcUpcomingSong[];
@@ -86,6 +168,59 @@ export type VcStatePayload = {
   artistBio: string | null;
   artistPhotoUrl: string | null;
 };
+
+export const VC_SONG_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: string }> = [
+  { value: 'artist-name', label: 'Artist Name' },
+  { value: 'artist-image', label: 'Artist Image' },
+  { value: 'song-title', label: 'Song Title' },
+  { value: 'about', label: 'About Song' },
+  { value: 'main-genre', label: 'Main Genre' },
+  { value: 'additional-genres', label: 'Additional Genres' },
+  { value: 'lyrics', label: 'Lyrics' },
+  { value: 'cover', label: 'Cover' },
+  { value: 'video-cover', label: 'Video Cover' },
+  { value: 'visualizer', label: 'Visualizer' },
+];
+
+export const VC_HOST_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: string }> = [
+  { value: 'host-graphic', label: 'Host graphic' },
+  { value: 'host-video', label: 'Host video' },
+  { value: 'host-title-text', label: 'Host title text' },
+  { value: 'host-area-text', label: 'Host area text' },
+  { value: 'host-graphics-group', label: 'Host graphics group' },
+];
+
+export const VC_CONTENT_LABELS: Record<VcCellContent, string> = {
+  '': '(blank)',
+  visualizer: 'Visualizer',
+  cover: 'Cover',
+  'video-cover': 'Video Cover',
+  lyrics: 'Lyrics',
+  about: 'About song',
+  'artist-name': 'Artist Name',
+  'artist-image': 'Artist Image',
+  'song-title': 'Song Title',
+  'main-genre': 'Main Genre',
+  'additional-genres': 'Additional Genres',
+  'host-graphic': 'Host graphic',
+  'host-video': 'Host video',
+  'host-title-text': 'Host title text',
+  'host-area-text': 'Host area text',
+  'host-graphics-group': 'Host graphics group',
+};
+
+const VC_CELL_CONTENT_SET = new Set<string>(Object.keys(VC_CONTENT_LABELS));
+
+export function isHostContentKind(content: VcCellContent): boolean {
+  return content.startsWith('host-');
+}
+
+export function migrateCellContent(raw: unknown): VcCellContent {
+  if (typeof raw !== 'string') return '';
+  if (raw === 'artist') return 'artist-name';
+  if (raw === 'host') return '';
+  return VC_CELL_CONTENT_SET.has(raw) ? (raw as VcCellContent) : '';
+}
 
 export type VcHotkeyAction =
   | 'cover'
@@ -99,16 +234,6 @@ export type VcHotkeyAction =
 
 export const VC_SETTINGS_KEY = 'vc.lastConfig';
 
-export const VC_CONTENT_LABELS: Record<VcCellContent, string> = {
-  '': '(blank)',
-  visualizer: 'Visualizer',
-  cover: 'Cover',
-  lyrics: 'Lyrics',
-  about: 'About song',
-  artist: 'Artist',
-  host: 'VC Host graphic',
-};
-
 export const VC_CYCLE_OPTIONS: Array<{ value: VcCycleTime; label: string }> = [
   { value: 'click', label: 'Click' },
   { value: 10, label: '10 seconds' },
@@ -119,8 +244,41 @@ export const VC_CYCLE_OPTIONS: Array<{ value: VcCycleTime; label: string }> = [
   { value: 60, label: '60 seconds' },
 ];
 
+export const VC_TRANSITION_OPTIONS: Array<{ value: VcTransitionStyle; label: string }> = [
+  { value: 'replace', label: 'Replace' },
+  { value: 'fade', label: 'Fade' },
+];
+
 export function emptyCell(): VcCellAssignment {
-  return { slotA: '', slotB: '', cycleTime: null };
+  return {
+    slotA: '',
+    slotB: '',
+    hostSlotA: null,
+    hostSlotB: null,
+    songSlotA: null,
+    songSlotB: null,
+    cycleTime: null,
+    transitionStyle: 'replace',
+  };
+}
+
+/** Song content kinds with per-assignment presentation settings. */
+export function isSongConfigurableContent(content: VcCellContent): boolean {
+  return content in SONG_CONTENT_SETTINGS_RULE;
+}
+
+/** @deprecated Use isSongConfigurableContent */
+export function isSongGraphicContent(content: VcCellContent): boolean {
+  return isSongConfigurableContent(content);
+}
+
+export function songSlotSettingsForContent(
+  cell: VcCellAssignment,
+  content: VcCellContent,
+): VcSongSlotSettings | null {
+  if (content === cell.slotA) return cell.songSlotA;
+  if (content === cell.slotB) return cell.songSlotB;
+  return null;
 }
 
 export function defaultCells(): VcCellAssignment[] {
@@ -159,19 +317,38 @@ export function configUsesVisualizer(config: VcModeConfig): boolean {
   );
 }
 
-export function configUsesHost(config: VcModeConfig): boolean {
-  return allContentAssignments(config).some(
-    (cell) => cell.slotA === 'host' || cell.slotB === 'host',
-  );
+export function configUsesHost(_config: VcModeConfig): boolean {
+  return false;
+}
+
+function sanitizeHostBinding(raw: unknown): VcHostSlotBinding | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Partial<VcHostSlotBinding>;
+  if (typeof value.itemId !== 'string') return null;
+  return {
+    itemId: value.itemId,
+    overrides: sanitizeAssignmentOverrides(value.overrides),
+  };
+}
+
+function sanitizeSongSlot(raw: unknown): VcSongSlotSettings {
+  if (!raw || typeof raw !== 'object') return { overrides: {} };
+  const value = raw as Partial<VcSongSlotSettings>;
+  return { overrides: sanitizeAssignmentOverrides(value.overrides) };
 }
 
 function sanitizeCell(raw: unknown): VcCellAssignment {
   if (!raw || typeof raw !== 'object') return emptyCell();
   const cell = raw as Partial<VcCellAssignment>;
-  const slotA = (cell.slotA ?? '') as VcCellContent;
-  const slotB = (cell.slotB ?? '') as VcCellContent;
+  const slotA = migrateCellContent(cell.slotA);
+  const slotB = migrateCellContent(cell.slotB);
+  const hostSlotA = isHostContentKind(slotA) ? sanitizeHostBinding(cell.hostSlotA) : null;
+  const hostSlotB = isHostContentKind(slotB) ? sanitizeHostBinding(cell.hostSlotB) : null;
+  const songSlotA = isSongConfigurableContent(slotA) ? sanitizeSongSlot(cell.songSlotA) : null;
+  const songSlotB = isSongConfigurableContent(slotB) ? sanitizeSongSlot(cell.songSlotB) : null;
   const cycleTime = cell.cycleTime ?? null;
-  return { slotA, slotB, cycleTime };
+  const transitionStyle = cell.transitionStyle === 'fade' ? 'fade' : 'replace';
+  return { slotA, slotB, hostSlotA, hostSlotB, songSlotA, songSlotB, cycleTime, transitionStyle };
 }
 
 function sanitizeCells(raw: unknown): VcCellAssignment[] {
@@ -210,7 +387,8 @@ export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
     cells,
     floatContent,
     visualizerId: config.visualizerId,
-    hostGraphicPath: config.hostGraphicPath ?? null,
+    useFallbacks: config.useFallbacks !== false,
+    gridDesign: sanitizeGridDesign(config.gridDesign),
   };
 }
 

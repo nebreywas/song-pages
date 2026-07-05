@@ -11,8 +11,10 @@ const listenerSubscribe = require('./listener/subscribe');
 const { bindSongPageGuestById } = require('./listener/guestSecurity');
 const visualizerWindow = require('./visualizerWindow');
 const vcWindow = require('./vcWindow');
+const { registerHostContentIpc } = require('./hostContent');
 
 function registerIpcHandlers() {
+  registerHostContentIpc(ipcMain);
   ipcMain.handle('app:getVersion', () => app.getVersion());
 
   ipcMain.handle('app:openExternal', (_event, url) => {
@@ -389,6 +391,10 @@ function registerIpcHandlers() {
 
   ipcMain.on('vc:sendFrame', (_event, payload) => {
     vcWindow.sendVcFrame(payload);
+  });
+
+  ipcMain.on('vc:sendPlaybackStatus', (_event, payload) => {
+    vcWindow.forwardVcPlaybackStatus(payload);
   });
 }
 

@@ -1,0 +1,477 @@
+/**
+ * Live VC cell content resolution — song data, host catalog items, fallback chain, assignment overrides.
+ */
+
+import {
+  findHostContentItem,
+  hostContentTypeForSlot,
+  resolveMultiFieldFallback,
+  SYSTEM_FALLBACK_ASSETS,
+  SYSTEM_FALLBACK_TEXT,
+  type HostContentCatalog,
+  type HostContentItem,
+  type HostFallbackItem,
+  type HostFallbackSlotId,
+  type HostFontSizeId,
+  type HostFontStyleId,
+  type HostGraphicsGroupItem,
+} from '../hostContent';
+import {
+  resolveEffectiveAreaTextPresentation,
+  resolveEffectiveGraphicPresentation,
+  resolveEffectiveGroupPresentation,
+  resolveEffectiveTitleTextPresentation,
+  resolveEffectiveVideoPresentation,
+  resolveSongAreaTextPresentation,
+  resolveSongGraphicPresentation,
+  resolveSongTitleTextPresentation,
+  resolveSongVideoPresentation,
+  type EffectiveGraphicPresentation,
+  type EffectiveGroupPresentation,
+  type EffectiveVideoPresentation,
+  type VcAssignmentOverrides,
+} from './assignmentSettings';
+import {
+  isHostContentKind,
+  SONG_CONTENT_SETTINGS_RULE,
+  type VcCellContent,
+  type VcHostSlotBinding,
+  type VcSongPayload,
+} from '../vcModeTypes';
+import type { VcGridDefaultTypography, VcGridDesignSettings } from './gridDesign';
+import { DEFAULT_VC_GRID_DESIGN } from './gridDesign';
+
+export type VcResolutionContext = {
+  song: VcSongPayload | null;
+  artistName: string | null;
+  artistPhotoUrl: string | null;
+  catalog: HostContentCatalog;
+  useFallbacks: boolean;
+  gridDesign?: VcGridDesignSettings;
+  random?: () => number;
+};
+
+export type ResolvedGraphic = {
+  kind: 'graphic';
+  remoteUrl?: string | null;
+  mediaPath?: string | null;
+  systemAsset?: keyof typeof SYSTEM_FALLBACK_ASSETS;
+  presentation?: EffectiveGraphicPresentation;
+};
+
+export type ResolvedVideo = {
+  kind: 'video';
+  remoteUrl?: string | null;
+  mediaPath?: string | null;
+  systemAsset?: 'video-cover';
+  presentation?: EffectiveVideoPresentation;
+};
+
+export type ResolvedText = {
+  kind: 'text';
+  text: string;
+  fontStyle: HostFontStyleId;
+  fontSize: HostFontSizeId;
+  color: string;
+  allCaps?: boolean;
+  markdownSource?: boolean;
+};
+
+export type ResolvedLyrics = {
+  kind: 'lyrics';
+  text: string;
+  fontStyle?: HostFontStyleId;
+  fontSize?: HostFontSizeId;
+  color?: string;
+  markdownSource?: boolean;
+};
+
+export type ResolvedAbout = {
+  kind: 'about';
+  coverUrl: string | null;
+  caption: string | null;
+  about: string;
+  markdownSource?: boolean;
+  fontStyle?: HostFontStyleId;
+  fontSize?: HostFontSizeId;
+  color?: string;
+  allCaps?: boolean;
+};
+
+export type ResolvedGraphicsGroup = {
+  kind: 'graphics-group';
+  presentation: EffectiveGroupPresentation;
+};
+
+export type ResolvedVcContent =
+  | { kind: 'empty' }
+  | { kind: 'visualizer' }
+  | ResolvedGraphic
+  | ResolvedVideo
+  | ResolvedText
+  | ResolvedLyrics
+  | ResolvedAbout
+  | ResolvedGraphicsGroup;
+
+const SONG_TO_FALLBACK: Partial<Record<VcCellContent, HostFallbackSlotId>> = {
+  cover: 'cover',
+  'video-cover': 'video-cover',
+  lyrics: 'lyrics',
+  about: 'about-song',
+  'artist-name': 'artist-name',
+  'artist-image': 'artist-image',
+  'song-title': 'song-title',
+  'main-genre': 'main-genre',
+  'additional-genres': 'additional-genres',
+};
+
+const TEXT_FALLBACK_SLOTS = new Set<HostFallbackSlotId>([
+  'artist-name',
+  'song-title',
+  'main-genre',
+  'additional-genres',
+]);
+
+function fallbackForSlot(
+  catalog: HostContentCatalog,
+  slotId: HostFallbackSlotId,
+): HostFallbackItem | undefined {
+  return catalog.items.find(
+    (item): item is HostFallbackItem => item.type === 'fallback' && item.slotId === slotId,
+  );
+}
+
+function gridTypography(ctx: VcResolutionContext): VcGridDefaultTypography {
+  return ctx.gridDesign?.defaultTypography ?? DEFAULT_VC_GRID_DESIGN.defaultTypography;
+}
+
+function defaultTextStyle(text: string, typography: VcGridDefaultTypography): ResolvedText {
+  return {
+    kind: 'text',
+    text,
+    fontStyle: typography.fontStyle,
+    fontSize: typography.fontSize,
+    color: typography.color,
+  };
+}
+
+function textFromTitleItem(
+  item: Extract<HostContentItem, { type: 'title-text' }>,
+  binding: VcHostSlotBinding | null,
+): ResolvedText {
+  const presentation = resolveEffectiveTitleTextPresentation(item, binding?.overrides ?? {});
+  const text = presentation.allCaps ? item.text.toUpperCase() : item.text;
+  return {
+    kind: 'text',
+    text,
+    fontStyle: presentation.fontStyle,
+    fontSize: presentation.fontSize,
+    color: presentation.color,
+    allCaps: presentation.allCaps,
+  };
+}
+
+function textFromAreaItem(
+  item: Extract<HostContentItem, { type: 'area-text' }>,
+  binding: VcHostSlotBinding | null,
+): ResolvedText {
+  const presentation = resolveEffectiveAreaTextPresentation(item, binding?.overrides ?? {});
+  return {
+    kind: 'text',
+    text: item.text,
+    fontStyle: presentation.fontStyle,
+    fontSize: presentation.fontSize,
+    color: presentation.color,
+    markdownSource: presentation.markdownSource,
+  };
+}
+
+function hostItemToResolved(
+  item: HostContentItem,
+  catalog: HostContentCatalog,
+  binding: VcHostSlotBinding | null,
+): ResolvedVcContent | null {
+  if (item.type === 'graphic') {
+    if (!item.mediaPath) return null;
+    return {
+      kind: 'graphic',
+      mediaPath: item.mediaPath,
+      presentation: resolveEffectiveGraphicPresentation(item, binding?.overrides ?? {}),
+    };
+  }
+  if (item.type === 'video') {
+    if (!item.mediaPath) return null;
+    return {
+      kind: 'video',
+      mediaPath: item.mediaPath,
+      presentation: resolveEffectiveVideoPresentation(item, binding?.overrides ?? {}),
+    };
+  }
+  if (item.type === 'title-text') {
+    return textFromTitleItem(item, binding);
+  }
+  if (item.type === 'area-text') {
+    return textFromAreaItem(item, binding);
+  }
+  if (item.type === 'graphics-group') {
+    return {
+      kind: 'graphics-group',
+      presentation: resolveEffectiveGroupPresentation(item, catalog, binding?.overrides ?? {}),
+    };
+  }
+  return null;
+}
+
+function resolveSystemFallback(slotId: HostFallbackSlotId, typography: VcGridDefaultTypography): ResolvedVcContent {
+  if (slotId === 'cover') {
+    return { kind: 'graphic', systemAsset: 'cover' };
+  }
+  if (slotId === 'artist-image') {
+    return { kind: 'graphic', systemAsset: 'artist-image' };
+  }
+  if (slotId === 'video-cover') {
+    return { kind: 'video', systemAsset: 'video-cover' };
+  }
+  if (slotId === 'lyrics') {
+    return { kind: 'lyrics', text: SYSTEM_FALLBACK_TEXT.lyrics };
+  }
+  if (slotId === 'about-song') {
+    return {
+      kind: 'about',
+      coverUrl: null,
+      caption: null,
+      about: SYSTEM_FALLBACK_TEXT['about-song'],
+    };
+  }
+  if (TEXT_FALLBACK_SLOTS.has(slotId)) {
+    return defaultTextStyle(SYSTEM_FALLBACK_TEXT[slotId as keyof typeof SYSTEM_FALLBACK_TEXT], typography);
+  }
+  return { kind: 'empty' };
+}
+
+function resolveHostFallback(
+  slot: HostFallbackItem,
+  catalog: HostContentCatalog,
+  random: () => number,
+  typography: VcGridDefaultTypography,
+): ResolvedVcContent | null {
+  if (!slot.enabled) return null;
+
+  if (TEXT_FALLBACK_SLOTS.has(slot.slotId)) {
+    const text = resolveMultiFieldFallback(slot.textFields, random);
+    if (text) return defaultTextStyle(text, typography);
+  }
+
+  if (slot.slotId === 'lyrics') {
+    const text = resolveMultiFieldFallback(slot.textFields, random);
+    if (text) return { kind: 'lyrics', text };
+  }
+
+  if (slot.slotId === 'about-song') {
+    const text = resolveMultiFieldFallback(slot.textFields, random);
+    if (text) {
+      return { kind: 'about', coverUrl: null, caption: null, about: text };
+    }
+  }
+
+  if (slot.linkedContentId) {
+    const linked = findHostContentItem(catalog, slot.linkedContentId);
+    if (!linked) return null;
+
+    if (slot.slotId === 'lyrics') {
+      if (linked.type === 'area-text' || linked.type === 'title-text') {
+        return { kind: 'lyrics', text: linked.text };
+      }
+    }
+
+    if (slot.slotId === 'about-song' && linked.type === 'area-text') {
+      return {
+        kind: 'about',
+        coverUrl: null,
+        caption: null,
+        about: linked.text,
+        markdownSource: linked.markdownSource,
+        fontStyle: linked.fontStyle,
+        fontSize: linked.fontSize,
+        color: linked.color,
+      };
+    }
+
+    return hostItemToResolved(linked, catalog, null);
+  }
+
+  return null;
+}
+
+function resolveWithFallbackChain(
+  slotId: HostFallbackSlotId,
+  ctx: VcResolutionContext,
+): ResolvedVcContent {
+  const fallback = fallbackForSlot(ctx.catalog, slotId);
+  const random = ctx.random ?? Math.random;
+  const typography = gridTypography(ctx);
+
+  if (fallback && !fallback.resetToSystemDefault) {
+    const hostResolved = resolveHostFallback(fallback, ctx.catalog, random, typography);
+    if (hostResolved) return hostResolved;
+  }
+
+  return resolveSystemFallback(slotId, typography);
+}
+
+function resolveSongPrimary(content: VcCellContent, ctx: VcResolutionContext): ResolvedVcContent | null {
+  const song = ctx.song;
+  if (!song) return null;
+
+  if (content === 'cover' && song.coverUrl) {
+    return { kind: 'graphic', remoteUrl: song.coverUrl };
+  }
+
+  if (content === 'video-cover' && song.videoCoverUrl) {
+    return { kind: 'video', remoteUrl: song.videoCoverUrl };
+  }
+
+  if (content === 'lyrics' && song.lyrics.trim()) {
+    return { kind: 'lyrics', text: song.lyrics };
+  }
+
+  if (content === 'about' && (song.about.trim() || song.caption || song.coverUrl)) {
+    return {
+      kind: 'about',
+      coverUrl: song.coverUrl,
+      caption: song.caption,
+      about: song.about,
+    };
+  }
+
+  if (content === 'artist-name') {
+    const name = (ctx.artistName ?? song.artist).trim();
+    if (name) return defaultTextStyle(name, gridTypography(ctx));
+  }
+
+  if (content === 'artist-image' && ctx.artistPhotoUrl) {
+    return { kind: 'graphic', remoteUrl: ctx.artistPhotoUrl };
+  }
+
+  if (content === 'song-title' && song.title.trim()) {
+    return defaultTextStyle(song.title, gridTypography(ctx));
+  }
+
+  if (content === 'main-genre' && song.mainGenre?.trim()) {
+    return defaultTextStyle(song.mainGenre.trim(), gridTypography(ctx));
+  }
+
+  if (content === 'additional-genres' && song.additionalGenres?.trim()) {
+    return defaultTextStyle(song.additionalGenres.trim(), gridTypography(ctx));
+  }
+
+  return null;
+}
+
+function applySongPresentation(
+  content: VcCellContent,
+  resolved: ResolvedVcContent,
+  overrides: VcAssignmentOverrides,
+  ctx: VcResolutionContext,
+): ResolvedVcContent {
+  const rule = SONG_CONTENT_SETTINGS_RULE[content];
+  if (!rule) return resolved;
+
+  const typography = gridTypography(ctx);
+
+  if (rule === 'graphic' && resolved.kind === 'graphic') {
+    return { ...resolved, presentation: resolveSongGraphicPresentation(overrides) };
+  }
+
+  if (rule === 'video' && resolved.kind === 'video') {
+    return { ...resolved, presentation: resolveSongVideoPresentation(overrides) };
+  }
+
+  if (rule === 'title-text') {
+    const presentation = resolveSongTitleTextPresentation(overrides, typography);
+    if (resolved.kind === 'text') {
+      const text = presentation.allCaps ? resolved.text.toUpperCase() : resolved.text;
+      return {
+        ...resolved,
+        text,
+        fontStyle: presentation.fontStyle,
+        fontSize: presentation.fontSize,
+        color: presentation.color,
+        allCaps: presentation.allCaps,
+      };
+    }
+    if (resolved.kind === 'about') {
+      return {
+        ...resolved,
+        fontStyle: presentation.fontStyle,
+        fontSize: presentation.fontSize,
+        color: presentation.color,
+        allCaps: presentation.allCaps,
+      };
+    }
+  }
+
+  if (rule === 'area-text' && resolved.kind === 'lyrics') {
+    const presentation = resolveSongAreaTextPresentation(overrides, typography);
+    return {
+      ...resolved,
+      fontStyle: presentation.fontStyle,
+      fontSize: presentation.fontSize,
+      color: presentation.color,
+      markdownSource: presentation.markdownSource,
+    };
+  }
+
+  return resolved;
+}
+
+function resolveSongContent(
+  content: VcCellContent,
+  ctx: VcResolutionContext,
+  songOverrides: VcAssignmentOverrides = {},
+): ResolvedVcContent {
+  const primary = resolveSongPrimary(content, ctx);
+  if (primary) return applySongPresentation(content, primary, songOverrides, ctx);
+
+  if (!ctx.useFallbacks) return { kind: 'empty' };
+
+  const slotId = SONG_TO_FALLBACK[content];
+  if (!slotId) return { kind: 'empty' };
+
+  return applySongPresentation(content, resolveWithFallbackChain(slotId, ctx), songOverrides, ctx);
+}
+
+export function resolveHostAssignment(
+  content: VcCellContent,
+  binding: VcHostSlotBinding | null,
+  catalog: HostContentCatalog,
+): ResolvedVcContent {
+  if (!isHostContentKind(content) || !binding?.itemId) {
+    return { kind: 'empty' };
+  }
+
+  const item = findHostContentItem(catalog, binding.itemId);
+  if (!item) return { kind: 'empty' };
+
+  const expectedType = hostContentTypeForSlot(content);
+  if (expectedType && item.type !== expectedType) {
+    return { kind: 'empty' };
+  }
+
+  return hostItemToResolved(item, catalog, binding) ?? { kind: 'empty' };
+}
+
+/** Resolve a cell slot content kind into renderable VC output. */
+export function resolveVcCellContent(
+  content: VcCellContent,
+  hostBinding: VcHostSlotBinding | null,
+  ctx: VcResolutionContext,
+  songOverrides?: VcAssignmentOverrides | null,
+): ResolvedVcContent {
+  if (!content) return { kind: 'empty' };
+  if (content === 'visualizer') return { kind: 'visualizer' };
+  if (isHostContentKind(content)) {
+    return resolveHostAssignment(content, hostBinding, ctx.catalog);
+  }
+  return resolveSongContent(content, ctx, songOverrides ?? {});
+}

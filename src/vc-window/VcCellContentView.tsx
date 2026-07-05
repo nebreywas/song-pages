@@ -1,10 +1,23 @@
-import type { VcCellContent, VcStatePayload } from '@shared/vcModeTypes';
+import { useMemo } from 'react';
+
+import type { HostContentCatalog } from '@shared/hostContent';
+import { resolveVcCellContent } from '@shared/vcMode/contentResolution';
+import {
+  type VcCellContent,
+  type VcHostSlotBinding,
+  type VcSongSlotSettings,
+  type VcStatePayload,
+} from '@shared/vcModeTypes';
 
 import { getVisualizer } from '../visualizers/registry';
 import { VisualizerPluginHost } from '../visualizers/VisualizerPluginHost';
+import { VcResolvedContentView } from './VcResolvedContentView';
 
 type VcCellContentViewProps = {
   content: VcCellContent;
+  hostBinding: VcHostSlotBinding | null;
+  songBinding: VcSongSlotSettings | null;
+  hostCatalog: HostContentCatalog;
   state: VcStatePayload;
   frequencyData: Uint8Array;
   frame: number;
@@ -13,69 +26,36 @@ type VcCellContentViewProps = {
 
 export function VcCellContentView({
   content,
+  hostBinding,
+  songBinding,
+  hostCatalog,
   state,
   frequencyData,
   frame,
   canvasFrame,
 }: VcCellContentViewProps) {
-  const song = state.currentSong;
-  const playback = state.playback;
+  const resolved = useMemo(
+    () =>
+      resolveVcCellContent(content, hostBinding, {
+        song: state.currentSong,
+        artistName: state.artistName,
+        artistPhotoUrl: state.artistPhotoUrl,
+        catalog: hostCatalog,
+        useFallbacks: state.config.useFallbacks !== false,
+        gridDesign: state.config.gridDesign,
+      }, songBinding?.overrides),
+    [content, hostBinding, songBinding, hostCatalog, state.currentSong, state.artistName, state.artistPhotoUrl, state.config.useFallbacks, state.config.gridDesign],
+  );
 
-  if (!content || !song) {
+  if (resolved.kind === 'empty') {
     return <div className="vc-cell-empty" />;
   }
 
-  if (content === 'cover') {
-    return song.coverUrl ? (
-      <img className="vc-cover-fit" src={song.coverUrl} alt="" />
-    ) : (
-      <div className="vc-cell-empty">No cover</div>
-    );
-  }
-
-  if (content === 'host') {
-    return state.hostGraphicUrl ? (
-      <img className="vc-host-fit" src={state.hostGraphicUrl} alt="VC host" />
-    ) : (
-      <div className="vc-cell-empty">No host graphic</div>
-    );
-  }
-
-  if (content === 'lyrics') {
-    if (!song.lyrics.trim()) return <div className="vc-cell-empty" />;
-    const progress = playback.duration > 0 ? playback.currentTime / playback.duration : 0;
-    return (
-      <div className="vc-lyrics-scroll">
-        <div className="vc-lyrics-inner" style={{ transform: `translateY(-${progress * 55}%)` }}>
-          {song.lyrics}
-        </div>
-      </div>
-    );
-  }
-
-  if (content === 'about') {
-    return (
-      <div className="vc-about-stack">
-        {song.coverUrl ? <img className="vc-about-cover" src={song.coverUrl} alt="" /> : null}
-        {song.caption ? <p className="vc-about-caption">{song.caption}</p> : null}
-        {song.about ? <div className="vc-about-text">{song.about}</div> : null}
-      </div>
-    );
-  }
-
-  if (content === 'artist') {
-    return (
-      <div className="vc-artist-stack">
-        {state.artistPhotoUrl ? <img className="vc-artist-photo" src={state.artistPhotoUrl} alt="" /> : null}
-        <h3 className="vc-artist-name">{state.artistName ?? song.artist}</h3>
-        {state.artistBio ? <p className="vc-artist-bio">{state.artistBio}</p> : null}
-      </div>
-    );
-  }
-
-  if (content === 'visualizer') {
+  if (resolved.kind === 'visualizer') {
+    const song = state.currentSong;
+    const playback = state.playback;
     const plugin = getVisualizer(state.config.visualizerId);
-    if (!plugin) return <div className="vc-cell-empty">Visualizer</div>;
+    if (!plugin || !song) return <div className="vc-cell-empty">Visualizer</div>;
     const timeDomain = new Uint8Array(frequencyData.length * 2);
     return (
       <VisualizerPluginHost
@@ -94,5 +74,5 @@ export function VcCellContentView({
     );
   }
 
-  return <div className="vc-cell-empty" />;
+  return <VcResolvedContentView resolved={resolved} playback={state.playback} />;
 }

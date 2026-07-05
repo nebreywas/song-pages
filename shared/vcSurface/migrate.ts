@@ -4,9 +4,9 @@
 
 import { DEFAULT_VISUALIZER_ID } from '../visualizerMessages';
 import {
-  createDefaultSurface,
   defaultCells,
   emptyCell,
+  migrateCellContent,
   normalizeVcConfig,
   type VcCellAssignment,
   type VcModeConfig,
@@ -41,9 +41,12 @@ function sanitizeCell(raw: unknown): VcCellAssignment {
   if (!raw || typeof raw !== 'object') return emptyCell();
   const cell = raw as Partial<VcCellAssignment>;
   return {
-    slotA: (cell.slotA ?? '') as VcCellAssignment['slotA'],
-    slotB: (cell.slotB ?? '') as VcCellAssignment['slotB'],
+    slotA: migrateCellContent(cell.slotA),
+    slotB: migrateCellContent(cell.slotB),
+    hostSlotA: null,
+    hostSlotB: null,
     cycleTime: cell.cycleTime ?? null,
+    transitionStyle: cell.transitionStyle === 'fade' ? 'fade' : 'replace',
   };
 }
 
@@ -75,7 +78,7 @@ export function migrateVcConfig(raw: unknown, visualizerIdFallback: string = DEF
       cells: defaultCells(),
       floatContent: {},
       visualizerId: visualizerIdFallback,
-      hostGraphicPath: null,
+      useFallbacks: true,
     });
   }
 
@@ -97,7 +100,8 @@ export function migrateVcConfig(raw: unknown, visualizerIdFallback: string = DEF
           ? (value.floatContent as VcModeConfig['floatContent'])
           : {},
       visualizerId: typeof value.visualizerId === 'string' ? value.visualizerId : visualizerIdFallback,
-      hostGraphicPath: typeof value.hostGraphicPath === 'string' ? value.hostGraphicPath : null,
+      useFallbacks: value.useFallbacks !== false,
+      gridDesign: value.gridDesign,
     });
   }
 
@@ -114,6 +118,6 @@ export function migrateVcConfig(raw: unknown, visualizerIdFallback: string = DEF
     cells: migrateCells(value.cells),
     floatContent: {},
     visualizerId: typeof value.visualizerId === 'string' ? value.visualizerId : visualizerIdFallback,
-    hostGraphicPath: typeof value.hostGraphicPath === 'string' ? value.hostGraphicPath : null,
+    useFallbacks: value.useFallbacks !== false,
   });
 }

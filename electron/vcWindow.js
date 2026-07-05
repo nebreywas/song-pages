@@ -1,5 +1,6 @@
 /**
  * VC Mode projection window — visual mixer for listening parties.
+ * Playback audio is mirrored here so window-only screen share includes music.
  */
 const { BrowserWindow, screen } = require('electron');
 const path = require('path');
@@ -40,6 +41,13 @@ function sendVcHotkey(action) {
   sendToVc('vc:hotkey', { action });
   if (mainWindowRef && !mainWindowRef.isDestroyed()) {
     mainWindowRef.webContents.send('vc:hotkey', { action });
+  }
+}
+
+/** VC window reports mirrored playback state so main can defer speaker muting. */
+function forwardVcPlaybackStatus(payload) {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.webContents.send('vc:playback-status', payload);
   }
 }
 
@@ -86,6 +94,8 @@ function openVcWindow(mainWindow, options = {}) {
       nodeIntegration: false,
       webSecurity: false,
       backgroundThrottling: false,
+      // Mirrored playback must start without a click in this window (Discord/Twitch capture).
+      autoplayPolicy: 'no-user-gesture-required',
     },
   });
 
@@ -154,4 +164,5 @@ module.exports = {
   sendVcState,
   sendVcFrame,
   hostGraphicUrlFromPath,
+  forwardVcPlaybackStatus,
 };

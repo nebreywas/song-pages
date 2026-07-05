@@ -38,6 +38,7 @@ import { useVcModeManager } from '../vc-mode/useVcModeManager';
 import '../styles/toast.css';
 import '../styles/visualizer.css';
 import '../vc-mode/vcMode.css';
+import '../vc-window/vc-window.css';
 
 type MainContentView = 'welcome' | 'artist' | 'song';
 
@@ -99,6 +100,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [volume, setVolume] = useState(0.85);
+  const [activePlaybackUrl, setActivePlaybackUrl] = useState<string | null>(null);
   const [bassBoost, setBassBoost] = useState(false);
   const [lofi, setLofi] = useState(false);
   const [crossfades, setCrossfades] = useState(false);
@@ -344,12 +346,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.volume = volume;
-  }, [volume]);
-
   const destroyHls = () => {
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -389,6 +385,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const vc = useVcModeManager({
     audioRef,
     playingSong,
+    previewSong,
     sortedSongs,
     playingSongId,
     pickNextSongId,
@@ -396,6 +393,10 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     isPlaying,
     currentTime,
     duration,
+    activePlaybackUrl,
+    volume,
+    bassBoost,
+    lofi,
   });
 
   useEffect(() => {
@@ -403,6 +404,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       setVcCloseConfirmOpen(false);
     }
   }, [vc.vcOpen]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = volume;
+  }, [volume]);
 
   const markSongAvailability = useCallback(
     async (song: SongRow, unavailable: boolean) => {
@@ -486,6 +493,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       audio.pause();
 
       const playbackUrl = access.playbackUrl;
+      setActivePlaybackUrl(playbackUrl);
       const markUnavailableIfLiked = () => {
         if (isLikedSongsArtist(selectedArtistId)) {
           void markSongAvailability(song, true);
@@ -505,6 +513,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             if (generation !== playbackGenerationRef.current) return;
             setIsPlaying(false);
             setError('Playback was blocked or failed.');
+            setActivePlaybackUrl(null);
             markUnavailableIfLiked();
           },
         );
@@ -514,6 +523,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         if (generation !== playbackGenerationRef.current) return;
         setError('Could not load audio stream.');
         setIsPlaying(false);
+        setActivePlaybackUrl(null);
         markUnavailableIfLiked();
       };
 
@@ -537,6 +547,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             const detail = data.details ? `${data.type}: ${data.details}` : data.type;
             setError(`HLS error — ${detail}`);
             setIsPlaying(false);
+            setActivePlaybackUrl(null);
             markUnavailableIfLiked();
           }
         });
@@ -672,6 +683,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     setPageUrl(null);
     setPlayingSongId(null);
     setPreviewSongId(null);
+    setActivePlaybackUrl(null);
     destroyHls();
     audioRef.current?.pause();
     setBusy(false);

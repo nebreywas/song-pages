@@ -6,6 +6,8 @@
 import { useMemo } from 'react';
 
 import { computeSurfaceLayout } from '@shared/vcSurface/geometry';
+import { gridDividerCss, floatOutlineCss } from '@shared/vcMode/gridDesign';
+import type { HostContentCatalog } from '@shared/hostContent';
 import {
   emptyCell,
   normalizeVcConfig,
@@ -16,6 +18,7 @@ import { VcCell } from './VcCell';
 
 type VcSurfaceProps = {
   state: VcStatePayload;
+  hostCatalog: HostContentCatalog;
   frequencyData: Uint8Array;
   frame: number;
   canvasFrame: string | null;
@@ -34,6 +37,7 @@ function rectStyle(rect: { x: number; y: number; width: number; height: number }
 
 export function VcSurface({
   state,
+  hostCatalog,
   frequencyData,
   frame,
   canvasFrame,
@@ -53,7 +57,15 @@ export function VcSurface({
   const debugClass = debugOutlines ? ' vc-debug-outline' : '';
 
   return (
-    <div className={`vc-surface${debugOutlines ? ' vc-surface-debug' : ''}`}>
+    <div
+      className={`vc-surface${debugOutlines ? ' vc-surface-debug' : ''}`}
+      style={
+        {
+          background: config.gridDesign.backgroundColor,
+          '--vc-grid-bg': config.gridDesign.backgroundColor,
+        } as React.CSSProperties
+      }
+    >
       {layout.areas.map((area) => {
         const cell = config.cells[area.areaNumber - 1] ?? emptyCell();
         return (
@@ -65,6 +77,7 @@ export function VcSurface({
           >
             <VcCell
               cell={cell}
+              hostCatalog={hostCatalog}
               state={state}
               frequencyData={frequencyData}
               frame={frame}
@@ -83,17 +96,43 @@ export function VcSurface({
             style={{
               ...rectStyle(float),
               zIndex: 10 + float.zIndex,
+              ...floatOutlineCss(config.gridDesign.floatLines),
             }}
             data-debug-label={debugOutlines ? `Float ${index + 1}` : undefined}
           >
             <VcCell
               cell={cell}
+              hostCatalog={hostCatalog}
               state={state}
               frequencyData={frequencyData}
               frame={frame}
               canvasFrame={canvasFrame}
             />
           </div>
+        );
+      })}
+
+      {layout.dividers.map((handle) => {
+        const isVertical = handle.axis === 'vertical';
+        return (
+          <div
+            key={handle.key}
+            className={`vc-surface-divider ${isVertical ? 'is-vertical' : 'is-horizontal'}`}
+            style={{
+              ...(isVertical
+                ? {
+                    left: `${handle.position * 100}%`,
+                    top: `${handle.region.y * 100}%`,
+                    height: `${handle.region.height * 100}%`,
+                  }
+                : {
+                    top: `${handle.position * 100}%`,
+                    left: `${handle.region.x * 100}%`,
+                    width: `${handle.region.width * 100}%`,
+                  }),
+              ...gridDividerCss(isVertical ? 'vertical' : 'horizontal', config.gridDesign.gridLines),
+            }}
+          />
         );
       })}
     </div>

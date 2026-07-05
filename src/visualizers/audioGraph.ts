@@ -34,6 +34,8 @@ type ButterchurnAudioNodes = {
 export type AudioGraph = {
   context: AudioContext;
   analyser: AnalyserNode;
+  /** Mutes local speakers without affecting analyser / visualizer taps. */
+  speakerGain: GainNode;
   /** Final node on the Butterchurn-only branch — connectAudio attaches here. */
   butterchurnTap: GainNode;
   butterchurnAudio: ButterchurnAudioNodes;
@@ -141,7 +143,11 @@ export function getOrCreateAudioGraph(audio: HTMLAudioElement): AudioGraph {
   effects.bassFilter.connect(effects.lofiLowpass);
   effects.lofiLowpass.connect(effects.lofiDrive);
   effects.lofiDrive.connect(analyser);
-  analyser.connect(context.destination);
+
+  const speakerGain = context.createGain();
+  speakerGain.gain.value = 1;
+  analyser.connect(speakerGain);
+  speakerGain.connect(context.destination);
 
   // Parallel branch — same post-effect source, no connection to destination.
   effects.lofiDrive.connect(butterchurnAudio.sensitivity);
@@ -154,6 +160,7 @@ export function getOrCreateAudioGraph(audio: HTMLAudioElement): AudioGraph {
   const graph: AudioGraph = {
     context,
     analyser,
+    speakerGain,
     butterchurnTap: butterchurnAudio.tap,
     butterchurnAudio,
     effects,
@@ -169,6 +176,14 @@ export function getOrCreateAudioGraph(audio: HTMLAudioElement): AudioGraph {
 export function resumeAudioContext(context: AudioContext): void {
   if (context.state === 'suspended') {
     void context.resume();
+  }
+}
+
+/** Route main-window playback to speakers (off while VC window carries audible output). */
+export function setMainSpeakerMuted(audio: HTMLAudioElement, muted: boolean): void {
+  const graph = graphs.get(audio);
+  if (graph) {
+    graph.speakerGain.gain.value = muted ? 0 : 1;
   }
 }
 

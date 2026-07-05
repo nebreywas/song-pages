@@ -1,6 +1,7 @@
 import {
   createDefaultSurface,
   defaultCells,
+  DEFAULT_VC_GRID_DESIGN,
   normalizeVcConfig,
   type VcModeConfig,
   type VcTemplateId,
@@ -16,7 +17,8 @@ export function createDefaultVcConfig(templateId: VcTemplateId = 'quad'): VcMode
     cells: defaultCells(),
     floatContent: {},
     visualizerId: DEFAULT_VISUALIZER_ID,
-    hostGraphicPath: null,
+    useFallbacks: true,
+    gridDesign: { ...DEFAULT_VC_GRID_DESIGN },
   });
 }
 

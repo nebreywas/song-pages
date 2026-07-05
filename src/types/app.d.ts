@@ -181,12 +181,25 @@ declare global {
         }>;
         sendState: (payload: import('@shared/vcModeTypes').VcStatePayload) => void;
         sendFrame: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void;
+        sendPlaybackStatus: (payload: { active: boolean }) => void;
         onState: (callback: (payload: import('@shared/vcModeTypes').VcStatePayload) => void) => () => void;
         onFrame: (callback: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void) => () => void;
         onHotkey: (callback: (payload: { action: import('@shared/vcModeTypes').VcHotkeyAction }) => void) => () => void;
         onOpened: (callback: () => void) => () => void;
         onClosed: (callback: () => void) => () => void;
         onRequestSync: (callback: () => void) => () => void;
+        onPlaybackStatus: (callback: (payload: { active: boolean }) => void) => () => void;
+      };
+      hostContent: {
+        pickAndImportMedia: (payload: {
+          kind: 'graphic' | 'video';
+          itemId?: string;
+        }) => Promise<
+          | { ok: true; mediaPath: string; widthPx: number; heightPx: number; fileSizeBytes: number }
+          | { ok: false; canceled?: boolean; error?: string }
+        >;
+        resolveMediaUrl: (relativePath: string) => Promise<string | null>;
+        deleteMedia: (relativePath: string) => Promise<boolean>;
       };
     };
   }

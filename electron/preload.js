@@ -111,6 +111,7 @@ contextBridge.exposeInMainWorld('app', {
     status: () => ipcRenderer.invoke('vc:status'),
     sendState: (payload) => ipcRenderer.send('vc:sendState', payload),
     sendFrame: (payload) => ipcRenderer.send('vc:sendFrame', payload),
+    sendPlaybackStatus: (payload) => ipcRenderer.send('vc:sendPlaybackStatus', payload),
     onState: (callback) => {
       const handler = (_event, payload) => callback(payload);
       ipcRenderer.on('vc:state', handler);
@@ -141,5 +142,16 @@ contextBridge.exposeInMainWorld('app', {
       ipcRenderer.on('vc:request-sync', handler);
       return () => ipcRenderer.removeListener('vc:request-sync', handler);
     },
+    onPlaybackStatus: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('vc:playback-status', handler);
+      return () => ipcRenderer.removeListener('vc:playback-status', handler);
+    },
+  },
+
+  hostContent: {
+    pickAndImportMedia: (payload) => ipcRenderer.invoke('hostContent:pickAndImportMedia', payload),
+    resolveMediaUrl: (relativePath) => ipcRenderer.invoke('hostContent:resolveMediaUrl', relativePath),
+    deleteMedia: (relativePath) => ipcRenderer.invoke('hostContent:deleteMedia', relativePath),
   },
 });
