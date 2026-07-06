@@ -6,8 +6,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { applyDividerDrag, computeSurfaceLayout } from '@shared/vcSurface/geometry';
+import {
+  arrowKeyToDirection,
+  directionDelta,
+  dividerDeltaForDirection,
+  findDividerKeyForAreaNudge,
+  nudgeDivider,
+  nudgeFloat,
+  onePixelNorm,
+} from '@shared/vcSurface/designerKeyboard';
 import { moveFloat, resizeFloat } from '@shared/vcSurface/floats';
-import { gridDividerCss, floatOutlineCss } from '@shared/vcMode/gridDesign';
+import {
+  gridDividerCss,
+  floatOutlineCssForFloat,
+  floatAppearanceCss,
+  hasActiveFullscreenGraphic,
+  regionHasBorderOverride,
+  regionOutlineCss,
+  resolveAreaBackgroundColor,
+  resolveLyricsFadeBackground,
+} from '@shared/vcMode/gridDesign';
 import type { HostContentCatalog } from '@shared/hostContent';
 import {
   emptyCell,
@@ -17,6 +35,7 @@ import {
 } from '@shared/vcModeTypes';
 
 import { DesignerContentPreview, hostBindingForPreview, songBindingForPreview } from './DesignerContentPreview';
+import { VcFullscreenGraphicLayer } from '../../vc-window/VcFullscreenGraphicLayer';
 import { clientToNorm } from './designerPointer';
 import type { RegionTarget } from './RegionContentPopover';
 
@@ -33,6 +52,9 @@ type DesignerCanvasProps = {
   onSelect: (selection: DesignerSelection) => void;
   onChangeSurface: (patch: Partial<VcModeConfig['surface']>) => void;
   onRegionContextMenu: (target: RegionTarget, event: React.MouseEvent) => void;
+  previewVisualizerId?: string;
+  onPreviewVisualizerClick?: () => void;
+  previewVisualizerClickEnabled?: boolean;
 };
 
 type DragState =
@@ -50,6 +72,13 @@ function formatRegionSize(width: number, height: number): string {
   return `${Math.round(width * 100)}% x ${Math.round(height * 100)}%`;
 }
 
+function isEditableKeyTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'BUTTON') return true;
+  return target.isContentEditable;
+}
+
 export function DesignerCanvas({
   config,
   hostCatalog,
@@ -58,8 +87,12 @@ export function DesignerCanvas({
   onSelect,
   onChangeSurface,
   onRegionContextMenu,
+  previewVisualizerId,
+  onPreviewVisualizerClick,
+  previewVisualizerClickEnabled = false,
 }: DesignerCanvasProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const configRef = useRef(config);
   const onChangeSurfaceRef = useRef(onChangeSurface);
   const [drag, setDrag] = useState<DragState>(null);
@@ -161,6 +194,61 @@ export function DesignerCanvas({
     };
   }, [drag, endDrag]);
 
+  const handleArrowNudge = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (!selection || drag || isEditableKeyTarget(event.target)) return;
+
+      const direction = arrowKeyToDirection(event.key);
+      if (!direction) return;
+
+      const surface = surfaceRef.current;
+      if (!surface) return;
+
+      const rect = surface.getBoundingClientRect();
+      const pixel = onePixelNorm({ widthPx: rect.width, heightPx: rect.height });
+      const edgeEpsilon = Math.max(pixel.x, pixel.y, 0.0005);
+      const current = configRef.current;
+
+      if (selection.kind === 'float') {
+        const float = current.surface.floats.find((f) => f.id === selection.id);
+        if (!float) return;
+
+        event.preventDefault();
+        const delta = directionDelta(direction, pixel);
+        const next = nudgeFloat(float, delta.x, delta.y);
+        onChangeSurfaceRef.current({
+          floats: current.surface.floats.map((f) => (f.id === selection.id ? next : f)),
+        });
+        return;
+      }
+
+      const layout = computeSurfaceLayout(current.surface.templateId, current.surface.dividers);
+      const dividerKey = findDividerKeyForAreaNudge(
+        layout,
+        selection.areaNumber,
+        direction,
+        edgeEpsilon,
+      );
+      if (!dividerKey) return;
+
+      event.preventDefault();
+      const dividerDelta = dividerDeltaForDirection(direction, pixel);
+      const dividers = nudgeDivider(
+        current.surface.templateId,
+        current.surface.dividers,
+        dividerKey,
+        dividerDelta,
+      );
+      onChangeSurfaceRef.current({ dividers });
+    },
+    [drag, selection],
+  );
+
+  useEffect(() => {
+    if (!selection) return;
+    frameRef.current?.focus({ preventScroll: true });
+  }, [selection]);
+
   const beginPointerDrag = (event: React.PointerEvent, nextDrag: DragState) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -171,12 +259,19 @@ export function DesignerCanvas({
 
   return (
     <div
+      ref={frameRef}
+      tabIndex={0}
+      role="application"
+      aria-label="VC surface designer canvas"
       className={`vc-designer-canvas-frame${drag ? ' is-dragging' : ''}`}
       style={{ '--vc-grid-bg': config.gridDesign.backgroundColor } as React.CSSProperties}
+      onKeyDown={handleArrowNudge}
     >
       <div
         ref={surfaceRef}
-        className="vc-designer-canvas"
+        className={`vc-designer-canvas${
+          hasActiveFullscreenGraphic(config.gridDesign) ? ' vc-has-fullscreen-graphic' : ''
+        }`}
         style={
           {
             background: config.gridDesign.backgroundColor,
@@ -188,10 +283,12 @@ export function DesignerCanvas({
           if (event.target === event.currentTarget) onSelect(null);
         }}
       >
+        <VcFullscreenGraphicLayer gridDesign={config.gridDesign} catalog={hostCatalog} />
         {layout.areas.map((area) => {
           const cell = config.cells[area.areaNumber - 1] ?? emptyCell();
           const selected =
             selection?.kind === 'area' && selection.areaNumber === area.areaNumber;
+          const areaBackground = resolveAreaBackgroundColor(cell, config.gridDesign);
           return (
             <div
               key={`area-${area.areaNumber}`}
@@ -201,7 +298,15 @@ export function DesignerCanvas({
                 top: `${area.y * 100}%`,
                 width: `${area.width * 100}%`,
                 height: `${area.height * 100}%`,
-              }}
+                background: areaBackground,
+                '--vc-lyrics-fade-bg': resolveLyricsFadeBackground(
+                  areaBackground,
+                  config.gridDesign.backgroundColor,
+                ),
+                ...(regionHasBorderOverride(cell)
+                  ? regionOutlineCss(cell, config.gridDesign)
+                  : {}),
+              } as React.CSSProperties}
               onPointerDown={(event) => {
                 if (event.button !== 0) return;
                 event.stopPropagation();
@@ -218,6 +323,9 @@ export function DesignerCanvas({
                   songBinding={songBindingForPreview(cell, activeContent(cell))}
                   hostCatalog={hostCatalog}
                   state={previewState}
+                  previewVisualizerId={previewVisualizerId}
+                  onPreviewVisualizerClick={onPreviewVisualizerClick}
+                  previewVisualizerClickEnabled={previewVisualizerClickEnabled}
                 />
               </div>
               <span className="vc-designer-area-badge">
@@ -232,6 +340,9 @@ export function DesignerCanvas({
           const selected = selection?.kind === 'float' && selection.id === float.id;
           const floatNumber = floatNumbers.get(float.id) ?? 1;
           const floatIndex = floatNumber - 1;
+          const appearance = floatAppearanceCss(float, config.gridDesign);
+          const floatBackground =
+            typeof appearance.region.background === 'string' ? appearance.region.background : undefined;
           return (
             <div
               key={float.id}
@@ -242,8 +353,13 @@ export function DesignerCanvas({
                 width: `${float.width * 100}%`,
                 height: `${float.height * 100}%`,
                 zIndex: 40 + float.zIndex,
-                ...floatOutlineCss(config.gridDesign.floatLines),
-              }}
+                ...floatOutlineCssForFloat(float, config.gridDesign),
+                ...appearance.region,
+                '--vc-lyrics-fade-bg': resolveLyricsFadeBackground(
+                  floatBackground,
+                  config.gridDesign.backgroundColor,
+                ),
+              } as React.CSSProperties}
               onPointerDown={(event) => {
                 if (event.button !== 0) return;
                 onSelect({ kind: 'float', id: float.id });
@@ -264,13 +380,16 @@ export function DesignerCanvas({
                 )
               }
             >
-              <div className="vc-designer-region-content">
+              <div className="vc-designer-region-content" style={appearance.content}>
                 <DesignerContentPreview
                   content={activeContent(cell)}
                   hostBinding={hostBindingForPreview(cell, activeContent(cell))}
                   songBinding={songBindingForPreview(cell, activeContent(cell))}
                   hostCatalog={hostCatalog}
                   state={previewState}
+                  previewVisualizerId={previewVisualizerId}
+                  onPreviewVisualizerClick={onPreviewVisualizerClick}
+                  previewVisualizerClickEnabled={previewVisualizerClickEnabled}
                 />
               </div>
               <span className="vc-designer-area-badge">

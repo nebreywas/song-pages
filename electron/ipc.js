@@ -396,6 +396,28 @@ function registerIpcHandlers() {
   ipcMain.on('vc:sendPlaybackStatus', (_event, payload) => {
     vcWindow.forwardVcPlaybackStatus(payload);
   });
+
+  ipcMain.on('vc:sendTransport', (_event, payload) => {
+    vcWindow.forwardVcTransport(payload);
+  });
+
+  ipcMain.on('vc:updateSurface', (_event, payload) => {
+    vcWindow.forwardVcSurfacePatch(payload);
+  });
+
+  ipcMain.on('vc:commitSurface', (_event, payload) => {
+    vcWindow.forwardVcSurfaceCommit(payload);
+  });
+
+  ipcMain.on('vc:requestVisualizerRotate', () => {
+    vcWindow.forwardVcVisualizerRotateRequest();
+  });
+
+  ipcMain.on('vc:reportActiveVisualizer', (_event, id) => {
+    if (typeof id === 'string') {
+      vcWindow.forwardVcActiveVisualizerReport(id);
+    }
+  });
 }
 
 module.exports = { registerIpcHandlers };

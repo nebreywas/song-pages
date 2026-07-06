@@ -75,6 +75,8 @@ export function migrateVcConfig(raw: unknown, visualizerIdFallback: string = DEF
           ? (value.floatContent as VcModeConfig['floatContent'])
           : {},
       visualizerId: typeof value.visualizerId === 'string' ? value.visualizerId : visualizerIdFallback,
+      visualizerChangeRule: value.visualizerChangeRule,
+      visualizerSequence: value.visualizerSequence,
       useFallbacks: value.useFallbacks !== false,
       gridDesign: value.gridDesign as VcModeConfig['gridDesign'],
     });

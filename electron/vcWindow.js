@@ -51,6 +51,39 @@ function forwardVcPlaybackStatus(payload) {
   }
 }
 
+function forwardVcTransport(payload) {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.webContents.send('vc:transport', payload);
+  }
+}
+
+/** VC window layout edits — persist surface geometry in the main window. */
+function forwardVcSurfacePatch(payload) {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.webContents.send('vc:surface-patch', payload);
+  }
+}
+
+/** VC window finished layout mode — persist full surface geometry immediately. */
+function forwardVcSurfaceCommit(payload) {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.webContents.send('vc:surface-commit', payload);
+  }
+}
+
+function forwardVcVisualizerRotateRequest() {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.webContents.send('vc:visualizer-rotate-request');
+  }
+}
+
+/** VC surface picked a new active visualizer — keep Butterchurn mirror in sync on main. */
+function forwardVcActiveVisualizerReport(id) {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.webContents.send('vc:active-visualizer', id);
+  }
+}
+
 function hostGraphicUrlFromPath(filePath) {
   if (!filePath || typeof filePath !== 'string') return null;
   try {
@@ -165,4 +198,9 @@ module.exports = {
   sendVcFrame,
   hostGraphicUrlFromPath,
   forwardVcPlaybackStatus,
+  forwardVcTransport,
+  forwardVcSurfacePatch,
+  forwardVcSurfaceCommit,
+  forwardVcVisualizerRotateRequest,
+  forwardVcActiveVisualizerReport,
 };

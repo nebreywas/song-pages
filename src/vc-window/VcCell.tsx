@@ -13,6 +13,7 @@ import type { HostContentCatalog } from '@shared/hostContent';
 
 import { VcCellContentView } from './VcCellContentView';
 import { useCellClickCooldown } from './useVcWindowState';
+import { useOptionalVcVisualizerRotationContext } from './VcVisualizerRotationContext';
 
 type VcCellProps = {
   cell: VcCellAssignment;
@@ -21,6 +22,10 @@ type VcCellProps = {
   frequencyData: Uint8Array;
   frame: number;
   canvasFrame: string | null;
+  /** Float cells omit the solid area background so transparency shows through. */
+  isFloat?: boolean;
+  /** Layout mode — block click-to-cycle and transport controls. */
+  interactionDisabled?: boolean;
 };
 
 function hostBindingForContent(
@@ -40,11 +45,23 @@ function activeContents(cell: VcCellAssignment): VcCellContent[] {
 }
 
 /** One surface region — optional primary/secondary cycling with replace or fade. */
-export function VcCell({ cell, hostCatalog, state, frequencyData, frame, canvasFrame }: VcCellProps) {
+export function VcCell({
+  cell,
+  hostCatalog,
+  state,
+  frequencyData,
+  frame,
+  canvasFrame,
+  isFloat = false,
+  interactionDisabled = false,
+}: VcCellProps) {
   const contents = useMemo(() => activeContents(cell), [cell]);
   const [index, setIndex] = useState(0);
   const tryClick = useCellClickCooldown();
   const useFade = cell.transitionStyle === 'fade' && contents.length > 1;
+  const rotation = useOptionalVcVisualizerRotationContext();
+  const hasVisualizer = contents.includes('visualizer');
+  const visualizerClickEnabled = hasVisualizer && Boolean(rotation?.visualizerClickEnabled);
 
   useEffect(() => {
     setIndex(0);
@@ -63,16 +80,30 @@ export function VcCell({ cell, hostCatalog, state, frequencyData, frame, canvasF
   }, [cell.cycleTime, contents.length]);
 
   if (!contents.length) {
-    return <div className="vc-cell vc-cell-blank" />;
+    return <div className={`vc-cell vc-cell-blank${isFloat ? ' vc-cell-float' : ''}`} />;
   }
 
   const current = contents[index] ?? contents[0];
 
   const onCellClick = () => {
+    if (interactionDisabled) return;
+
+    const current = contents[index] ?? contents[0];
+    if (visualizerClickEnabled && current === 'visualizer') {
+      if (!tryClick()) return;
+      rotation?.rotateVisualizer();
+      return;
+    }
+
     if (contents.length <= 1 || cell.cycleTime !== 'click') return;
     if (!tryClick()) return;
     setIndex((value) => (value + 1) % contents.length);
   };
+
+  const isClickable =
+    !interactionDisabled &&
+    ((cell.cycleTime === 'click' && contents.length > 1) ||
+      (visualizerClickEnabled && (contents[index] ?? contents[0]) === 'visualizer'));
 
   const sharedViewProps = {
     hostCatalog,
@@ -84,13 +115,14 @@ export function VcCell({ cell, hostCatalog, state, frequencyData, frame, canvasF
 
   return (
     <div
-      className={`vc-cell${cell.cycleTime === 'click' && contents.length > 1 ? ' vc-cell-clickable' : ''}${useFade ? ' vc-cell-fade' : ''}`}
+      className={`vc-cell${isFloat ? ' vc-cell-float' : ''}${isClickable ? ' vc-cell-clickable' : ''}${useFade ? ' vc-cell-fade' : ''}${interactionDisabled ? ' vc-cell-layout-locked' : ''}`}
       onClick={onCellClick}
       onKeyDown={(event) => {
+        if (interactionDisabled) return;
         if (event.key === 'Enter' || event.key === ' ') onCellClick();
       }}
-      role={cell.cycleTime === 'click' && contents.length > 1 ? 'button' : undefined}
-      tabIndex={cell.cycleTime === 'click' && contents.length > 1 ? 0 : undefined}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
       style={
         useFade ? ({ '--vc-fade-ms': `${VC_TRANSITION_FADE_MS}ms` } as CSSProperties) : undefined
       }

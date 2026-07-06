@@ -130,14 +130,23 @@
 }
 
 .editor-field input,
-.editor-field textarea,
-.editor-field select {
+.editor-field textarea {
   font: inherit;
   color: inherit;
   border: 1px solid #2a3344;
   border-radius: 6px;
   background: #0f1420;
   padding: 0.45rem 0.55rem;
+}
+
+.editor-field select {
+  font: inherit;
+  color: inherit;
+  border: 1px solid #2a3344;
+  border-radius: 6px;
+  background-color: #0f1420;
+  padding-block: 0.45rem;
+  padding-inline-start: 0.55rem;
 }
 
 .editor-field textarea {

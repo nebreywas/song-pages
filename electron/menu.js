@@ -82,11 +82,25 @@ function buildAppMenu(isDev) {
           click: (_item, focusedWindow) => focusedWindow?.reload(),
         },
         {
+          label: 'Force Reload (ignore cache)',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: (_item, focusedWindow) => focusedWindow?.webContents.reloadIgnoringCache(),
+        },
+        {
           label: 'Toggle Developer Tools',
           accelerator: process.platform === 'darwin' ? 'Alt+Command+I' : 'Ctrl+Shift+I',
           click: (_item, focusedWindow) => focusedWindow?.webContents.toggleDevTools(),
         },
         { type: 'separator' },
+        {
+          label: 'Toggle Audio Debug Panel',
+          accelerator: 'Alt+Command+A',
+          click: (_item, focusedWindow) => {
+            focusedWindow?.webContents.executeJavaScript(
+              `window.dispatchEvent(new Event('songpages-audio-debug-toggle'));`,
+            );
+          },
+        },
         {
           label: 'Open User Data Folder',
           click: () => shell.openPath(app.getPath('userData')),

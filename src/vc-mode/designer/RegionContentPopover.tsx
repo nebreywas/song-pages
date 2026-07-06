@@ -1,20 +1,22 @@
 /**
  * Centered content-assignment dialog over the designer canvas.
  *
- * Layout pattern (shared by future region detail panels):
- * - Left: primary assignment fields + section launcher buttons
- * - Right: detail panel when a launcher is active (float layout, etc.)
+ * - Left: slot assignment (content picks, transition)
+ * - Right: tabbed detail panel — Layout (floats), Primary, Secondary when configured
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { hostContentTypeForSlot, listItemsByType, type HostContentCatalog } from '@shared/hostContent';
 import type { VcGridDesignSettings } from '@shared/vcMode/gridDesign';
+import { resolveAreaBackgroundDisplayColor, resolveFloatAppearanceDraft } from '@shared/vcMode/gridDesign';
 import type { VcFloatGeometry } from '@shared/vcSurface/floats';
+
+import { RegionBordersAndBackgrounds } from './RegionBordersAndBackgrounds';
 import {
   isHostContentKind,
+  isFloatOnlyContent,
   isSongConfigurableContent,
-  VC_CONTENT_LABELS,
   VC_CYCLE_OPTIONS,
   VC_HOST_CONTENT_OPTIONS,
   VC_SONG_CONTENT_OPTIONS,
@@ -28,18 +30,16 @@ import {
 } from '@shared/vcModeTypes';
 
 import { DesignerOverlayLayer } from './DesignerOverlayLayer';
+import { AssignmentSettingsIntro } from './AssignmentSettingsIntro';
+import { HostAssignmentSettings } from './HostAssignmentSettings';
+import { SongAssignmentSettings } from './SongAssignmentSettings';
 
 export type RegionTarget =
   | { kind: 'area'; areaNumber: number }
   | { kind: 'float'; id: string; index: number };
 
-/** Detail panels opened from the left-hand section nav. Extend for future sprints. */
-type RegionDetailPanel =
-  | 'float-layout'
-  | 'host-primary'
-  | 'host-secondary'
-  | 'song-primary'
-  | 'song-secondary';
+/** Right-hand detail tabs — Layout is float-only; Primary/Secondary follow slot content. */
+type RegionDetailTab = 'layout' | 'primary' | 'secondary';
 
 type RegionContentPopoverProps = {
   target: RegionTarget;
@@ -52,21 +52,28 @@ type RegionContentPopoverProps = {
   onSendFloatToBack?: () => void;
   onRemoveFloat?: () => void;
   onUpdateFloatField?: (field: 'x' | 'y' | 'width' | 'height', pct: number) => void;
+  onUpdateFloat?: (patch: Partial<VcFloatGeometry>) => void;
   onClose: () => void;
 };
 
 function ContentSelect({
   value,
   onChange,
+  allowFloatOnly,
 }: {
   value: VcCellContent;
   onChange: (value: VcCellContent) => void;
+  allowFloatOnly: boolean;
 }) {
+  const songOptions = allowFloatOnly
+    ? VC_SONG_CONTENT_OPTIONS
+    : VC_SONG_CONTENT_OPTIONS.filter((opt) => !isFloatOnlyContent(opt.value));
+
   return (
     <select value={value} onChange={(e) => onChange(e.target.value as VcCellContent)}>
       <option value="">(blank)</option>
       <optgroup label="Song content">
-        {VC_SONG_CONTENT_OPTIONS.map((opt) => (
+        {songOptions.map((opt) => (
           <option key={opt.value} value={opt.value}>
             {opt.label}
           </option>
@@ -87,22 +94,37 @@ function ContentAssignmentFields({
   cell,
   onAssignSlot,
   onUpdateCell,
+  allowFloatOnly,
+  showPrimaryLabel = true,
 }: {
   cell: VcCellAssignment;
   onAssignSlot: (slot: 'slotA' | 'slotB', value: VcCellContent) => void;
   onUpdateCell: (patch: Partial<VcCellAssignment>) => void;
+  allowFloatOnly: boolean;
+  /** When false, the label is rendered in the dialog header row beside the detail tabs. */
+  showPrimaryLabel?: boolean;
 }) {
   return (
     <>
-      <label className="vc-field">
-        <span>Primary content</span>
-        <ContentSelect value={cell.slotA} onChange={(value) => onAssignSlot('slotA', value)} />
+      <label className={`vc-field${showPrimaryLabel ? '' : ' vc-field--primary-slot'}`}>
+        {showPrimaryLabel ? <span>Primary content</span> : null}
+        <ContentSelect
+          value={cell.slotA}
+          onChange={(value) => onAssignSlot('slotA', value)}
+          allowFloatOnly={allowFloatOnly}
+        />
       </label>
 
       <label className="vc-field">
         <span>Secondary content</span>
-        <ContentSelect value={cell.slotB} onChange={(value) => onAssignSlot('slotB', value)} />
+        <ContentSelect
+          value={cell.slotB}
+          onChange={(value) => onAssignSlot('slotB', value)}
+          allowFloatOnly={allowFloatOnly}
+        />
       </label>
+
+      <hr className="vc-region-popover-section-divider" aria-hidden="true" />
 
       <label className="vc-field">
         <span>Transition trigger</span>
@@ -128,20 +150,21 @@ function ContentAssignmentFields({
         </select>
       </label>
 
-      <label className="vc-field">
-        <span>Transition style</span>
-        <select
-          value={cell.transitionStyle}
-          disabled={!cellNeedsCycle(cell)}
-          onChange={(e) => onUpdateCell({ transitionStyle: e.target.value as VcTransitionStyle })}
-        >
-          {VC_TRANSITION_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {cellNeedsCycle(cell) && cell.cycleTime != null ? (
+        <label className="vc-field">
+          <span>Transition style</span>
+          <select
+            value={cell.transitionStyle}
+            onChange={(e) => onUpdateCell({ transitionStyle: e.target.value as VcTransitionStyle })}
+          >
+            {VC_TRANSITION_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
     </>
   );
 }
@@ -154,17 +177,55 @@ function regionTitle(target: RegionTarget): string {
   return target.kind === 'area' ? `Area ${target.areaNumber}` : `Float ${target.index + 1}`;
 }
 
-import { HostAssignmentSettings } from './HostAssignmentSettings';
-import { SongAssignmentSettings } from './SongAssignmentSettings';
+function slotHasDetailTab(content: VcCellContent): boolean {
+  return isHostContentKind(content) || isSongConfigurableContent(content);
+}
+
+function availableDetailTabs(
+  target: RegionTarget,
+  cell: VcCellAssignment,
+  showFloatLayout: boolean,
+): RegionDetailTab[] {
+  const tabs: RegionDetailTab[] = [];
+  if (target.kind === 'area' || showFloatLayout) tabs.push('layout');
+  if (slotHasDetailTab(cell.slotA)) tabs.push('primary');
+  if (slotHasDetailTab(cell.slotB)) tabs.push('secondary');
+  return tabs;
+}
+
+function defaultDetailTab(_target: RegionTarget, tabs: RegionDetailTab[]): RegionDetailTab | null {
+  if (tabs.length === 0) return null;
+  if (tabs.includes('layout')) return 'layout';
+  return tabs[0];
+}
+
+function resolveDetailTab(
+  current: RegionDetailTab | null,
+  target: RegionTarget,
+  tabs: RegionDetailTab[],
+): RegionDetailTab | null {
+  if (tabs.length === 0) return null;
+  if (current && tabs.includes(current)) return current;
+  return defaultDetailTab(target, tabs);
+}
+
+function detailTabLabel(tab: RegionDetailTab): string {
+  switch (tab) {
+    case 'layout':
+      return 'Layout';
+    case 'primary':
+      return 'Primary';
+    case 'secondary':
+      return 'Secondary';
+  }
+}
 
 function HostAssignmentDetail({
-  slot,
   content,
   binding,
   catalog,
   onChange,
 }: {
-  slot: 'slotA' | 'slotB';
   content: VcCellContent;
   binding: VcHostSlotBinding | null;
   catalog: HostContentCatalog;
@@ -172,12 +233,11 @@ function HostAssignmentDetail({
 }) {
   const hostType = hostContentTypeForSlot(content);
   const items = hostType ? listItemsByType(catalog, hostType) : [];
+  const resolvedBinding = binding ?? { itemId: '', overrides: {} };
 
   return (
     <>
-      <header className="vc-region-popover-detail-header">
-        <h4>{slot === 'slotA' ? 'Primary' : 'Secondary'} host content</h4>
-      </header>
+      <AssignmentSettingsIntro content={content} />
       <label className="vc-field">
         <span>Select content</span>
         <select
@@ -202,7 +262,7 @@ function HostAssignmentDetail({
       </label>
       <HostAssignmentSettings
         content={content}
-        binding={binding ?? { itemId: '', overrides: {} }}
+        binding={resolvedBinding}
         catalog={catalog}
         onChange={onChange}
       />
@@ -211,14 +271,12 @@ function HostAssignmentDetail({
 }
 
 function SongAssignmentDetail({
-  slot,
   content,
   settings,
   catalog,
   gridDesign,
   onChange,
 }: {
-  slot: 'slotA' | 'slotB';
   content: VcCellContent;
   settings: VcSongSlotSettings;
   catalog: HostContentCatalog;
@@ -226,66 +284,114 @@ function SongAssignmentDetail({
   onChange: (settings: VcSongSlotSettings) => void;
 }) {
   return (
-    <>
-      <header className="vc-region-popover-detail-header">
-        <h4>{slot === 'slotA' ? 'Primary' : 'Secondary'} song content</h4>
-      </header>
-      <SongAssignmentSettings
-        content={content}
-        settings={settings}
-        catalog={catalog}
+    <SongAssignmentSettings
+      content={content}
+      settings={settings}
+      catalog={catalog}
+      gridDesign={gridDesign}
+      onChange={onChange}
+    />
+  );
+}
+
+function AreaLayoutDetail({
+  cell,
+  gridDesign,
+  onUpdateCell,
+}: {
+  cell: VcCellAssignment;
+  gridDesign: VcGridDesignSettings;
+  onUpdateCell: (patch: Partial<VcCellAssignment>) => void;
+}) {
+  const resolved = resolveAreaBackgroundDisplayColor(cell, gridDesign);
+
+  return (
+    <section className="vc-host-assignment-settings vc-area-layout-settings">
+      <RegionBordersAndBackgrounds
+        appearanceMode="area"
         gridDesign={gridDesign}
-        onChange={onChange}
+        overrides={cell}
+        resolvedBackground={resolved}
+        onPatch={onUpdateCell}
       />
-    </>
+    </section>
   );
 }
 
 function FloatLayoutDetail({
   float,
+  gridDesign,
   onUpdateFloatField,
+  onUpdateFloat,
   onBringFloatToFront,
   onSendFloatToBack,
   onRemoveFloat,
 }: {
   float: VcFloatGeometry;
+  gridDesign: VcGridDesignSettings;
   onUpdateFloatField: (field: 'x' | 'y' | 'width' | 'height', pct: number) => void;
+  onUpdateFloat?: (patch: Partial<VcFloatGeometry>) => void;
   onBringFloatToFront?: () => void;
   onSendFloatToBack?: () => void;
   onRemoveFloat?: () => void;
 }) {
+  const draftAppearance = resolveFloatAppearanceDraft(float, gridDesign);
+
   return (
     <>
-      <header className="vc-region-popover-detail-header">
-        <h4>Float layout</h4>
-      </header>
-
-      <div className="vc-float-numeric">
-        {(['x', 'y', 'width', 'height'] as const).map((field) => (
-          <label key={field} className="vc-field">
-            <span>{field}</span>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              step={1}
-              value={Math.round(float[field] * 100)}
-              onChange={(e) => onUpdateFloatField(field, Number(e.target.value))}
-            />
-          </label>
-        ))}
+      <div className="vc-field vc-region-field vc-float-layout-field">
+        <span className="vc-assignment-sublabel">Position &amp; size</span>
+        <div
+          className="vc-float-numeric vc-region-field-controls"
+          role="group"
+          aria-label="Float position and size"
+        >
+          {(['x', 'y', 'width', 'height'] as const).map((field) => (
+            <label key={field} className="vc-float-numeric-field">
+              <span className="vc-float-numeric-label">{field}</span>
+              <input
+                type="number"
+                className="vc-float-numeric-input"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(float[field] * 100)}
+                onChange={(e) => onUpdateFloatField(field, Number(e.target.value))}
+              />
+            </label>
+          ))}
+        </div>
       </div>
 
+      {onUpdateFloat ? (
+        <section className="vc-host-assignment-settings vc-float-appearance-settings">
+          <RegionBordersAndBackgrounds
+            appearanceMode="float"
+            gridDesign={gridDesign}
+            overrides={float}
+            resolvedBackground={draftAppearance.backgroundColor}
+            resolvedBackgroundOpacityPct={draftAppearance.backgroundOpacityPct}
+            resolvedContentOpacityPct={draftAppearance.contentOpacityPct}
+            onPatch={onUpdateFloat}
+            showOpacitySliders
+          />
+        </section>
+      ) : null}
+
       <div className="vc-region-popover-actions">
-        {onBringFloatToFront ? (
-          <button type="button" className="btn" onClick={onBringFloatToFront}>
-            Bring to front
-          </button>
-        ) : null}
-        {onSendFloatToBack ? (
-          <button type="button" className="btn" onClick={onSendFloatToBack}>
-            Send to back
-          </button>
+        {onBringFloatToFront || onSendFloatToBack ? (
+          <div className="vc-float-z-actions">
+            {onBringFloatToFront ? (
+              <button type="button" className="btn" onClick={onBringFloatToFront}>
+                Bring to front
+              </button>
+            ) : null}
+            {onSendFloatToBack ? (
+              <button type="button" className="btn" onClick={onSendFloatToBack}>
+                Send to back
+              </button>
+            ) : null}
+          </div>
         ) : null}
         {onRemoveFloat ? (
           <button type="button" className="btn" onClick={onRemoveFloat}>
@@ -294,6 +400,33 @@ function FloatLayoutDetail({
         ) : null}
       </div>
     </>
+  );
+}
+
+function RegionDetailTabBar({
+  tabs,
+  activeTab,
+  onSelect,
+}: {
+  tabs: RegionDetailTab[];
+  activeTab: RegionDetailTab;
+  onSelect: (tab: RegionDetailTab) => void;
+}) {
+  return (
+    <nav className="vc-region-popover-tabs" aria-label="Region settings">
+      {tabs.map((tab) => (
+        <button
+          key={tab}
+          type="button"
+          role="tab"
+          className={`vc-region-popover-tab${activeTab === tab ? ' is-active' : ''}`}
+          aria-selected={activeTab === tab}
+          onClick={() => onSelect(tab)}
+        >
+          {detailTabLabel(tab)}
+        </button>
+      ))}
+    </nav>
   );
 }
 
@@ -308,19 +441,34 @@ export function RegionContentPopover({
   onSendFloatToBack,
   onRemoveFloat,
   onUpdateFloatField,
+  onUpdateFloat,
   onClose,
 }: RegionContentPopoverProps) {
-  const [activeDetail, setActiveDetail] = useState<RegionDetailPanel | null>(null);
-
   const isFloat = target.kind === 'float';
   const showFloatLayout = isFloat && float && onUpdateFloatField;
+
+  const detailTabs = useMemo(
+    () => availableDetailTabs(target, cell, Boolean(showFloatLayout)),
+    [target, cell, showFloatLayout],
+  );
+  const hasDetailPanel = detailTabs.length > 0;
+
+  const [activeTab, setActiveTab] = useState<RegionDetailTab | null>(() =>
+    defaultDetailTab(target, availableDetailTabs(target, cell, Boolean(showFloatLayout))),
+  );
+  const prevTargetKeyRef = useRef<string | null>(null);
+  const targetKey = target.kind === 'float' ? `float:${target.id}` : `area:${target.areaNumber}`;
+
   const showHostPrimary = isHostContentKind(cell.slotA);
   const showHostSecondary = isHostContentKind(cell.slotB);
   const showSongPrimary = isSongConfigurableContent(cell.slotA);
   const showSongSecondary = isSongConfigurableContent(cell.slotB);
-  const hasDetail = activeDetail !== null;
 
   const assignSlot = (slot: 'slotA' | 'slotB', value: VcCellContent) => {
+    if (isFloatOnlyContent(value) && target.kind !== 'float') {
+      return;
+    }
+
     const patch: Partial<VcCellAssignment> = { [slot]: value };
     const prevContent = slot === 'slotA' ? cell.slotA : cell.slotB;
 
@@ -351,174 +499,134 @@ export function RegionContentPopover({
     }
 
     onUpdateCell(patch);
-    if (isHostContentKind(value)) {
-      setActiveDetail(slot === 'slotA' ? 'host-primary' : 'host-secondary');
-    } else if (isSongConfigurableContent(value)) {
-      setActiveDetail(slot === 'slotA' ? 'song-primary' : 'song-secondary');
+    if (slotHasDetailTab(value)) {
+      setActiveTab(slot === 'slotA' ? 'primary' : 'secondary');
     }
   };
 
   useEffect(() => {
-    setActiveDetail(null);
-  }, [target]);
-
-  const dismissOverlay = () => {
-    if (activeDetail) {
-      setActiveDetail(null);
+    const prev = prevTargetKeyRef.current;
+    prevTargetKeyRef.current = targetKey;
+    if (prev !== targetKey) {
+      setActiveTab(defaultDetailTab(target, detailTabs));
       return;
     }
-    onClose();
-  };
+    setActiveTab((current) => resolveDetailTab(current, target, detailTabs));
+  }, [targetKey, target, detailTabs]);
 
-  const toggleDetail = (panel: RegionDetailPanel) => {
-    setActiveDetail((current) => (current === panel ? null : panel));
-  };
+  const layoutClass = [
+    'vc-region-popover-layout',
+    hasDetailPanel ? 'has-detail' : '',
+    hasDetailPanel ? 'vc-region-popover-layout--with-tabs' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const popoverClass = [
+    'vc-region-popover',
+    hasDetailPanel ? 'has-detail' : '',
+    hasDetailPanel ? 'vc-region-popover--with-tabs' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const resolvedTab = activeTab && detailTabs.includes(activeTab) ? activeTab : detailTabs[0] ?? null;
 
   return (
     <DesignerOverlayLayer
       ariaLabel={`${regionTitle(target)} content`}
-      onClose={dismissOverlay}
-      className={`vc-region-popover${hasDetail ? ' has-detail' : ''}`}
+      onClose={onClose}
+      closeOnBackdropClick={false}
+      closeOnEscape={false}
+      className={popoverClass}
     >
       <header className="vc-region-popover-header">
         <h3>{regionTitle(target)}</h3>
-        <button type="button" className="vc-region-popover-close" onClick={dismissOverlay} aria-label="Close">
+        <button type="button" className="vc-region-popover-close" onClick={onClose} aria-label="Close">
           ×
         </button>
       </header>
 
-      <div className={`vc-region-popover-layout${hasDetail ? ' has-detail' : ''}`}>
-          <div className="vc-region-popover-main">
-            <ContentAssignmentFields
-              cell={cell}
-              onAssignSlot={assignSlot}
-              onUpdateCell={onUpdateCell}
-            />
+      <div className={layoutClass}>
+        {hasDetailPanel ? (
+          <span className="vc-region-popover-slot-label">Primary content</span>
+        ) : null}
 
-            {showHostPrimary ? (
-              <nav className="vc-region-popover-section-nav" aria-label="Host assignment">
-                <button
-                  type="button"
-                  className={`btn vc-region-popover-section-btn${activeDetail === 'host-primary' ? ' is-active' : ''}`}
-                  onClick={() => toggleDetail('host-primary')}
-                >
-                  Host content (primary)
-                </button>
-              </nav>
-            ) : null}
-
-            {showHostSecondary ? (
-              <nav className="vc-region-popover-section-nav" aria-label="Host assignment secondary">
-                <button
-                  type="button"
-                  className={`btn vc-region-popover-section-btn${activeDetail === 'host-secondary' ? ' is-active' : ''}`}
-                  onClick={() => toggleDetail('host-secondary')}
-                >
-                  Host content (secondary)
-                </button>
-              </nav>
-            ) : null}
-
-            {showSongPrimary ? (
-              <nav className="vc-region-popover-section-nav" aria-label="Song assignment">
-                <button
-                  type="button"
-                  className={`btn vc-region-popover-section-btn${activeDetail === 'song-primary' ? ' is-active' : ''}`}
-                  onClick={() => toggleDetail('song-primary')}
-                >
-                  {VC_CONTENT_LABELS[cell.slotA]} settings (primary)
-                </button>
-              </nav>
-            ) : null}
-
-            {showSongSecondary ? (
-              <nav className="vc-region-popover-section-nav" aria-label="Song assignment secondary">
-                <button
-                  type="button"
-                  className={`btn vc-region-popover-section-btn${activeDetail === 'song-secondary' ? ' is-active' : ''}`}
-                  onClick={() => toggleDetail('song-secondary')}
-                >
-                  {VC_CONTENT_LABELS[cell.slotB]} settings (secondary)
-                </button>
-              </nav>
-            ) : null}
-
-            {showFloatLayout ? (
-              <nav className="vc-region-popover-section-nav" aria-label="Region details">
-                <button
-                  type="button"
-                  className={`btn vc-region-popover-section-btn${activeDetail === 'float-layout' ? ' is-active' : ''}`}
-                  aria-expanded={activeDetail === 'float-layout'}
-                  onClick={() => toggleDetail('float-layout')}
-                >
-                  Float layout
-                </button>
-              </nav>
-            ) : null}
-          </div>
-
-          {activeDetail === 'host-primary' && showHostPrimary ? (
-            <aside className="vc-region-popover-detail" aria-label="Host primary assignment">
-              <HostAssignmentDetail
-                slot="slotA"
-                content={cell.slotA}
-                binding={cell.hostSlotA}
-                catalog={catalog}
-                onChange={(binding) => onUpdateCell({ hostSlotA: binding })}
-              />
-            </aside>
-          ) : null}
-
-          {activeDetail === 'host-secondary' && showHostSecondary ? (
-            <aside className="vc-region-popover-detail" aria-label="Host secondary assignment">
-              <HostAssignmentDetail
-                slot="slotB"
-                content={cell.slotB}
-                binding={cell.hostSlotB}
-                catalog={catalog}
-                onChange={(binding) => onUpdateCell({ hostSlotB: binding })}
-              />
-            </aside>
-          ) : null}
-
-          {activeDetail === 'song-primary' && showSongPrimary && cell.songSlotA ? (
-            <aside className="vc-region-popover-detail" aria-label="Song primary assignment">
-              <SongAssignmentDetail
-                slot="slotA"
-                content={cell.slotA}
-                settings={cell.songSlotA}
-                catalog={catalog}
-                gridDesign={gridDesign}
-                onChange={(settings) => onUpdateCell({ songSlotA: settings })}
-              />
-            </aside>
-          ) : null}
-
-          {activeDetail === 'song-secondary' && showSongSecondary && cell.songSlotB ? (
-            <aside className="vc-region-popover-detail" aria-label="Song secondary assignment">
-              <SongAssignmentDetail
-                slot="slotB"
-                content={cell.slotB}
-                settings={cell.songSlotB}
-                catalog={catalog}
-                gridDesign={gridDesign}
-                onChange={(settings) => onUpdateCell({ songSlotB: settings })}
-              />
-            </aside>
-          ) : null}
-
-          {activeDetail === 'float-layout' && showFloatLayout ? (
-            <aside className="vc-region-popover-detail" aria-label="Float layout">
-              <FloatLayoutDetail
-                float={float}
-                onUpdateFloatField={onUpdateFloatField}
-                onBringFloatToFront={onBringFloatToFront}
-                onSendFloatToBack={onSendFloatToBack}
-                onRemoveFloat={onRemoveFloat}
-              />
-            </aside>
-          ) : null}
+        <div
+          className={`vc-region-popover-main${hasDetailPanel ? ' vc-region-popover-main--with-tabs' : ''}`}
+        >
+          <ContentAssignmentFields
+            cell={cell}
+            onAssignSlot={assignSlot}
+            onUpdateCell={onUpdateCell}
+            allowFloatOnly={isFloat}
+            showPrimaryLabel={!hasDetailPanel}
+          />
         </div>
+
+        {hasDetailPanel && resolvedTab ? (
+          <div className="vc-region-popover-detail-column" aria-label="Region settings">
+            <RegionDetailTabBar tabs={detailTabs} activeTab={resolvedTab} onSelect={setActiveTab} />
+            <div className="vc-region-popover-tab-panel" role="tabpanel">
+              {resolvedTab === 'layout' && showFloatLayout ? (
+                <div className="vc-float-layout-detail">
+                  <FloatLayoutDetail
+                  float={float}
+                  gridDesign={gridDesign}
+                  onUpdateFloatField={onUpdateFloatField}
+                  onUpdateFloat={onUpdateFloat}
+                  onBringFloatToFront={onBringFloatToFront}
+                  onSendFloatToBack={onSendFloatToBack}
+                  onRemoveFloat={onRemoveFloat}
+                />
+                </div>
+              ) : null}
+
+              {resolvedTab === 'layout' && target.kind === 'area' ? (
+                <AreaLayoutDetail cell={cell} gridDesign={gridDesign} onUpdateCell={onUpdateCell} />
+              ) : null}
+
+              {resolvedTab === 'primary' && showHostPrimary ? (
+                <HostAssignmentDetail
+                  content={cell.slotA}
+                  binding={cell.hostSlotA}
+                  catalog={catalog}
+                  onChange={(binding) => onUpdateCell({ hostSlotA: binding })}
+                />
+              ) : null}
+
+              {resolvedTab === 'primary' && showSongPrimary && cell.songSlotA ? (
+                <SongAssignmentDetail
+                  content={cell.slotA}
+                  settings={cell.songSlotA}
+                  catalog={catalog}
+                  gridDesign={gridDesign}
+                  onChange={(settings) => onUpdateCell({ songSlotA: settings })}
+                />
+              ) : null}
+
+              {resolvedTab === 'secondary' && showHostSecondary ? (
+                <HostAssignmentDetail
+                  content={cell.slotB}
+                  binding={cell.hostSlotB}
+                  catalog={catalog}
+                  onChange={(binding) => onUpdateCell({ hostSlotB: binding })}
+                />
+              ) : null}
+
+              {resolvedTab === 'secondary' && showSongSecondary && cell.songSlotB ? (
+                <SongAssignmentDetail
+                  content={cell.slotB}
+                  settings={cell.songSlotB}
+                  catalog={catalog}
+                  gridDesign={gridDesign}
+                  onChange={(settings) => onUpdateCell({ songSlotB: settings })}
+                />
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </DesignerOverlayLayer>
   );
 }

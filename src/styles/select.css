@@ -1,0 +1,46 @@
+/**
+ * Universal native select styling — custom chevron with consistent inset from the right edge.
+ * Override padding-block / padding-inline-start per context; leave padding-inline-end alone.
+ */
+:root {
+  --select-chevron-gap: 0.55rem;
+  --select-chevron-size: 0.65em;
+  --select-chevron-end-padding: calc(var(--select-chevron-gap) + var(--select-chevron-size) + 0.4em);
+  --select-chevron-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --select-padding-block: 0.45rem;
+  --select-padding-inline: 0.55rem;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  font: inherit;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background-color: var(--surface-2);
+  background-image: var(--select-chevron-image);
+  background-repeat: no-repeat;
+  background-position: right var(--select-chevron-gap) center;
+  background-size: var(--select-chevron-size);
+  padding-block: var(--select-padding-block);
+  padding-inline-start: var(--select-padding-inline);
+  padding-inline-end: var(--select-chevron-end-padding);
+  cursor: pointer;
+}
+
+select:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+select option {
+  background: var(--surface-2);
+  color: var(--text);
+}

@@ -13,7 +13,10 @@ function baseContext(overrides: Partial<VcResolutionContext> = {}): VcResolution
   return {
     song: null,
     artistName: 'Test Artist',
+    artistBio: 'A short artist biography.',
     artistPhotoUrl: 'https://example.com/artist.jpg',
+    playback: { currentTime: 201, duration: 321, isPlaying: true },
+    upcoming: [],
     catalog: createDefaultHostContentCatalog(),
     useFallbacks: true,
     gridDesign: DEFAULT_VC_GRID_DESIGN,
@@ -27,7 +30,7 @@ function songPayload() {
     id: 1,
     title: 'Test Song',
     artist: 'Test Artist',
-    year: 2026,
+    year: '2026',
     caption: 'A caption',
     coverUrl: 'https://example.com/cover.jpg',
     videoCoverUrl: 'https://example.com/video-cover.mp4',
@@ -36,6 +39,7 @@ function songPayload() {
     artistId: 10,
     mainGenre: 'Electronic',
     additionalGenres: 'Ambient, Chill',
+    durationSeconds: 321,
   };
 }
 
@@ -168,5 +172,100 @@ test('resolveVcCellContent resolves host fallback text fields deterministically 
   assert.equal(resolved.kind, 'text');
   if (resolved.kind === 'text') {
     assert.equal(resolved.text, 'First');
+  }
+});
+
+test('resolveVcCellContent resolves artist bio and combined bio-name', () => {
+  const ctx = baseContext({ song: songPayload(), artistBio: 'Bio paragraph.' });
+
+  const bio = resolveVcCellContent('artist-bio', null, ctx);
+  assert.equal(bio.kind, 'text');
+  if (bio.kind === 'text') assert.equal(bio.text, 'Bio paragraph.');
+
+  const combined = resolveVcCellContent('artist-bio-name', null, ctx);
+  assert.equal(combined.kind, 'artist-bio-name');
+  if (combined.kind === 'artist-bio-name') {
+    assert.equal(combined.artistName, 'Test Artist');
+    assert.equal(combined.bio, 'Bio paragraph.');
+  }
+});
+
+test('resolveVcCellContent applies lyrics edge fade override', () => {
+  const ctx = baseContext({ song: songPayload() });
+
+  const defaultLyrics = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(defaultLyrics.kind, 'lyrics');
+  if (defaultLyrics.kind === 'lyrics') {
+    assert.equal(defaultLyrics.lyricsEdgeFade, true);
+  }
+
+  const noFade = resolveVcCellContent('lyrics', null, ctx, { lyricsEdgeFade: false });
+  assert.equal(noFade.kind, 'lyrics');
+  if (noFade.kind === 'lyrics') {
+    assert.equal(noFade.lyricsEdgeFade, false);
+  }
+});
+
+test('resolveVcCellContent resolves song year, length, and elapsed/remaining', () => {
+  const ctx = baseContext({
+    song: songPayload(),
+    playback: { currentTime: 201, duration: 321, isPlaying: false },
+  });
+
+  const year = resolveVcCellContent('song-year', null, ctx);
+  assert.equal(year.kind, 'text');
+  if (year.kind === 'text') assert.equal(year.text, '2026');
+
+  const length = resolveVcCellContent('song-length', null, ctx);
+  assert.equal(length.kind, 'text');
+  if (length.kind === 'text') assert.equal(length.text, '5:21');
+
+  const elapsed = resolveVcCellContent('elapsed-remaining', null, ctx);
+  assert.equal(elapsed.kind, 'text');
+  if (elapsed.kind === 'text') assert.equal(elapsed.text, '3:21 / 2:00');
+});
+
+test('resolveVcCellContent resolves interactive seek bar and player controls', () => {
+  const ctx = baseContext({ song: songPayload() });
+
+  const seek = resolveVcCellContent('seek-bar', null, ctx, {
+    seekIncludeTransport: true,
+    seekClickable: false,
+  });
+  assert.equal(seek.kind, 'seek-bar');
+  if (seek.kind === 'seek-bar') {
+    assert.equal(seek.presentation.includeTransport, true);
+    assert.equal(seek.presentation.clickable, false);
+  }
+
+  const controls = resolveVcCellContent('player-controls', null, ctx, { controlScalePct: 150 });
+  assert.equal(controls.kind, 'player-controls');
+  if (controls.kind === 'player-controls') {
+    assert.equal(controls.presentation.scalePct, 150);
+  }
+});
+
+test('resolveVcCellContent applies text alignment override to song title text', () => {
+  const ctx = baseContext({ song: songPayload() });
+  const resolved = resolveVcCellContent('song-title', null, ctx, { textAlign: 'center' });
+  assert.equal(resolved.kind, 'text');
+  if (resolved.kind === 'text') {
+    assert.equal(resolved.textAlign, 'center');
+  }
+});
+
+test('resolveVcCellContent resolves upcoming covers when playlist has entries', () => {
+  const ctx = baseContext({
+    song: songPayload(),
+    upcoming: [
+      { id: 2, title: 'Next Song', artist: 'Test Artist', coverUrl: 'https://example.com/next.jpg', durationSeconds: 180 },
+    ],
+  });
+
+  const upcoming = resolveVcCellContent('upcoming-covers', null, ctx, { upcomingLayout: 'gallery' });
+  assert.equal(upcoming.kind, 'upcoming-covers');
+  if (upcoming.kind === 'upcoming-covers') {
+    assert.equal(upcoming.songs.length, 1);
+    assert.equal(upcoming.presentation.layout, 'gallery');
   }
 });

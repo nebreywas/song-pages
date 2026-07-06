@@ -8,14 +8,13 @@ import {
   type HostContentItem,
 } from '@shared/hostContent';
 import {
-  clearAllAssignmentOverrides,
   getAssignmentDefaults,
-  isOverrideActive,
   patchAssignmentOverride,
   type VcAssignmentOverrides,
 } from '@shared/vcMode/assignmentSettings';
 import type { VcCellContent, VcHostSlotBinding } from '@shared/vcModeTypes';
 
+import { AssignmentField } from './AssignmentField';
 import { GraphicAssignmentControls } from './GraphicAssignmentControls';
 import { TextAssignmentControls } from './TextAssignmentControls';
 
@@ -25,32 +24,6 @@ type HostAssignmentSettingsProps = {
   catalog: HostContentCatalog;
   onChange: (binding: VcHostSlotBinding) => void;
 };
-
-function OverrideField({
-  label,
-  overridden,
-  onReset,
-  children,
-}: {
-  label: string;
-  overridden: boolean;
-  onReset: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={`vc-assignment-field${overridden ? ' is-overridden' : ''}`}>
-      <div className="vc-assignment-field-head">
-        <span>{label}</span>
-        {overridden ? (
-          <button type="button" className="vc-assignment-reset" onClick={onReset}>
-            Reset
-          </button>
-        ) : null}
-      </div>
-      {children}
-    </div>
-  );
-}
 
 function patchBinding(
   content: VcCellContent,
@@ -74,10 +47,12 @@ function TextSettings({
   onChange,
   showAllCaps,
   showMarkdown,
+  showTitleOverflow = false,
 }: HostAssignmentSettingsProps & {
   item: HostContentItem | null;
   showAllCaps: boolean;
   showMarkdown: boolean;
+  showTitleOverflow?: boolean;
 }) {
   return (
     <TextAssignmentControls
@@ -88,6 +63,7 @@ function TextSettings({
       onOverridesChange={(overrides) => onChange({ ...binding, overrides })}
       showAllCaps={showAllCaps}
       showMarkdown={showMarkdown}
+      showTitleOverflow={showTitleOverflow}
     />
   );
 }
@@ -111,13 +87,7 @@ function GroupSettings({
 
   return (
     <>
-      <OverrideField
-        label="Presentation"
-        overridden={isOverrideActive(content, item, catalog, overrides, 'presentationMode')}
-        onReset={() =>
-          onChange(patchBinding(content, item, catalog, binding, 'presentationMode', defaults.presentationMode))
-        }
-      >
+      <AssignmentField label="Presentation">
         <select
           value={mode}
           onChange={(e) =>
@@ -127,17 +97,11 @@ function GroupSettings({
           <option value="slideshow">Slideshow</option>
           <option value="gallery">Gallery</option>
         </select>
-      </OverrideField>
+      </AssignmentField>
 
       {mode === 'slideshow' ? (
         <>
-          <OverrideField
-            label="Frame time (seconds)"
-            overridden={isOverrideActive(content, item, catalog, overrides, 'frameTimeSec')}
-            onReset={() =>
-              onChange(patchBinding(content, item, catalog, binding, 'frameTimeSec', defaults.frameTimeSec))
-            }
-          >
+          <AssignmentField label="Frame time (seconds)">
             <input
               type="number"
               min={1}
@@ -147,17 +111,9 @@ function GroupSettings({
                 onChange(patchBinding(content, item, catalog, binding, 'frameTimeSec', Number(e.target.value)))
               }
             />
-          </OverrideField>
+          </AssignmentField>
 
-          <OverrideField
-            label="Transition"
-            overridden={isOverrideActive(content, item, catalog, overrides, 'slideshowTransition')}
-            onReset={() =>
-              onChange(
-                patchBinding(content, item, catalog, binding, 'slideshowTransition', defaults.slideshowTransition),
-              )
-            }
-          >
+          <AssignmentField label="Transition">
             <select
               value={slideshowTransition}
               onChange={(e) =>
@@ -168,17 +124,9 @@ function GroupSettings({
               <option value="fade">Fade</option>
               <option value="flip">Flip</option>
             </select>
-          </OverrideField>
+          </AssignmentField>
 
-          <OverrideField
-            label="Slideshow playback"
-            overridden={isOverrideActive(content, item, catalog, overrides, 'slideshowPlayback')}
-            onReset={() =>
-              onChange(
-                patchBinding(content, item, catalog, binding, 'slideshowPlayback', defaults.slideshowPlayback),
-              )
-            }
-          >
+          <AssignmentField label="Slideshow playback">
             <select
               value={slideshowPlayback}
               onChange={(e) =>
@@ -188,15 +136,11 @@ function GroupSettings({
               <option value="loop">Loop</option>
               <option value="once">Play once</option>
             </select>
-          </OverrideField>
+          </AssignmentField>
         </>
       ) : (
         <>
-          <OverrideField
-            label="Max visible"
-            overridden={isOverrideActive(content, item, catalog, overrides, 'maxVisible')}
-            onReset={() => onChange(patchBinding(content, item, catalog, binding, 'maxVisible', defaults.maxVisible))}
-          >
+          <AssignmentField label="Max visible">
             <input
               type="number"
               min={1}
@@ -206,15 +150,9 @@ function GroupSettings({
                 onChange(patchBinding(content, item, catalog, binding, 'maxVisible', Number(e.target.value)))
               }
             />
-          </OverrideField>
+          </AssignmentField>
 
-          <OverrideField
-            label="Gallery layout"
-            overridden={isOverrideActive(content, item, catalog, overrides, 'galleryLayout')}
-            onReset={() =>
-              onChange(patchBinding(content, item, catalog, binding, 'galleryLayout', defaults.galleryLayout))
-            }
-          >
+          <AssignmentField label="Gallery layout">
             <select
               value={galleryLayout}
               onChange={(e) =>
@@ -225,7 +163,7 @@ function GroupSettings({
               <option value="scroll">Scroll</option>
               <option value="coverflow">Cover flow</option>
             </select>
-          </OverrideField>
+          </AssignmentField>
         </>
       )}
     </>
@@ -234,23 +172,9 @@ function GroupSettings({
 
 export function HostAssignmentSettings({ content, binding, catalog, onChange }: HostAssignmentSettingsProps) {
   const item = binding.itemId ? findHostContentItem(catalog, binding.itemId) ?? null : null;
-  const hasOverrides = Object.keys(binding.overrides).length > 0;
 
   return (
     <section className="vc-host-assignment-settings">
-      <div className="vc-host-assignment-settings-head">
-        <h4>Assignment settings</h4>
-        {hasOverrides ? (
-          <button
-            type="button"
-            className="btn vc-assignment-clear"
-            onClick={() => onChange({ ...binding, overrides: clearAllAssignmentOverrides(content, binding.overrides) })}
-          >
-            Clear all overrides
-          </button>
-        ) : null}
-      </div>
-
       {!binding.itemId ? (
         <p className="hc-pane-empty">Select a catalog item to configure assignment settings.</p>
       ) : !item ? (
@@ -282,6 +206,7 @@ export function HostAssignmentSettings({ content, binding, catalog, onChange }: 
           onChange={onChange}
           showAllCaps
           showMarkdown={false}
+          showTitleOverflow
         />
       ) : content === 'host-area-text' ? (
         <TextSettings
@@ -302,8 +227,6 @@ export function HostAssignmentSettings({ content, binding, catalog, onChange }: 
           onChange={onChange}
         />
       ) : null}
-
-      <p className="vc-assignment-hint">Defaults come from Host Content unless overridden here.</p>
     </section>
   );
 }

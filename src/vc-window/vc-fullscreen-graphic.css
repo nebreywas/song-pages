@@ -1,0 +1,34 @@
+/* Full-surface host graphic from grid design — below regions, above background color. */
+
+.vc-fullscreen-graphic-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+}
+
+.vc-has-fullscreen-graphic .vc-surface-region,
+.vc-has-fullscreen-graphic .vc-designer-region {
+  background: transparent !important;
+}
+
+.vc-fullscreen-graphic-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.vc-surface-region,
+.vc-designer-region {
+  z-index: 1;
+}
+
+.vc-surface-divider,
+.vc-designer-divider {
+  z-index: 8;
+}

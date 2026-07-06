@@ -4,6 +4,7 @@ import { BridgeRequired } from './components/BridgeRequired';
 import { SettingsModal } from './components/SettingsModal';
 import { getApp } from './lib/bridge';
 import { useAppTheme } from './lib/useAppTheme';
+import { useAudioDebugHotkey } from './audio/debug/AudioDebugPanel';
 import { ListenerMode } from './listener/ListenerMode';
 import { ArtistMode } from './artist/ArtistMode';
 import { DeveloperMode } from './developer/DeveloperMode';
@@ -25,6 +26,8 @@ export default function App() {
     if (!app?.onOpenSettings) return;
     return app.onOpenSettings(() => setSettingsOpen(true));
   }, []);
+
+  useAudioDebugHotkey();
 
   return (
     <div className="app-root">

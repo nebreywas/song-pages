@@ -118,6 +118,7 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (generation !== loadGenerationRef.current) return;
         if (data.fatal) {
+          console.warn('[VC mirror] HLS fatal error', data.type, data.details);
           hls.destroy();
           if (hlsRef.current === hls) hlsRef.current = null;
           reportPlaybackStatus(audio);

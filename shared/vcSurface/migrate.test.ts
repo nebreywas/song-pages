@@ -121,6 +121,21 @@ test('migrateVcConfig preserves gridDesign, floats, and host bindings on modern 
   assert.equal(migrated.floatContent['float-1']?.songSlotA?.overrides.allCaps, true);
 });
 
+test('migrateVcConfig preserves visualizer rotation settings', () => {
+  const migrated = migrateVcConfig({
+    surface: createDefaultSurface('quad'),
+    cells: defaultCells(),
+    floatContent: {},
+    visualizerId: 'aurora',
+    visualizerChangeRule: 'click',
+    visualizerSequence: 'random-builtin',
+    useFallbacks: true,
+  });
+
+  assert.equal(migrated.visualizerChangeRule, 'click');
+  assert.equal(migrated.visualizerSequence, 'random-builtin');
+});
+
 test('migrateVcConfig migrates legacy cell content strings through normalize', () => {
   const config = migrateVcConfig({
     surface: createDefaultSurface('quad'),

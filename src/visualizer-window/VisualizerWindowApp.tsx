@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { DEFAULT_VISUALIZER_ID } from '@shared/visualizerMessages';
 
 import { SongPageWebview } from '../listener/SongPageWebview';
+import { AudioDebugPanel, useAudioDebugHotkey } from '../audio/debug/AudioDebugPanel';
 import { defaultVisualizerForSurface, getVisualizer, visualizerSupportsSurface } from '../visualizers/registry';
 import { VisualizerPluginHost } from '../visualizers/VisualizerPluginHost';
 import { useVisualizerIpcStream } from '../visualizers/useVisualizerStream';
@@ -10,6 +11,7 @@ import { useVisualizerIpcStream } from '../visualizers/useVisualizerStream';
 /** Projection window — song page webview or FFT visualizer streamed from the main window. */
 export function VisualizerWindowApp() {
   const { stream, connected } = useVisualizerIpcStream();
+  useAudioDebugHotkey();
 
   const experienceId = useMemo(() => {
     if (!stream) return DEFAULT_VISUALIZER_ID;
@@ -70,6 +72,7 @@ export function VisualizerWindowApp() {
         frame={stream.frame}
         canvasFrame={stream.canvasFrame}
       />
+      <AudioDebugPanel surface="projection" />
     </div>
   );
 }

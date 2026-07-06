@@ -21,6 +21,8 @@ const VC_HOTKEYS = [
   { accelerator: 'CommandOrControl+Alt+U', action: 'upcoming' },
   // Toggle bright red area/float outlines on the VC surface (debug only).
   { accelerator: 'CommandOrControl+Alt+D', action: 'debugOutlines' },
+  // Toggle fullscreen layout editing — move/resize areas and floats on the VC surface.
+  { accelerator: 'CommandOrControl+Alt+L', action: 'layoutMode' },
 ];
 
 function registerVcHotkeys(onHotkey) {

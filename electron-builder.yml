@@ -24,6 +24,9 @@ asarUnpack:
 
 mac:
   category: public.app-category.music
+  extendInfo:
+    CFBundleDisplayName: Song Pages
+    CFBundleName: Song Pages
   target:
     - dmg
 

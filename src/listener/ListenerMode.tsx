@@ -4,7 +4,8 @@ import Hls from 'hls.js';
 import { SongPageWebview } from './SongPageWebview';
 import { ListenerWelcome } from './ListenerWelcome';
 import { ArtistInfoPanel } from './ArtistInfoPanel';
-import { usePlaybackEffects } from './usePlaybackEffects';
+import { usePlaybackEffects } from '../audio/hooks/usePlaybackEffects';
+import { useAnalyserPlaybackMirror } from '../audio/hooks/useAnalyserPlaybackMirror';
 import { ToastStack } from './ToastStack';
 import { useToasts } from './useToasts';
 import { PlayerBar, type RepeatMode } from './PlayerBar';
@@ -32,10 +33,14 @@ import { VisualizerSettingsDialog } from '../visualizers/settings/ui/VisualizerS
 import { ButterchurnMirrorHost } from '../visualizers/butterchurn/adapter/ButterchurnMirrorHost';
 import { useExperienceSettings } from '../visualizers/settings/useExperienceSettings';
 import { useVisualizerManager } from '../visualizers/useVisualizerManager';
+import { AudioDebugPanel } from '../audio/debug/AudioDebugPanel';
+import { useAudioDebugReporter } from '../audio/debug/useAudioDebugReporter';
 import { VcModeModal } from '../vc-mode/VcModeModal';
 import { VcCloseConfirmModal } from '../vc-mode/VcCloseConfirmModal';
 import { useVcModeManager } from '../vc-mode/useVcModeManager';
+import '../styles/themes.css';
 import '../styles/toast.css';
+import '../styles/select.css';
 import '../styles/visualizer.css';
 import '../vc-mode/vcMode.css';
 import '../vc-window/vc-window.css';
@@ -122,11 +127,22 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   } | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  /** Muted HLS mirror for visualizer FFT — keeps main playback on native output for stream capture. */
+  const analyserAudioRef = useRef<HTMLAudioElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const playbackGenerationRef = useRef(0);
   const mainColumnRef = useRef<HTMLDivElement>(null);
   const rowClickTimerRef = useRef<number | null>(null);
   const durationProbeRef = useRef<Set<number>>(new Set());
+  /** Latest transport handlers for VC window IPC — avoids hook-order / TDZ issues. */
+  const vcTransportHandlersRef = useRef({
+    togglePlayPause: () => {},
+    playPrevious: () => {},
+    playNext: () => {},
+    handleSeek: (_time: number) => {},
+    playSong: async (_song: SongRow) => {},
+    sortedSongs: [] as SongRow[],
+  });
 
   const selectedArtist = artists.find((artist) => artist.id === selectedArtistId) ?? null;
   const playingSong = songs.find((song) => song.id === playingSongId) ?? null;
@@ -140,7 +156,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   );
 
   const visualizer = useVisualizerManager({
-    audioRef,
+    analyserAudioRef,
     playingSong,
     isPlaying,
     currentTime,
@@ -160,7 +176,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   );
 
   usePlaybackEffects({
-    audioRef,
+    mainAudioRef: audioRef,
+    analyserAudioRef,
+    volume,
     isPlaying,
     bassBoost,
     lofi,
@@ -383,7 +401,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   );
 
   const vc = useVcModeManager({
-    audioRef,
+    analyserAudioRef,
     playingSong,
     previewSong,
     sortedSongs,
@@ -395,8 +413,36 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     duration,
     activePlaybackUrl,
     volume,
-    bassBoost,
-    lofi,
+  });
+
+  const analyserMirrorEnabled =
+    (visualizer.canVisualize && visualizer.activeSession !== 'none') ||
+    (visualizer.windowOpen && visualizer.projectionMode === 'visualizer' && visualizer.canVisualize) ||
+    vc.analyserEnabled ||
+    bassBoost ||
+    lofi;
+
+  useAudioDebugReporter({
+    surface: 'main',
+    mainAudioRef: audioRef,
+    mirrorAudioRef: analyserAudioRef,
+    analyser: visualizer.analyser,
+    frequencyData: visualizer.frequencyData,
+    isPlaying,
+    embeddedActive: visualizer.embeddedActive,
+    windowOpen: visualizer.windowOpen,
+    projectionMode: visualizer.projectionMode,
+    activeSession: visualizer.activeSession,
+    analyserEnabled: visualizer.canVisualize && visualizer.activeSession !== 'none',
+    mirrorEnabled: analyserMirrorEnabled,
+    experienceId: visualizer.activeExperienceId,
+  });
+
+  useAnalyserPlaybackMirror({
+    mainAudioRef: audioRef,
+    analyserAudioRef,
+    playbackUrl: activePlaybackUrl,
+    enabled: analyserMirrorEnabled,
   });
 
   useEffect(() => {
@@ -406,10 +452,41 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   }, [vc.vcOpen]);
 
   useEffect(() => {
+    const app = getApp();
+    if (!app?.vc?.onTransport) return;
+
+    const off = app.vc.onTransport((command) => {
+      const handlers = vcTransportHandlersRef.current;
+      if (command.type === 'playPause') {
+        handlers.togglePlayPause();
+        return;
+      }
+      if (command.type === 'prev') {
+        handlers.playPrevious();
+        return;
+      }
+      if (command.type === 'next') {
+        handlers.playNext();
+        return;
+      }
+      if (command.type === 'seek') {
+        handlers.handleSeek(command.seconds);
+        return;
+      }
+      if (command.type === 'playSong') {
+        const target = handlers.sortedSongs.find((song) => song.id === command.songId);
+        if (target) void handlers.playSong(target);
+      }
+    });
+
+    return () => off();
+  }, [vc.vcOpen]);
+
+  useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || bassBoost || lofi) return;
     audio.volume = volume;
-  }, [volume]);
+  }, [volume, bassBoost, lofi]);
 
   const markSongAvailability = useCallback(
     async (song: SongRow, unavailable: boolean) => {
@@ -767,6 +844,15 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     setCurrentTime(audio.currentTime);
   };
 
+  vcTransportHandlersRef.current = {
+    togglePlayPause,
+    playPrevious,
+    playNext,
+    handleSeek,
+    playSong,
+    sortedSongs,
+  };
+
   const handleContentResize = (deltaY: number) => {
     const column = mainColumnRef.current;
     setContentHeight((height) => clampContentHeight(column, height + deltaY));
@@ -937,6 +1023,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             onToggleCrossfades={() => setCrossfades((on) => !on)}
           />
           <audio ref={audioRef} preload="metadata" />
+          <audio
+            ref={analyserAudioRef}
+            className="listener-analyser-audio"
+            preload="metadata"
+            aria-hidden="true"
+          />
         </section>
         {error ? <p className="error listener-feedback">{error}</p> : null}
 
@@ -1135,6 +1227,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           }
         />
       ) : null}
+
+      <AudioDebugPanel surface="main" />
     </div>
   );
 }

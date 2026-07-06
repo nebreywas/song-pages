@@ -4,6 +4,7 @@ import type { VisualizerStreamConfig, VisualizerStreamFrame } from '@shared/visu
 
 import { getApp } from '../lib/bridge';
 import { FFT_SIZE } from './audioGraph';
+import { audioDebug, measureFrequencyBins } from './debug/audioDebug';
 
 type StreamState = {
   frequencyData: Uint8Array;
@@ -41,6 +42,11 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
 
     const frequencyData = new Uint8Array(FFT_SIZE / 2);
     const timeDomainData = new Uint8Array(FFT_SIZE);
+    let framesReceived = 0;
+    let lastFrameAt = 0;
+    let lastStallWarnAt = 0;
+
+    audioDebug.log('ipc-recv', 'Projection stream listener attached');
 
     const offConfig = app.visualizer.onConfig((message: VisualizerStreamConfig) => {
       setConnected(true);
@@ -67,11 +73,36 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
 
     const offFrame = app.visualizer.onFrame((message: VisualizerStreamFrame) => {
       setConnected(true);
+      framesReceived += 1;
+      lastFrameAt = Date.now();
       const bins =
         message.frequency instanceof Uint8Array
           ? message.frequency
           : new Uint8Array(message.frequency);
       frequencyData.set(bins);
+      const fft = measureFrequencyBins(frequencyData);
+      audioDebug.patchSnapshot({
+        ipc: {
+          role: 'receiver',
+          receiving: true,
+          framesReceived,
+          lastFrameAgeMs: 0,
+          lastPeakBin: fft.peak,
+        },
+        analyser: {
+          connected: true,
+          peakBin: fft.peak,
+          avgBin: fft.avg,
+          silent: fft.silent,
+        },
+        isPlaying: message.isPlaying,
+      });
+      if (framesReceived === 1) {
+        audioDebug.log('ipc-recv', 'First frame received', { peak: fft.peak, isPlaying: message.isPlaying });
+      }
+      if (fft.silent && message.isPlaying && framesReceived % 120 === 0) {
+        audioDebug.log('ipc-recv', 'Frame received but FFT is silent', { peak: fft.peak }, 'warn');
+      }
       setState({
         frequencyData,
         timeDomainData,
@@ -82,15 +113,30 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
         song: metaRef.current.song,
         projectionMode: metaRef.current.projectionMode,
         pageUrl: metaRef.current.pageUrl,
-        frame: Date.now(),
+        frame: lastFrameAt,
         canvasFrame: message.canvasFrame ?? null,
       });
     });
 
+    const stallId = window.setInterval(() => {
+      if (!lastFrameAt) return;
+      const ageMs = Date.now() - lastFrameAt;
+      audioDebug.patchSnapshot({
+        ipc: { lastFrameAgeMs: ageMs },
+      });
+      const snap = audioDebug.getSnapshot();
+      if (snap.isPlaying && ageMs > 500 && framesReceived > 0 && Date.now() - lastStallWarnAt > 2000) {
+        lastStallWarnAt = Date.now();
+        audioDebug.log('ipc-recv', 'Projection frame stall detected', { lastFrameAgeMs: ageMs }, 'warn');
+      }
+    }, 250);
+
     return () => {
       offConfig();
       offFrame();
+      window.clearInterval(stallId);
       setConnected(false);
+      audioDebug.log('ipc-recv', 'Projection stream disconnected');
     };
   }, []);
 
@@ -128,8 +174,16 @@ export function useVisualizerIpcSender(options: {
     canvasFrame = null,
   } = options;
   const intervalRef = useRef<number | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(analyser);
   const timingRef = useRef({ currentTime, duration, isPlaying });
   const canvasFrameRef = useRef<string | null>(canvasFrame);
+  const framesSentRef = useRef(0);
+  const wasSendingRef = useRef(false);
+  const lastSendBlockedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    analyserRef.current = analyser;
+  }, [analyser]);
 
   useEffect(() => {
     canvasFrameRef.current = canvasFrame;
@@ -166,36 +220,102 @@ export function useVisualizerIpcSender(options: {
 
   useEffect(() => {
     const app = getApp();
-    if (!enabled || !sendFrames || !analyser || !app?.visualizer?.sendFrame) {
+
+    const describeBlock = (): string | null => {
+      if (!enabled) return 'ipc disabled (window closed)';
+      if (!sendFrames) return 'sendFrames false (not visualizer projection or analyser off)';
+      if (!analyserRef.current) return 'analyser null';
+      if (!app?.visualizer?.sendFrame) return 'bridge missing sendFrame';
+      return null;
+    };
+
+    const blocked = describeBlock();
+    lastSendBlockedRef.current = blocked;
+
+    if (blocked) {
       if (intervalRef.current != null) {
         window.clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      audioDebug.patchSnapshot({
+        ipc: {
+          role: 'sender',
+          sending: false,
+          sendBlockedReason: blocked,
+        },
+      });
+      if (sendFrames && enabled) {
+        audioDebug.log('ipc-send', 'Frame loop stopped', { reason: blocked }, 'warn');
+      }
+      wasSendingRef.current = false;
       return;
     }
 
-    const scratch = new Uint8Array(analyser.frequencyBinCount);
+    const node = analyserRef.current!;
+    const scratch = new Uint8Array(node.frequencyBinCount);
+    framesSentRef.current = 0;
+
+    audioDebug.log('ipc-send', 'Frame loop started', {
+      fftSize: node.fftSize,
+      binCount: node.frequencyBinCount,
+    });
 
     const tick = () => {
-      analyser.getByteFrequencyData(scratch as Uint8Array<ArrayBuffer>);
+      const activeAnalyser = analyserRef.current;
+      if (!activeAnalyser) return;
+
+      activeAnalyser.getByteFrequencyData(scratch as Uint8Array<ArrayBuffer>);
       const timing = timingRef.current;
+      const fft = measureFrequencyBins(scratch);
+
       app.visualizer!.sendFrame({
         type: 'frame',
-        frequency: Array.from(scratch),
+        // Copy — scratch buffer is reused each tick; typed array IPC is cheaper than Array.from.
+        frequency: new Uint8Array(scratch),
         currentTime: timing.currentTime,
         duration: timing.duration,
         isPlaying: timing.isPlaying,
         canvasFrame: canvasFrameRef.current,
       });
+
+      framesSentRef.current += 1;
+      audioDebug.patchSnapshot({
+        ipc: {
+          role: 'sender',
+          sending: true,
+          sendBlockedReason: null,
+          framesSent: framesSentRef.current,
+          lastPeakBin: fft.peak,
+        },
+        analyser: {
+          connected: true,
+          peakBin: fft.peak,
+          avgBin: fft.avg,
+          silent: fft.silent,
+        },
+      });
+
+      if (framesSentRef.current === 1) {
+        audioDebug.log('ipc-send', 'First frame sent', { peak: fft.peak });
+      }
+      if (fft.silent && timing.isPlaying && framesSentRef.current % 120 === 0) {
+        audioDebug.log('ipc-send', 'Sending silent FFT while playing', { peak: fft.peak }, 'warn');
+      }
     };
 
     tick();
     intervalRef.current = window.setInterval(tick, FRAME_INTERVAL_MS);
+    wasSendingRef.current = true;
     return () => {
       if (intervalRef.current != null) {
         window.clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      audioDebug.log('ipc-send', 'Frame loop torn down', {
+        framesSent: framesSentRef.current,
+        wasSending: wasSendingRef.current,
+      });
+      wasSendingRef.current = false;
     };
   }, [analyser, enabled, sendFrames]);
 }

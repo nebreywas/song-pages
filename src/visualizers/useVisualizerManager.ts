@@ -25,7 +25,8 @@ import { useAudioAnalyser } from './useAudioAnalyser';
 import { useVisualizerIpcSender } from './useVisualizerStream';
 
 type UseVisualizerManagerOptions = {
-  audioRef: React.RefObject<HTMLAudioElement | null>;
+  /** Hidden mirror element — Web Audio analyser attaches here, not the audible player. */
+  analyserAudioRef: React.RefObject<HTMLAudioElement | null>;
   playingSong: SongRow | null | undefined;
   isPlaying: boolean;
   currentTime: number;
@@ -41,7 +42,7 @@ function resolveActiveSession(embeddedActive: boolean, projectionVisualizerActiv
 }
 
 export function useVisualizerManager({
-  audioRef,
+  analyserAudioRef,
   playingSong,
   isPlaying,
   currentTime,
@@ -75,7 +76,7 @@ export function useVisualizerManager({
 
   const { analyser, butterchurnTap, applyButterchurnAudioSettings, frequencyData, timeDomainData, audioContext } =
     useAudioAnalyser({
-    audioRef,
+    audioRef: analyserAudioRef,
     isPlaying,
     enabled: analyserEnabled,
   });

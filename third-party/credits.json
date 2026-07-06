@@ -14,6 +14,13 @@
       "license": "MIT",
       "url": "https://github.com/jberg/butterchurn-presets"
     },
+    "coloris": {
+      "id": "coloris",
+      "name": "Coloris",
+      "description": "Lightweight color picker for VC and host content designers.",
+      "license": "MIT",
+      "url": "https://github.com/mdbassit/Coloris"
+    },
     "preset-flexi-martin-geiss": {
       "id": "preset-flexi-martin-geiss",
       "name": "Flexi, martin + geiss",

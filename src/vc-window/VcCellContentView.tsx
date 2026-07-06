@@ -12,6 +12,7 @@ import {
 import { getVisualizer } from '../visualizers/registry';
 import { VisualizerPluginHost } from '../visualizers/VisualizerPluginHost';
 import { VcResolvedContentView } from './VcResolvedContentView';
+import { useOptionalVcVisualizerRotationContext } from './VcVisualizerRotationContext';
 
 type VcCellContentViewProps = {
   content: VcCellContent;
@@ -34,17 +35,34 @@ export function VcCellContentView({
   frame,
   canvasFrame,
 }: VcCellContentViewProps) {
+  const rotation = useOptionalVcVisualizerRotationContext();
   const resolved = useMemo(
     () =>
       resolveVcCellContent(content, hostBinding, {
         song: state.currentSong,
         artistName: state.artistName,
+        artistBio: state.artistBio,
         artistPhotoUrl: state.artistPhotoUrl,
+        playback: state.playback,
+        upcoming: state.upcoming,
         catalog: hostCatalog,
         useFallbacks: state.config.useFallbacks !== false,
         gridDesign: state.config.gridDesign,
       }, songBinding?.overrides),
-    [content, hostBinding, songBinding, hostCatalog, state.currentSong, state.artistName, state.artistPhotoUrl, state.config.useFallbacks, state.config.gridDesign],
+    [
+      content,
+      hostBinding,
+      songBinding,
+      hostCatalog,
+      state.currentSong,
+      state.artistName,
+      state.artistBio,
+      state.artistPhotoUrl,
+      state.playback,
+      state.upcoming,
+      state.config.useFallbacks,
+      state.config.gridDesign,
+    ],
   );
 
   if (resolved.kind === 'empty') {
@@ -54,11 +72,16 @@ export function VcCellContentView({
   if (resolved.kind === 'visualizer') {
     const song = state.currentSong;
     const playback = state.playback;
-    const plugin = getVisualizer(state.config.visualizerId);
+    const experienceId =
+      rotation?.activeVisualizerId ??
+      state.effectiveVisualizerId ??
+      state.config.visualizerId;
+    const plugin = getVisualizer(experienceId);
     if (!plugin || !song) return <div className="vc-cell-empty">Visualizer</div>;
     const timeDomain = new Uint8Array(frequencyData.length * 2);
     return (
       <VisualizerPluginHost
+        key={plugin.id}
         surface="window"
         experienceId={plugin.id}
         analyser={null}

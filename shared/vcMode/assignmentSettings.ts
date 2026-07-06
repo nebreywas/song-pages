@@ -19,11 +19,35 @@ import type { VcCellContent } from '../vcModeTypes';
 
 export type VcMediaFitMode = 'stretch' | 'max-x' | 'max-y' | 'original';
 export type VcGraphicOverflow = 'static' | 'scroll' | 'auto-scroll' | 'bounce';
+export type VcTitleOverflow = VcGraphicOverflow;
 export type VcVideoPlayback = 'once' | 'loop' | 'bounce';
 export type VcGroupPresentationMode = 'slideshow' | 'gallery';
 export type VcSlideshowTransition = 'none' | 'fade' | 'flip';
 export type VcGalleryLayout = 'static' | 'scroll' | 'coverflow';
 export type VcSlideshowPlayback = 'once' | 'loop';
+export type VcUpcomingLayout = 'gallery' | 'overflow';
+export type VcTextAlign = 'left' | 'center' | 'right' | 'justify';
+
+export const VC_TEXT_ALIGN_IDS = ['left', 'center', 'right', 'justify'] as const satisfies readonly VcTextAlign[];
+
+export const VC_TEXT_ALIGN_LABELS: Record<VcTextAlign, string> = {
+  left: 'Left justified',
+  center: 'Centered',
+  right: 'Right justified',
+  justify: 'Justified',
+};
+
+export const DEFAULT_VC_TEXT_ALIGN: VcTextAlign = 'left';
+
+/** Long title overflow — host title + song title slots in VC Mode. */
+export const VC_TITLE_OVERFLOW_OPTIONS: Array<{ value: VcTitleOverflow; label: string }> = [
+  { value: 'static', label: 'Static (doesn\u2019t move)' },
+  { value: 'scroll', label: 'Continuous wrap' },
+  { value: 'auto-scroll', label: 'Restart scroll' },
+  { value: 'bounce', label: 'Bounce' },
+];
+
+export const DEFAULT_VC_TITLE_OVERFLOW: VcTitleOverflow = 'static';
 
 /** Sparse overrides stored on hostSlotA / hostSlotB — only explicit diffs from inherited defaults. */
 export type VcAssignmentOverrides = {
@@ -36,12 +60,24 @@ export type VcAssignmentOverrides = {
   color?: string;
   allCaps?: boolean;
   markdownSource?: boolean;
+  /** Horizontal alignment for text assignments in areas and floats. */
+  textAlign?: VcTextAlign;
   presentationMode?: VcGroupPresentationMode;
   frameTimeSec?: number;
   slideshowTransition?: VcSlideshowTransition;
   slideshowPlayback?: VcSlideshowPlayback;
   maxVisible?: number;
   galleryLayout?: VcGalleryLayout;
+  /** Player controls float scale — 100–200% of the designed palette. */
+  controlScalePct?: number;
+  /** Seek bar: show prev/next transport buttons alongside the bar. */
+  seekIncludeTransport?: boolean;
+  /** Seek bar: allow click/drag to seek. */
+  seekClickable?: boolean;
+  /** Upcoming covers: multi-row gallery vs single horizontal row. */
+  upcomingLayout?: VcUpcomingLayout;
+  /** Lyrics scroll container: feather top/bottom edges into the region background. */
+  lyricsEdgeFade?: boolean;
 };
 
 export type EffectiveMediaPresentation = {
@@ -65,6 +101,9 @@ export type EffectiveTextPresentation = {
   color: string;
   allCaps: boolean;
   markdownSource: boolean;
+  textAlign: VcTextAlign;
+  /** Single-line title overflow (song title, host title). */
+  lineOverflow?: VcTitleOverflow;
 };
 
 export type GroupMemberMedia = {
@@ -91,6 +130,8 @@ const GROUP_MODES = new Set<VcGroupPresentationMode>(['slideshow', 'gallery']);
 const SLIDE_TRANSITIONS = new Set<VcSlideshowTransition>(['none', 'fade', 'flip']);
 const SLIDE_PLAYBACK = new Set<VcSlideshowPlayback>(['once', 'loop']);
 const GALLERY_LAYOUTS = new Set<VcGalleryLayout>(['static', 'scroll', 'coverflow']);
+const UPCOMING_LAYOUTS = new Set<VcUpcomingLayout>(['gallery', 'overflow']);
+const TEXT_ALIGNS = new Set<VcTextAlign>(VC_TEXT_ALIGN_IDS);
 
 export const SYSTEM_ASSIGNMENT_DEFAULTS = {
   insetPct: 0,
@@ -109,16 +150,24 @@ const OVERRIDE_KEYS_BY_CONTENT: Partial<Record<VcCellContent, Array<keyof VcAssi
   cover: ['insetPct', 'fitMode', 'overflow'],
   'video-cover': ['insetPct', 'fitMode', 'playback'],
   'artist-image': ['insetPct', 'fitMode', 'overflow'],
-  lyrics: ['fontStyle', 'fontSize', 'color', 'markdownSource'],
-  about: ['fontStyle', 'fontSize', 'color', 'allCaps'],
-  'artist-name': ['fontStyle', 'fontSize', 'color', 'allCaps'],
-  'song-title': ['fontStyle', 'fontSize', 'color', 'allCaps'],
-  'main-genre': ['fontStyle', 'fontSize', 'color', 'allCaps'],
-  'additional-genres': ['fontStyle', 'fontSize', 'color', 'allCaps'],
+  lyrics: ['fontStyle', 'fontSize', 'color', 'markdownSource', 'textAlign', 'lyricsEdgeFade'],
+  about: ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
+  'artist-name': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
+  'song-title': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign', 'overflow'],
+  'main-genre': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
+  'additional-genres': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
+  'artist-bio': ['fontStyle', 'fontSize', 'color', 'markdownSource', 'textAlign'],
+  'artist-bio-name': ['fontStyle', 'fontSize', 'color', 'markdownSource', 'textAlign'],
+  'song-year': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
+  'song-length': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
+  'elapsed-remaining': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
+  'seek-bar': ['seekIncludeTransport', 'seekClickable', 'fontStyle', 'fontSize', 'color'],
+  'player-controls': ['controlScalePct'],
+  'upcoming-covers': ['upcomingLayout'],
   'host-graphic': ['insetPct', 'fitMode', 'overflow'],
   'host-video': ['insetPct', 'fitMode', 'playback'],
-  'host-title-text': ['fontStyle', 'fontSize', 'color', 'allCaps'],
-  'host-area-text': ['fontStyle', 'fontSize', 'color', 'markdownSource'],
+  'host-title-text': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign', 'overflow'],
+  'host-area-text': ['fontStyle', 'fontSize', 'color', 'markdownSource', 'textAlign'],
   'host-graphics-group': [
     'presentationMode',
     'frameTimeSec',
@@ -139,6 +188,10 @@ function clampFrameTime(value: number): number {
 
 function clampMaxVisible(value: number): number {
   return Math.min(12, Math.max(1, Math.round(value)));
+}
+
+function clampControlScale(value: number): number {
+  return Math.min(200, Math.max(100, Math.round(value)));
 }
 
 function pickEnum<T extends string>(raw: unknown, allowed: Set<T>): T | undefined {
@@ -170,6 +223,8 @@ export function sanitizeAssignmentOverrides(raw: unknown): VcAssignmentOverrides
   if (color) next.color = color;
   if (typeof value.allCaps === 'boolean') next.allCaps = value.allCaps;
   if (typeof value.markdownSource === 'boolean') next.markdownSource = value.markdownSource;
+  const textAlign = pickEnum(value.textAlign, TEXT_ALIGNS);
+  if (textAlign) next.textAlign = textAlign;
   const presentationMode = pickEnum(value.presentationMode, GROUP_MODES);
   if (presentationMode) next.presentationMode = presentationMode;
   if (typeof value.frameTimeSec === 'number' && Number.isFinite(value.frameTimeSec)) {
@@ -184,6 +239,14 @@ export function sanitizeAssignmentOverrides(raw: unknown): VcAssignmentOverrides
   }
   const galleryLayout = pickEnum(value.galleryLayout, GALLERY_LAYOUTS);
   if (galleryLayout) next.galleryLayout = galleryLayout;
+  if (typeof value.controlScalePct === 'number' && Number.isFinite(value.controlScalePct)) {
+    next.controlScalePct = clampControlScale(value.controlScalePct);
+  }
+  if (typeof value.seekIncludeTransport === 'boolean') next.seekIncludeTransport = value.seekIncludeTransport;
+  if (typeof value.seekClickable === 'boolean') next.seekClickable = value.seekClickable;
+  const upcomingLayout = pickEnum(value.upcomingLayout, UPCOMING_LAYOUTS);
+  if (upcomingLayout) next.upcomingLayout = upcomingLayout;
+  if (typeof value.lyricsEdgeFade === 'boolean') next.lyricsEdgeFade = value.lyricsEdgeFade;
 
   return next;
 }
@@ -219,6 +282,8 @@ export function getAssignmentDefaults(
       fontSize: item.fontSize,
       color: item.color,
       allCaps: item.allCaps,
+      textAlign: DEFAULT_VC_TEXT_ALIGN,
+      overflow: base.overflow,
     };
   }
 
@@ -228,6 +293,7 @@ export function getAssignmentDefaults(
       fontSize: item.fontSize,
       color: item.color,
       markdownSource: item.markdownSource,
+      textAlign: DEFAULT_VC_TEXT_ALIGN,
     };
   }
 
@@ -269,7 +335,6 @@ export function getAssignmentDefaults(
   if (
     content === 'about' ||
     content === 'artist-name' ||
-    content === 'song-title' ||
     content === 'main-genre' ||
     content === 'additional-genres'
   ) {
@@ -278,6 +343,18 @@ export function getAssignmentDefaults(
       fontSize: gridTypography.fontSize,
       color: gridTypography.color,
       allCaps: false,
+      textAlign: DEFAULT_VC_TEXT_ALIGN,
+    };
+  }
+
+  if (content === 'song-title') {
+    return {
+      fontStyle: gridTypography.fontStyle,
+      fontSize: gridTypography.fontSize,
+      color: gridTypography.color,
+      allCaps: false,
+      textAlign: DEFAULT_VC_TEXT_ALIGN,
+      overflow: base.overflow,
     };
   }
 
@@ -287,6 +364,32 @@ export function getAssignmentDefaults(
       fontSize: gridTypography.fontSize,
       color: gridTypography.color,
       markdownSource: false,
+      textAlign: DEFAULT_VC_TEXT_ALIGN,
+      lyricsEdgeFade: true,
+    };
+  }
+
+  if (content === 'artist-bio' || content === 'artist-bio-name') {
+    return {
+      fontStyle: gridTypography.fontStyle,
+      fontSize: gridTypography.fontSize,
+      color: gridTypography.color,
+      markdownSource: false,
+      textAlign: DEFAULT_VC_TEXT_ALIGN,
+    };
+  }
+
+  if (
+    content === 'song-year' ||
+    content === 'song-length' ||
+    content === 'elapsed-remaining'
+  ) {
+    return {
+      fontStyle: gridTypography.fontStyle,
+      fontSize: gridTypography.fontSize,
+      color: gridTypography.color,
+      allCaps: false,
+      textAlign: DEFAULT_VC_TEXT_ALIGN,
     };
   }
 
@@ -321,6 +424,7 @@ export function patchAssignmentOverride(
   if (key === 'maxVisible' && typeof value === 'number') normalized = clampMaxVisible(value);
   if (key === 'fontStyle' && typeof value === 'string') normalized = normalizeFontStyleId(value);
   if (key === 'fontSize' && typeof value === 'string') normalized = normalizeFontSizeId(value);
+  if (key === 'textAlign' && typeof value === 'string') normalized = pickEnum(value, TEXT_ALIGNS) ?? DEFAULT_VC_TEXT_ALIGN;
   if (key === 'color' && typeof value === 'string') normalized = pickColor(value) ?? defaults.color;
 
   next[key] = normalized as never;
@@ -395,14 +499,32 @@ export function resolveSongVideoPresentation(overrides: VcAssignmentOverrides): 
 export function resolveSongTitleTextPresentation(
   overrides: VcAssignmentOverrides,
   gridTypography: VcGridDefaultTypography = DEFAULT_VC_GRID_DESIGN.defaultTypography,
+  options?: { titleLine?: boolean },
 ): EffectiveTextPresentation {
+  const defaults = getAssignmentDefaults('song-title', null, { version: 1, items: [] }, gridTypography);
   return {
     fontStyle: pickOverride(overrides, 'fontStyle', gridTypography.fontStyle, gridTypography.fontStyle),
     fontSize: pickOverride(overrides, 'fontSize', gridTypography.fontSize, gridTypography.fontSize),
     color: pickOverride(overrides, 'color', gridTypography.color, gridTypography.color),
     allCaps: pickOverride(overrides, 'allCaps', false, false),
     markdownSource: false,
+    textAlign: pickOverride(overrides, 'textAlign', DEFAULT_VC_TEXT_ALIGN, DEFAULT_VC_TEXT_ALIGN),
+    ...(options?.titleLine
+      ? {
+          lineOverflow: pickOverride(
+            overrides,
+            'overflow',
+            defaults.overflow,
+            DEFAULT_VC_TITLE_OVERFLOW,
+          ),
+        }
+      : {}),
   };
+}
+
+/** Whether lyrics use top/bottom edge fade (default on). */
+export function resolveLyricsEdgeFade(overrides: VcAssignmentOverrides): boolean {
+  return overrides.lyricsEdgeFade ?? true;
 }
 
 /** Resolve song area-style text presentation from assignment overrides. */
@@ -416,6 +538,7 @@ export function resolveSongAreaTextPresentation(
     color: pickOverride(overrides, 'color', gridTypography.color, gridTypography.color),
     allCaps: false,
     markdownSource: pickOverride(overrides, 'markdownSource', false, false),
+    textAlign: pickOverride(overrides, 'textAlign', DEFAULT_VC_TEXT_ALIGN, DEFAULT_VC_TEXT_ALIGN),
   };
 }
 
@@ -442,6 +565,8 @@ export function resolveEffectiveTitleTextPresentation(
     color: pickOverride(overrides, 'color', defaults.color, '#ffffff'),
     allCaps: pickOverride(overrides, 'allCaps', defaults.allCaps, false),
     markdownSource: false,
+    textAlign: pickOverride(overrides, 'textAlign', defaults.textAlign, DEFAULT_VC_TEXT_ALIGN),
+    lineOverflow: pickOverride(overrides, 'overflow', defaults.overflow, DEFAULT_VC_TITLE_OVERFLOW),
   };
 }
 
@@ -456,6 +581,7 @@ export function resolveEffectiveAreaTextPresentation(
     color: pickOverride(overrides, 'color', defaults.color, '#ffffff'),
     allCaps: false,
     markdownSource: pickOverride(overrides, 'markdownSource', defaults.markdownSource, false),
+    textAlign: pickOverride(overrides, 'textAlign', defaults.textAlign, DEFAULT_VC_TEXT_ALIGN),
   };
 }
 
@@ -528,4 +654,45 @@ export function isOverrideActive(
   key: keyof VcAssignmentOverrides,
 ): boolean {
   return key in overrides && overrides[key] !== undefined;
+}
+
+export type EffectiveSeekBarPresentation = EffectiveTextPresentation & {
+  includeTransport: boolean;
+  clickable: boolean;
+};
+
+export type EffectivePlayerControlsPresentation = {
+  scalePct: number;
+};
+
+export type EffectiveUpcomingCoversPresentation = {
+  layout: VcUpcomingLayout;
+};
+
+export function resolveSeekBarPresentation(
+  overrides: VcAssignmentOverrides,
+  gridTypography: VcGridDefaultTypography = DEFAULT_VC_GRID_DESIGN.defaultTypography,
+): EffectiveSeekBarPresentation {
+  const text = resolveSongTitleTextPresentation(overrides, gridTypography);
+  return {
+    ...text,
+    includeTransport: pickOverride(overrides, 'seekIncludeTransport', false, false),
+    clickable: pickOverride(overrides, 'seekClickable', true, true),
+  };
+}
+
+export function resolvePlayerControlsPresentation(
+  overrides: VcAssignmentOverrides,
+): EffectivePlayerControlsPresentation {
+  return {
+    scalePct: pickOverride(overrides, 'controlScalePct', 100, 100),
+  };
+}
+
+export function resolveUpcomingCoversPresentation(
+  overrides: VcAssignmentOverrides,
+): EffectiveUpcomingCoversPresentation {
+  return {
+    layout: pickOverride(overrides, 'upcomingLayout', 'overflow', 'overflow'),
+  };
 }

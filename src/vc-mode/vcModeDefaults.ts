@@ -7,6 +7,10 @@ import {
   type VcTemplateId,
   VC_SETTINGS_KEY,
 } from '@shared/vcModeTypes';
+import {
+  DEFAULT_VC_VISUALIZER_CHANGE_RULE,
+  DEFAULT_VC_VISUALIZER_SEQUENCE,
+} from '@shared/vcMode/visualizerSettings';
 import { migrateVcConfig as migrateSurfaceConfig } from '@shared/vcSurface/migrate';
 import { DEFAULT_VISUALIZER_ID } from '@shared/visualizerMessages';
 import { normalizeExperienceId } from '../visualizers/native/registry';
@@ -17,6 +21,8 @@ export function createDefaultVcConfig(templateId: VcTemplateId = 'quad'): VcMode
     cells: defaultCells(),
     floatContent: {},
     visualizerId: DEFAULT_VISUALIZER_ID,
+    visualizerChangeRule: DEFAULT_VC_VISUALIZER_CHANGE_RULE,
+    visualizerSequence: DEFAULT_VC_VISUALIZER_SEQUENCE,
     useFallbacks: true,
     gridDesign: { ...DEFAULT_VC_GRID_DESIGN },
   });

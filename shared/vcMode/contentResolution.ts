@@ -2,6 +2,7 @@
  * Live VC cell content resolution — song data, host catalog items, fallback chain, assignment overrides.
  */
 
+import { formatPlaybackTime } from '../formatPlaybackTime';
 import {
   findHostContentItem,
   hostContentTypeForSlot,
@@ -22,21 +23,32 @@ import {
   resolveEffectiveGroupPresentation,
   resolveEffectiveTitleTextPresentation,
   resolveEffectiveVideoPresentation,
+  resolvePlayerControlsPresentation,
+  resolveSeekBarPresentation,
   resolveSongAreaTextPresentation,
+  resolveLyricsEdgeFade,
   resolveSongGraphicPresentation,
   resolveSongTitleTextPresentation,
   resolveSongVideoPresentation,
+  resolveUpcomingCoversPresentation,
   type EffectiveGraphicPresentation,
   type EffectiveGroupPresentation,
+  type EffectivePlayerControlsPresentation,
+  type EffectiveSeekBarPresentation,
+  type EffectiveUpcomingCoversPresentation,
   type EffectiveVideoPresentation,
   type VcAssignmentOverrides,
+  type VcTextAlign,
+  type VcTitleOverflow,
 } from './assignmentSettings';
 import {
   isHostContentKind,
   SONG_CONTENT_SETTINGS_RULE,
   type VcCellContent,
   type VcHostSlotBinding,
+  type VcPlaybackState,
   type VcSongPayload,
+  type VcUpcomingSong,
 } from '../vcModeTypes';
 import type { VcGridDefaultTypography, VcGridDesignSettings } from './gridDesign';
 import { DEFAULT_VC_GRID_DESIGN } from './gridDesign';
@@ -44,7 +56,10 @@ import { DEFAULT_VC_GRID_DESIGN } from './gridDesign';
 export type VcResolutionContext = {
   song: VcSongPayload | null;
   artistName: string | null;
+  artistBio: string | null;
   artistPhotoUrl: string | null;
+  playback: VcPlaybackState;
+  upcoming: VcUpcomingSong[];
   catalog: HostContentCatalog;
   useFallbacks: boolean;
   gridDesign?: VcGridDesignSettings;
@@ -75,6 +90,10 @@ export type ResolvedText = {
   color: string;
   allCaps?: boolean;
   markdownSource?: boolean;
+  textAlign?: VcTextAlign;
+  /** Host title + song title — always single line in VC Mode. */
+  titleLine?: boolean;
+  lineOverflow?: VcTitleOverflow;
 };
 
 export type ResolvedLyrics = {
@@ -84,6 +103,8 @@ export type ResolvedLyrics = {
   fontSize?: HostFontSizeId;
   color?: string;
   markdownSource?: boolean;
+  textAlign?: VcTextAlign;
+  lyricsEdgeFade?: boolean;
 };
 
 export type ResolvedAbout = {
@@ -96,11 +117,39 @@ export type ResolvedAbout = {
   fontSize?: HostFontSizeId;
   color?: string;
   allCaps?: boolean;
+  textAlign?: VcTextAlign;
 };
 
 export type ResolvedGraphicsGroup = {
   kind: 'graphics-group';
   presentation: EffectiveGroupPresentation;
+};
+
+export type ResolvedArtistBioName = {
+  kind: 'artist-bio-name';
+  artistName: string;
+  bio: string;
+  fontStyle: HostFontStyleId;
+  fontSize: HostFontSizeId;
+  color: string;
+  markdownSource?: boolean;
+  textAlign?: VcTextAlign;
+};
+
+export type ResolvedSeekBar = {
+  kind: 'seek-bar';
+  presentation: EffectiveSeekBarPresentation;
+};
+
+export type ResolvedPlayerControls = {
+  kind: 'player-controls';
+  presentation: EffectivePlayerControlsPresentation;
+};
+
+export type ResolvedUpcomingCovers = {
+  kind: 'upcoming-covers';
+  presentation: EffectiveUpcomingCoversPresentation;
+  songs: VcUpcomingSong[];
 };
 
 export type ResolvedVcContent =
@@ -111,6 +160,10 @@ export type ResolvedVcContent =
   | ResolvedText
   | ResolvedLyrics
   | ResolvedAbout
+  | ResolvedArtistBioName
+  | ResolvedSeekBar
+  | ResolvedPlayerControls
+  | ResolvedUpcomingCovers
   | ResolvedGraphicsGroup;
 
 const SONG_TO_FALLBACK: Partial<Record<VcCellContent, HostFallbackSlotId>> = {
@@ -168,6 +221,9 @@ function textFromTitleItem(
     fontSize: presentation.fontSize,
     color: presentation.color,
     allCaps: presentation.allCaps,
+    textAlign: presentation.textAlign,
+    titleLine: true,
+    lineOverflow: presentation.lineOverflow,
   };
 }
 
@@ -183,6 +239,7 @@ function textFromAreaItem(
     fontSize: presentation.fontSize,
     color: presentation.color,
     markdownSource: presentation.markdownSource,
+    textAlign: presentation.textAlign,
   };
 }
 
@@ -319,6 +376,14 @@ function resolveWithFallbackChain(
   return resolveSystemFallback(slotId, typography);
 }
 
+function songDurationSeconds(ctx: VcResolutionContext): number | null {
+  const song = ctx.song;
+  if (!song) return null;
+  if (song.durationSeconds != null && song.durationSeconds > 0) return song.durationSeconds;
+  if (ctx.playback.duration > 0) return ctx.playback.duration;
+  return null;
+}
+
 function resolveSongPrimary(content: VcCellContent, ctx: VcResolutionContext): ResolvedVcContent | null {
   const song = ctx.song;
   if (!song) return null;
@@ -349,6 +414,27 @@ function resolveSongPrimary(content: VcCellContent, ctx: VcResolutionContext): R
     if (name) return defaultTextStyle(name, gridTypography(ctx));
   }
 
+  if (content === 'artist-bio') {
+    const bio = (ctx.artistBio ?? '').trim();
+    if (bio) return defaultTextStyle(bio, gridTypography(ctx));
+  }
+
+  if (content === 'artist-bio-name') {
+    const name = (ctx.artistName ?? song.artist).trim();
+    const bio = (ctx.artistBio ?? '').trim();
+    if (name || bio) {
+      const typography = gridTypography(ctx);
+      return {
+        kind: 'artist-bio-name',
+        artistName: name,
+        bio,
+        fontStyle: typography.fontStyle,
+        fontSize: typography.fontSize,
+        color: typography.color,
+      };
+    }
+  }
+
   if (content === 'artist-image' && ctx.artistPhotoUrl) {
     return { kind: 'graphic', remoteUrl: ctx.artistPhotoUrl };
   }
@@ -357,12 +443,43 @@ function resolveSongPrimary(content: VcCellContent, ctx: VcResolutionContext): R
     return defaultTextStyle(song.title, gridTypography(ctx));
   }
 
+  if (content === 'song-year' && song.year?.trim()) {
+    return defaultTextStyle(song.year.trim(), gridTypography(ctx));
+  }
+
+  if (content === 'song-length') {
+    const total = songDurationSeconds(ctx);
+    if (total != null) return defaultTextStyle(formatPlaybackTime(total), gridTypography(ctx));
+  }
+
+  if (content === 'elapsed-remaining' && ctx.playback.duration > 0) {
+    const elapsed = formatPlaybackTime(ctx.playback.currentTime);
+    const remaining = formatPlaybackTime(Math.max(0, ctx.playback.duration - ctx.playback.currentTime));
+    return defaultTextStyle(`${elapsed} / ${remaining}`, gridTypography(ctx));
+  }
+
   if (content === 'main-genre' && song.mainGenre?.trim()) {
     return defaultTextStyle(song.mainGenre.trim(), gridTypography(ctx));
   }
 
   if (content === 'additional-genres' && song.additionalGenres?.trim()) {
     return defaultTextStyle(song.additionalGenres.trim(), gridTypography(ctx));
+  }
+
+  if (content === 'seek-bar') {
+    return { kind: 'seek-bar', presentation: resolveSeekBarPresentation({}, gridTypography(ctx)) };
+  }
+
+  if (content === 'player-controls') {
+    return { kind: 'player-controls', presentation: resolvePlayerControlsPresentation({}) };
+  }
+
+  if (content === 'upcoming-covers' && ctx.upcoming.length > 0) {
+    return {
+      kind: 'upcoming-covers',
+      presentation: resolveUpcomingCoversPresentation({}),
+      songs: ctx.upcoming,
+    };
   }
 
   return null;
@@ -374,10 +491,23 @@ function applySongPresentation(
   overrides: VcAssignmentOverrides,
   ctx: VcResolutionContext,
 ): ResolvedVcContent {
+  const typography = gridTypography(ctx);
+
+  // Interactive slots have no typography rule entry — apply dedicated presentation first.
+  if (content === 'seek-bar' && resolved.kind === 'seek-bar') {
+    return { ...resolved, presentation: resolveSeekBarPresentation(overrides, typography) };
+  }
+
+  if (content === 'player-controls' && resolved.kind === 'player-controls') {
+    return { ...resolved, presentation: resolvePlayerControlsPresentation(overrides) };
+  }
+
+  if (content === 'upcoming-covers' && resolved.kind === 'upcoming-covers') {
+    return { ...resolved, presentation: resolveUpcomingCoversPresentation(overrides) };
+  }
+
   const rule = SONG_CONTENT_SETTINGS_RULE[content];
   if (!rule) return resolved;
-
-  const typography = gridTypography(ctx);
 
   if (rule === 'graphic' && resolved.kind === 'graphic') {
     return { ...resolved, presentation: resolveSongGraphicPresentation(overrides) };
@@ -388,7 +518,10 @@ function applySongPresentation(
   }
 
   if (rule === 'title-text') {
-    const presentation = resolveSongTitleTextPresentation(overrides, typography);
+    const isSongTitle = content === 'song-title';
+    const presentation = resolveSongTitleTextPresentation(overrides, typography, {
+      titleLine: isSongTitle,
+    });
     if (resolved.kind === 'text') {
       const text = presentation.allCaps ? resolved.text.toUpperCase() : resolved.text;
       return {
@@ -398,6 +531,10 @@ function applySongPresentation(
         fontSize: presentation.fontSize,
         color: presentation.color,
         allCaps: presentation.allCaps,
+        textAlign: presentation.textAlign,
+        ...(isSongTitle
+          ? { titleLine: true, lineOverflow: presentation.lineOverflow }
+          : {}),
       };
     }
     if (resolved.kind === 'about') {
@@ -407,19 +544,44 @@ function applySongPresentation(
         fontSize: presentation.fontSize,
         color: presentation.color,
         allCaps: presentation.allCaps,
+        textAlign: presentation.textAlign,
       };
     }
   }
 
-  if (rule === 'area-text' && resolved.kind === 'lyrics') {
+  if (rule === 'area-text') {
     const presentation = resolveSongAreaTextPresentation(overrides, typography);
-    return {
-      ...resolved,
-      fontStyle: presentation.fontStyle,
-      fontSize: presentation.fontSize,
-      color: presentation.color,
-      markdownSource: presentation.markdownSource,
-    };
+    if (resolved.kind === 'lyrics') {
+      return {
+        ...resolved,
+        fontStyle: presentation.fontStyle,
+        fontSize: presentation.fontSize,
+        color: presentation.color,
+        markdownSource: presentation.markdownSource,
+        textAlign: presentation.textAlign,
+        lyricsEdgeFade: resolveLyricsEdgeFade(overrides),
+      };
+    }
+    if (resolved.kind === 'text') {
+      return {
+        ...resolved,
+        fontStyle: presentation.fontStyle,
+        fontSize: presentation.fontSize,
+        color: presentation.color,
+        markdownSource: presentation.markdownSource,
+        textAlign: presentation.textAlign,
+      };
+    }
+    if (resolved.kind === 'artist-bio-name') {
+      return {
+        ...resolved,
+        fontStyle: presentation.fontStyle,
+        fontSize: presentation.fontSize,
+        color: presentation.color,
+        markdownSource: presentation.markdownSource,
+        textAlign: presentation.textAlign,
+      };
+    }
   }
 
   return resolved;

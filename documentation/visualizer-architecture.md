@@ -1,6 +1,8 @@
 # Visualizer Architecture
 
-This document describes how **visualizers** work in Song Pages: the Web Audio graph, experience registry, embedded vs projection rendering, Butterchurn mirroring, and settings persistence.
+This document describes how **visualizers** work in Song Pages: experience registry, embedded vs projection rendering, Butterchurn mirroring, and settings persistence.
+
+For the **full playback / mirror / Discord capture pipeline**, see [audio-pipeline.md](./audio-pipeline.md) (canonical).
 
 For VC Mode's use of visualizers in the projection window, see [vc-mode-architecture.md](./vc-mode-architecture.md).
 
@@ -22,12 +24,14 @@ Only **one active visualizer session** runs at a time: embedded **or** external 
 ## High-level diagram
 
 ```text
-Listener <audio> (HLS)
+Main <audio> (audible HLS — native path, Discord capture when FX off)
+Mirror <audio> (hidden HLS duplicate — Web Audio graph ONLY)
        │
        ▼
-audioGraph.ts (one graph per <audio> element)
+audioGraph.ts (one graph per mirror element)
        │
-       ├── playback chain: source → bass → lo-fi → analyser → speakerGain → destination
+       ├── tap: source → bass → lo-fi → analyser → speakerGain(0) → destination
+       ├── playback (FX): same chain, speakerGain(1), main ducked
        └── Butterchurn tap (parallel): sensitivity → bass emphasis → butterchurnTap
                     │
                     ▼
@@ -36,7 +40,7 @@ audioGraph.ts (one graph per <audio> element)
        ┌────────────┴────────────┐
        ▼                         ▼
 EmbeddedVisualizerHost    useVisualizerIpcSender
-(in Listener UI)          → visualizer window (FFT + canvas JPEG)
+(in Listener UI)          → visualizer window (FFT Uint8Array ~60fps)
 ```
 
 ---
@@ -47,6 +51,8 @@ EmbeddedVisualizerHost    useVisualizerIpcSender
 |------|------|
 | Web Audio graph | `src/visualizers/audioGraph.ts` |
 | Analyser hook | `src/visualizers/useAudioAnalyser.ts` |
+| Mirror HLS | `src/listener/useAnalyserPlaybackMirror.ts` |
+| Audio debug | `src/visualizers/debug/*` |
 | Session manager | `src/visualizers/useVisualizerManager.ts` |
 | Experience registry | `src/visualizers/registry.ts`, `native/registry.ts`, `butterchurn/*` |
 | Core types / context | `src/visualizers/core/*` |
@@ -62,16 +68,20 @@ EmbeddedVisualizerHost    useVisualizerIpcSender
 
 ## Web Audio graph
 
-`audioGraph.ts` maintains a **WeakMap** from `<audio>` to graph nodes because `createMediaElementSource` may only be called once per element (React StrictMode remount safety).
+**Full detail:** [audio-pipeline.md](./audio-pipeline.md#web-audio-graph-audiographts).
 
-**Playback path:**  
-`MediaElementSource → bass shelf → lo-fi lowpass → lo-fi drive → AnalyserNode → speakerGain → destination`
+`audioGraph.ts` maintains a **WeakMap** from the **mirror** `<audio>` to graph nodes. The main audible player never gets Web Audio.
+
+### Tap mode (visualizers — default)
+
+`createMediaElementSource(mirror)` → analyser → **`speakerGain = 0`** → destination. The graph must reach destination (even at zero gain) or the analyser does not pull samples. Mirror element must **`muted=false`, `volume=1`** after attach — Chromium silences `MediaElementSource` when the element is HTML-muted; use speakerGain for silence.
+
+### Playback mode (bass boost / lo-fi)
+
+Same graph; `speakerGain = 1`. Main `<audio>` volume ducked to 0; FX heard via mirror Web Audio path. **Discord main-window capture with FX on is not supported.**
 
 **Butterchurn path (parallel, not wired to speakers):**  
 `lo-fi drive → sensitivity gain → bass emphasis → butterchurnTap`
-
-- **speakerGain** — mutes local speakers without killing the analyser (used when VC audio mirror is active on main).
-- **Playback effects** (bass boost, lo-fi) affect the playback chain only, not a separate VC mirror stream.
 
 Butterchurn connects via `connectAudio()` to `butterchurnTap`, not the main analyser output.
 
@@ -113,7 +123,7 @@ Responsibilities:
 | `visualizer:open` / `close` / `setFullScreen` / `status` | Window lifecycle |
 | `visualizer:listDisplays` | Display picker (VC window does not have this yet) |
 | `visualizer:sendConfig` → `visualizer:config` | Experience id, song info, settings |
-| `visualizer:sendFrame` → `visualizer:frame` | FFT arrays, timing, optional canvas JPEG |
+| `visualizer:sendFrame` → `visualizer:frame` | FFT `Uint8Array`, timing, optional canvas JPEG |
 
 Projection window entry: `src/visualizer-window/visualizer.html` (Vite multi-page build).
 
@@ -143,5 +153,6 @@ Credits for Butterchurn: `third-party/credits.json`, shown in `VisualizerSetting
 
 ## Related reading
 
+- [audio-pipeline.md](./audio-pipeline.md) — main/mirror split, Discord incident, debug panel, engineering rules
 - [vc-mode-architecture.md](./vc-mode-architecture.md) — VC projection and Butterchurn mirror in VC window
 - [settings-and-persistence.md](./settings-and-persistence.md) — full settings key registry

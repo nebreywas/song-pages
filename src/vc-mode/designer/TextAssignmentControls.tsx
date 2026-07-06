@@ -11,39 +11,22 @@ import {
   type HostContentItem,
 } from '@shared/hostContent';
 import {
+  DEFAULT_VC_TEXT_ALIGN,
+  DEFAULT_VC_TITLE_OVERFLOW,
   getAssignmentDefaults,
-  isOverrideActive,
   patchAssignmentOverride,
+  VC_TEXT_ALIGN_IDS,
+  VC_TEXT_ALIGN_LABELS,
+  VC_TITLE_OVERFLOW_OPTIONS,
   type VcAssignmentOverrides,
+  type VcTextAlign,
+  type VcTitleOverflow,
 } from '@shared/vcMode/assignmentSettings';
 import type { VcGridDefaultTypography } from '@shared/vcMode/gridDesign';
 import type { VcCellContent } from '@shared/vcModeTypes';
 
-function OverrideField({
-  label,
-  overridden,
-  onReset,
-  children,
-}: {
-  label: string;
-  overridden: boolean;
-  onReset: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={`vc-assignment-field${overridden ? ' is-overridden' : ''}`}>
-      <div className="vc-assignment-field-head">
-        <span>{label}</span>
-        {overridden ? (
-          <button type="button" className="vc-assignment-reset" onClick={onReset}>
-            Reset
-          </button>
-        ) : null}
-      </div>
-      {children}
-    </div>
-  );
-}
+import { AssignmentField } from './AssignmentField';
+import { VcColorField } from '../../components/color/VcColorField';
 
 type TextAssignmentControlsProps = {
   content: VcCellContent;
@@ -54,6 +37,10 @@ type TextAssignmentControlsProps = {
   onOverridesChange: (overrides: VcAssignmentOverrides) => void;
   showAllCaps: boolean;
   showMarkdown: boolean;
+  /** Host title + song title — single-line overflow behavior. */
+  showTitleOverflow?: boolean;
+  /** Lyrics-only: top/bottom edge fade while scrolling. */
+  showLyricsEdgeFade?: boolean;
 };
 
 function patchOverrides(
@@ -77,6 +64,8 @@ export function TextAssignmentControls({
   onOverridesChange,
   showAllCaps,
   showMarkdown,
+  showTitleOverflow = false,
+  showLyricsEdgeFade = false,
 }: TextAssignmentControlsProps) {
   const defaults = getAssignmentDefaults(content, item, catalog, gridTypography);
 
@@ -85,71 +74,72 @@ export function TextAssignmentControls({
   const color = overrides.color ?? defaults.color ?? '#ffffff';
   const allCaps = overrides.allCaps ?? defaults.allCaps ?? false;
   const markdownSource = overrides.markdownSource ?? defaults.markdownSource ?? false;
+  const textAlign = overrides.textAlign ?? defaults.textAlign ?? DEFAULT_VC_TEXT_ALIGN;
+  const lyricsEdgeFade = overrides.lyricsEdgeFade ?? defaults.lyricsEdgeFade ?? true;
+  const titleOverflow = (overrides.overflow ??
+    defaults.overflow ??
+    DEFAULT_VC_TITLE_OVERFLOW) as VcTitleOverflow;
 
   const patch = (key: keyof VcAssignmentOverrides, value: unknown) =>
     onOverridesChange(patchOverrides(content, item, catalog, gridTypography, overrides, key, value));
 
   return (
     <>
-      <OverrideField
-        label="Font style"
-        overridden={isOverrideActive(content, item, catalog, overrides, 'fontStyle')}
-        onReset={() => patch('fontStyle', defaults.fontStyle)}
-      >
-        <select value={fontStyle} onChange={(e) => patch('fontStyle', e.target.value)}>
-          {HOST_FONT_STYLE_IDS.map((styleId) => (
-            <option key={styleId} value={styleId}>
-              {HOST_FONT_STYLE_LABELS[styleId]}
+      <div className="vc-assignment-font-row">
+        <label className="vc-assignment-font-field">
+          <span>Font style</span>
+          <select value={fontStyle} onChange={(e) => patch('fontStyle', e.target.value)}>
+            {HOST_FONT_STYLE_IDS.map((styleId) => (
+              <option key={styleId} value={styleId}>
+                {HOST_FONT_STYLE_LABELS[styleId]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="vc-assignment-font-field">
+          <span>Font size</span>
+          <select value={fontSize} onChange={(e) => patch('fontSize', e.target.value)}>
+            {HOST_FONT_SIZE_IDS.map((sizeId) => (
+              <option key={sizeId} value={sizeId}>
+                {HOST_FONT_SIZE_LABELS[sizeId]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="vc-assignment-font-field vc-assignment-font-color">
+          <span>Color</span>
+          <VcColorField
+            variant="compact"
+            value={color}
+            onChange={(next) => patch('color', next)}
+            aria-label="Text color"
+          />
+        </label>
+      </div>
+
+      <AssignmentField label="Text positioning">
+        <select value={textAlign} onChange={(e) => patch('textAlign', e.target.value as VcTextAlign)}>
+          {VC_TEXT_ALIGN_IDS.map((alignId) => (
+            <option key={alignId} value={alignId}>
+              {VC_TEXT_ALIGN_LABELS[alignId]}
             </option>
           ))}
         </select>
-      </OverrideField>
-
-      <OverrideField
-        label="Font size"
-        overridden={isOverrideActive(content, item, catalog, overrides, 'fontSize')}
-        onReset={() => patch('fontSize', defaults.fontSize)}
-      >
-        <select value={fontSize} onChange={(e) => patch('fontSize', e.target.value)}>
-          {HOST_FONT_SIZE_IDS.map((sizeId) => (
-            <option key={sizeId} value={sizeId}>
-              {HOST_FONT_SIZE_LABELS[sizeId]}
-            </option>
-          ))}
-        </select>
-      </OverrideField>
-
-      <OverrideField
-        label="Color"
-        overridden={isOverrideActive(content, item, catalog, overrides, 'color')}
-        onReset={() => patch('color', defaults.color)}
-      >
-        <input type="color" value={color} onChange={(e) => patch('color', e.target.value)} />
-      </OverrideField>
+      </AssignmentField>
 
       {showAllCaps ? (
-        <OverrideField
-          label="All caps"
-          overridden={isOverrideActive(content, item, catalog, overrides, 'allCaps')}
-          onReset={() => patch('allCaps', defaults.allCaps)}
-        >
+        <AssignmentField label="All caps">
           <label className="vc-field vc-field-inline">
-            <input
-              type="checkbox"
-              checked={allCaps}
-              onChange={(e) => patch('allCaps', e.target.checked)}
-            />
+            <input type="checkbox" checked={allCaps} onChange={(e) => patch('allCaps', e.target.checked)} />
             <span>All caps</span>
           </label>
-        </OverrideField>
+        </AssignmentField>
       ) : null}
 
       {showMarkdown ? (
-        <OverrideField
-          label="Display"
-          overridden={isOverrideActive(content, item, catalog, overrides, 'markdownSource')}
-          onReset={() => patch('markdownSource', defaults.markdownSource)}
-        >
+        <AssignmentField label="Display">
           <label className="vc-field vc-field-inline">
             <input
               type="checkbox"
@@ -158,7 +148,35 @@ export function TextAssignmentControls({
             />
             <span>Always plain text</span>
           </label>
-        </OverrideField>
+        </AssignmentField>
+      ) : null}
+
+      {showTitleOverflow ? (
+        <AssignmentField label="Long title overflow">
+          <select
+            value={titleOverflow}
+            onChange={(e) => patch('overflow', e.target.value as VcTitleOverflow)}
+          >
+            {VC_TITLE_OVERFLOW_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </AssignmentField>
+      ) : null}
+
+      {showLyricsEdgeFade ? (
+        <AssignmentField label="Scroll fade">
+          <label className="vc-field vc-field-inline">
+            <input
+              type="checkbox"
+              checked={lyricsEdgeFade}
+              onChange={(e) => patch('lyricsEdgeFade', e.target.checked)}
+            />
+            <span>Edge fade bars</span>
+          </label>
+        </AssignmentField>
       ) : null}
     </>
   );

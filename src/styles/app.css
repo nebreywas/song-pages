@@ -178,6 +178,15 @@ body {
   padding: 0.75rem;
 }
 
+/* Visualizer FFT mirror — never the audible / Discord capture path. */
+.listener-analyser-audio {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .listener-sidebar {
   --listener-sidebar-width: 280px;
   width: var(--listener-sidebar-width);
@@ -1157,7 +1166,12 @@ body {
 }
 
 .transport-btn.active {
-  color: var(--accent);
+  color: goldenrod;
+}
+
+.transport-btn.active:hover:not(:disabled) {
+  color: goldenrod;
+  background: var(--surface-2);
 }
 
 .transport-btn-primary {

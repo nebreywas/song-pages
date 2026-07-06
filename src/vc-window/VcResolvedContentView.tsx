@@ -3,12 +3,17 @@ import { useMemo, type CSSProperties } from 'react';
 import { hostTextCssStyle } from '@shared/hostContent';
 import type { ResolvedVcContent } from '@shared/vcMode/contentResolution';
 import type { VcPlaybackState } from '@shared/vcModeTypes';
+import type { VcTitleOverflow, VcTextAlign } from '@shared/vcMode/assignmentSettings';
 
 import { renderMarkdownPreview } from '../lib/markdownPreview';
 import { systemFallbackUrl } from './systemFallbackUrls';
 import { useResolvedMediaUrl } from './useResolvedMediaUrl';
 import { VcGraphicsGroupView } from './VcGraphicsGroupView';
 import { VcMediaPresentation } from './VcMediaPresentation';
+import { VcTitleLineText } from './VcTitleLineText';
+import { VcTransportBar } from './VcTransportBar';
+import { VcUpcomingCoversView } from './VcUpcomingCoversView';
+import { lyricsScrollClassName } from './lyricsScrollClassName';
 
 type VcResolvedContentViewProps = {
   resolved: Exclude<ResolvedVcContent, { kind: 'empty' } | { kind: 'visualizer' }>;
@@ -20,6 +25,7 @@ function hostTextStyle(
   fontStyle: Parameters<typeof hostTextCssStyle>[0],
   fontSize: Parameters<typeof hostTextCssStyle>[1],
   color: string,
+  textAlign?: VcTextAlign,
 ): CSSProperties {
   const style = hostTextCssStyle(fontStyle, fontSize, color);
   return {
@@ -29,6 +35,7 @@ function hostTextStyle(
     fontWeight: style.fontWeight,
     fontStretch: style.fontStretch,
     lineHeight: style.lineHeight,
+    ...(textAlign ? { textAlign } : {}),
   };
 }
 
@@ -99,6 +106,9 @@ function ResolvedTextView({
   color,
   allCaps,
   markdownSource,
+  textAlign,
+  titleLine,
+  lineOverflow,
 }: {
   text: string;
   fontStyle: Parameters<typeof hostTextCssStyle>[0];
@@ -106,9 +116,23 @@ function ResolvedTextView({
   color: string;
   allCaps?: boolean;
   markdownSource?: boolean;
+  textAlign?: VcTextAlign;
+  titleLine?: boolean;
+  lineOverflow?: VcTitleOverflow;
 }) {
   const display = allCaps ? text.toUpperCase() : text;
-  const style = hostTextStyle(fontStyle, fontSize, color);
+  const style = hostTextStyle(fontStyle, fontSize, color, titleLine ? undefined : textAlign);
+
+  if (titleLine) {
+    return (
+      <VcTitleLineText
+        text={display}
+        style={style}
+        overflow={lineOverflow ?? 'static'}
+        textAlign={textAlign}
+      />
+    );
+  }
 
   if (markdownSource) {
     const html = renderMarkdownPreview(display);
@@ -136,6 +160,8 @@ function ResolvedLyricsView({
   fontSize,
   color,
   markdownSource,
+  textAlign,
+  lyricsEdgeFade,
 }: {
   text: string;
   playback: VcPlaybackState;
@@ -143,16 +169,19 @@ function ResolvedLyricsView({
   fontSize?: Parameters<typeof hostTextCssStyle>[1];
   color?: string;
   markdownSource?: boolean;
+  textAlign?: VcTextAlign;
+  lyricsEdgeFade?: boolean;
 }) {
   const progress = playback.duration > 0 ? playback.currentTime / playback.duration : 0;
   const textStyle =
-    fontStyle && fontSize && color ? hostTextStyle(fontStyle, fontSize, color) : undefined;
+    fontStyle && fontSize && color ? hostTextStyle(fontStyle, fontSize, color, textAlign) : textAlign ? { textAlign } : undefined;
+  const scrollClass = lyricsScrollClassName(lyricsEdgeFade);
 
   if (markdownSource) {
     const html = renderMarkdownPreview(text);
     if (!html) return <div className="vc-cell-empty" />;
     return (
-      <div className="vc-lyrics-scroll">
+      <div className={scrollClass}>
         <div
           className="vc-lyrics-inner vc-host-text-markdown markdown-body"
           style={{ ...textStyle, transform: `translateY(-${progress * 55}%)` }}
@@ -163,7 +192,7 @@ function ResolvedLyricsView({
   }
 
   return (
-    <div className="vc-lyrics-scroll">
+    <div className={scrollClass}>
       <div className="vc-lyrics-inner" style={{ ...textStyle, transform: `translateY(-${progress * 55}%)` }}>
         {text}
       </div>
@@ -180,6 +209,7 @@ function ResolvedAboutView({
   fontSize,
   color,
   allCaps,
+  textAlign,
 }: {
   coverUrl: string | null;
   caption: string | null;
@@ -189,6 +219,7 @@ function ResolvedAboutView({
   fontSize?: Parameters<typeof hostTextCssStyle>[1];
   color?: string;
   allCaps?: boolean;
+  textAlign?: VcTextAlign;
 }) {
   const aboutHtml = useMemo(() => {
     if (!markdownSource || !about.trim()) return null;
@@ -196,12 +227,16 @@ function ResolvedAboutView({
   }, [about, markdownSource]);
 
   const textStyle =
-    fontStyle && fontSize && color ? hostTextStyle(fontStyle, fontSize, color) : undefined;
+    fontStyle && fontSize && color
+      ? hostTextStyle(fontStyle, fontSize, color, textAlign)
+      : textAlign
+        ? { textAlign }
+        : undefined;
   const displayAbout = allCaps ? about.toUpperCase() : about;
   const displayCaption = caption ? (allCaps ? caption.toUpperCase() : caption) : null;
 
   return (
-    <div className="vc-about-stack">
+    <div className="vc-about-stack" style={textAlign ? { textAlign } : undefined}>
       {coverUrl ? <img className="vc-about-cover" src={coverUrl} alt="" /> : null}
       {displayCaption ? <p className="vc-about-caption">{displayCaption}</p> : null}
       {aboutHtml ? (
@@ -215,6 +250,46 @@ function ResolvedAboutView({
           {displayAbout}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ResolvedArtistBioNameView({
+  artistName,
+  bio,
+  fontStyle,
+  fontSize,
+  color,
+  markdownSource,
+  textAlign,
+}: {
+  artistName: string;
+  bio: string;
+  fontStyle: Parameters<typeof hostTextCssStyle>[0];
+  fontSize: Parameters<typeof hostTextCssStyle>[1];
+  color: string;
+  markdownSource?: boolean;
+  textAlign?: VcTextAlign;
+}) {
+  const style = hostTextStyle(fontStyle, fontSize, color, textAlign);
+  const combined = [artistName, bio].filter(Boolean).join(artistName && bio ? '\n\n' : '');
+
+  if (markdownSource) {
+    const html = renderMarkdownPreview(combined);
+    if (!html) return <div className="vc-cell-empty" />;
+    return (
+      <div
+        className="vc-host-text vc-host-text-markdown vc-artist-bio-name markdown-body"
+        style={style}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
+  }
+
+  return (
+    <div className="vc-host-text vc-artist-bio-name" style={style}>
+      {artistName ? <strong className="vc-artist-bio-name-heading">{artistName}</strong> : null}
+      {bio ? <div className="vc-artist-bio-name-body">{bio}</div> : null}
     </div>
   );
 }
@@ -253,6 +328,9 @@ export function VcResolvedContentView({
           color={resolved.color}
           allCaps={resolved.allCaps}
           markdownSource={resolved.markdownSource}
+          textAlign={resolved.textAlign}
+          titleLine={resolved.titleLine}
+          lineOverflow={resolved.lineOverflow}
         />
       );
     case 'lyrics':
@@ -264,6 +342,8 @@ export function VcResolvedContentView({
           fontSize={resolved.fontSize}
           color={resolved.color}
           markdownSource={resolved.markdownSource}
+          textAlign={resolved.textAlign}
+          lyricsEdgeFade={resolved.lyricsEdgeFade}
         />
       );
     case 'about':
@@ -277,11 +357,55 @@ export function VcResolvedContentView({
           fontSize={resolved.fontSize}
           color={resolved.color}
           allCaps={resolved.allCaps}
+          textAlign={resolved.textAlign}
         />
       );
     case 'graphics-group':
       return (
         <VcGraphicsGroupView presentation={resolved.presentation} animate={animateGroup} />
+      );
+    case 'artist-bio-name':
+      return (
+        <ResolvedArtistBioNameView
+          artistName={resolved.artistName}
+          bio={resolved.bio}
+          fontStyle={resolved.fontStyle}
+          fontSize={resolved.fontSize}
+          color={resolved.color}
+          markdownSource={resolved.markdownSource}
+          textAlign={resolved.textAlign}
+        />
+      );
+    case 'seek-bar':
+      return (
+        <VcTransportBar
+          playback={playback}
+          presentation={resolved.presentation}
+          showTransport={resolved.presentation.includeTransport}
+        />
+      );
+    case 'player-controls':
+      return (
+        <div className="vc-player-controls-shell">
+          <VcTransportBar
+            playback={playback}
+            presentation={{
+              fontStyle: 'clean',
+              fontSize: 'medium',
+              color: '#ffffff',
+              allCaps: false,
+              markdownSource: false,
+              includeTransport: true,
+              clickable: true,
+            }}
+            showTransport
+            scalePct={resolved.presentation.scalePct}
+          />
+        </div>
+      );
+    case 'upcoming-covers':
+      return (
+        <VcUpcomingCoversView songs={resolved.songs} presentation={resolved.presentation} />
       );
     default:
       return <div className="vc-cell-empty" />;

@@ -182,6 +182,11 @@ declare global {
         sendState: (payload: import('@shared/vcModeTypes').VcStatePayload) => void;
         sendFrame: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void;
         sendPlaybackStatus: (payload: { active: boolean }) => void;
+        sendTransport: (payload: import('@shared/vcMode/vcTransport').VcTransportCommand) => void;
+        updateSurface: (patch: Partial<import('@shared/vcModeTypes').VcSurfaceConfig>) => void;
+        commitSurface: (surface: import('@shared/vcModeTypes').VcSurfaceConfig) => void;
+        requestVisualizerRotate: () => void;
+        reportActiveVisualizer: (id: string) => void;
         onState: (callback: (payload: import('@shared/vcModeTypes').VcStatePayload) => void) => () => void;
         onFrame: (callback: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void) => () => void;
         onHotkey: (callback: (payload: { action: import('@shared/vcModeTypes').VcHotkeyAction }) => void) => () => void;
@@ -189,6 +194,15 @@ declare global {
         onClosed: (callback: () => void) => () => void;
         onRequestSync: (callback: () => void) => () => void;
         onPlaybackStatus: (callback: (payload: { active: boolean }) => void) => () => void;
+        onTransport: (callback: (payload: import('@shared/vcMode/vcTransport').VcTransportCommand) => void) => () => void;
+        onSurfacePatch: (
+          callback: (patch: Partial<import('@shared/vcModeTypes').VcSurfaceConfig>) => void,
+        ) => () => void;
+        onSurfaceCommit: (
+          callback: (surface: import('@shared/vcModeTypes').VcSurfaceConfig) => void,
+        ) => () => void;
+        onVisualizerRotateRequest: (callback: () => void) => () => void;
+        onActiveVisualizerReport: (callback: (id: string) => void) => () => void;
       };
       hostContent: {
         pickAndImportMedia: (payload: {

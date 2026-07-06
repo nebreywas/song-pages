@@ -1,4 +1,6 @@
 @import './host-content/hostContentFonts.css';
+@import '../vc-window/vc-lyrics-feather.css';
+@import '../vc-window/vc-fullscreen-graphic.css';
 
 .vc-modal-backdrop {
   position: fixed;
@@ -152,13 +154,9 @@
 }
 
 .vc-toolbar-field select {
-  font: inherit;
   width: 100%;
-  padding: 0.4rem 0.5rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text);
+  padding-block: 0.4rem;
+  padding-inline-start: 0.5rem;
 }
 
 .vc-surface-toolbar .btn {
@@ -167,16 +165,24 @@
 }
 
 .vc-visualizer-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.5fr);
+  gap: 0.65rem;
+  align-items: end;
   width: 100%;
   margin-bottom: 0;
   font-size: 0.85rem;
 }
 
+.vc-visualizer-bar .vc-field {
+  margin-bottom: 0;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
 .vc-visualizer-bar select {
   width: 100%;
+  min-height: 2.05rem;
   box-sizing: border-box;
 }
 
@@ -193,6 +199,11 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.65rem;
+  outline: none;
+}
+
+.vc-designer-canvas-frame:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 /* Only absolute children — fill the frame via inset, not content height. */
@@ -202,12 +213,12 @@
   overflow: hidden;
   touch-action: none;
   user-select: none;
+  isolation: isolate;
 }
 
 .vc-designer-region {
   position: absolute;
   overflow: hidden;
-  background: var(--vc-grid-bg, #0a0e16);
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
@@ -323,13 +334,15 @@
   height: 100%;
   flex: 1;
   min-height: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
   padding: 0.5rem;
   box-sizing: border-box;
   color: #8b95a8;
   font-size: 0.78rem;
-  text-align: center;
+  text-align: left;
   overflow: hidden;
 }
 
@@ -338,12 +351,25 @@
   height: 100%;
   flex: 1;
   min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
   background:
     radial-gradient(circle at 30% 40%, rgba(91, 159, 212, 0.35), transparent 45%),
     radial-gradient(circle at 70% 60%, rgba(91, 159, 212, 0.2), transparent 50%),
     #0a1220;
   color: #c9d7ea;
   font-weight: 600;
+}
+
+.vc-designer-preview-visualizer.is-clickable {
+  cursor: pointer;
+}
+
+.vc-designer-preview-visualizer-hint {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #8b95a8;
 }
 
 .vc-designer-preview-media {
@@ -382,6 +408,8 @@
 
 .vc-designer-preview-lyrics {
   transition: transform 0.35s linear;
+  overflow: visible;
+  height: auto;
 }
 
 .vc-designer-preview-about {
@@ -454,6 +482,10 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
+  /* Region popover rhythm — label→controls (red) vs section→section (green). */
+  --vc-region-label-gap: 0.5rem;
+  --vc-region-slider-label-gap: 0.35rem;
+  --vc-region-section-gap: 0.55rem;
 }
 
 .vc-region-popover.has-detail,
@@ -495,87 +527,434 @@
 }
 
 .vc-region-popover-layout.has-detail {
-  grid-template-columns: minmax(14rem, 22rem) minmax(14rem, 20rem);
-  gap: 0.75rem;
+  /* Row 1: primary label + tabs; row 2: assignment fields + tab panel. */
+  grid-template-columns: minmax(12rem, 18.5rem) minmax(14rem, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 0.75rem;
+  row-gap: 0.35rem;
+  align-items: stretch;
+}
+
+.vc-region-popover-slot-label {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.vc-region-popover-main--with-tabs {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: start;
+}
+
+.vc-region-popover-detail-column {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--border);
+}
+
+/* Primary select aligns with the first row of tab-panel content. */
+.vc-region-popover-main--with-tabs .vc-field--primary-slot {
+  gap: 0;
+  margin-top: 0;
+  margin-bottom: 0.55rem;
+}
+
+/* Align primary select with layout row when popover has detail tabs. */
+.vc-region-popover-layout--with-tabs .vc-region-popover-main--with-tabs .vc-field--primary-slot select {
+  min-height: 2.05rem;
+  box-sizing: border-box;
+}
+
+.vc-float-layout-field {
+  margin-bottom: 0.5rem;
+}
+
+.vc-float-layout-field .vc-float-numeric {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+/* Region popover field rhythm — label above controls, uniform control row height. */
+.vc-region-popover .vc-region-field {
+  gap: var(--vc-region-label-gap);
+  margin-bottom: 0;
+}
+
+.vc-region-popover .vc-region-field-controls {
+  display: flex;
+  align-items: center;
+  min-height: 2.05rem;
+  box-sizing: border-box;
+}
+
+/* Sliders sit on the label — no tall control row (min-height adds dead space above the track). */
+.vc-region-popover .vc-region-field--slider {
+  gap: var(--vc-region-slider-label-gap);
+}
+
+.vc-region-popover .vc-region-field--slider .vc-region-slider-row {
+  min-height: 0;
+}
+
+/* Border toolbar row — match Position & size visual offset (~3px) from label to control tops. */
+.vc-region-popover .vc-region-border-style-block.vc-region-field {
+  gap: calc(var(--vc-region-label-gap) + 3px);
+}
+
+/* Float layout detail panel — one section gap between every block. */
+.vc-float-layout-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vc-region-section-gap);
+}
+
+.vc-float-layout-detail .vc-host-assignment-settings.vc-float-appearance-settings {
+  display: contents;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.vc-float-layout-detail .vc-field {
+  margin-bottom: 0;
+}
+
+.vc-float-layout-detail .vc-region-popover-actions {
+  gap: 0.5rem;
+  margin-top: 0;
+}
+
+.vc-region-popover-tab-panel .vc-area-layout-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vc-region-section-gap);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.vc-region-popover-tab-panel .vc-host-assignment-settings {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.vc-region-popover-tab-panel > .vc-field:first-child + .vc-host-assignment-settings {
+  margin-top: 0.75rem;
+}
+
+/* Match left-hand section nav button size (Grid defaults, z-order, remove). */
+.vc-float-layout-detail .btn {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.8rem;
+  line-height: 1.25;
+}
+
+.vc-float-layout-detail .vc-float-grid-defaults-btn {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.8rem;
+  line-height: 1.25;
 }
 
 .vc-region-popover-main {
   min-width: 0;
   overflow: auto;
   padding-right: 0.1rem;
+  font-size: 0.82rem;
 }
 
-.vc-region-popover-detail {
-  min-width: 0;
+.vc-region-popover-main .vc-field select {
+  padding-block: 0.35rem;
+  padding-inline-start: 0.4rem;
+  font-size: inherit;
+}
+
+.vc-region-popover-detail-column .vc-region-popover-tabs {
+  align-self: center;
+}
+
+.vc-region-popover-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.15rem;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.vc-region-popover-tab {
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  padding: 0 0.7rem 0.25rem;
+  margin-bottom: -1px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.vc-region-popover-tab:hover {
+  color: var(--text);
+}
+
+.vc-region-popover-tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.vc-region-popover-tab-panel {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
-  padding-left: 0.75rem;
-  border-left: 1px solid var(--border);
+  padding-right: 0.1rem;
+}
+
+.vc-assignment-sublabel {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+/* Field labels — same look as Position & size across the region popover. */
+.vc-region-popover .vc-assignment-sublabel,
+.vc-region-popover .vc-field > span:not(.vc-field-hint):not(.vc-assignment-value):not(.vc-float-opacity-value),
+.vc-region-popover .vc-field-inline > span,
+.vc-region-popover-slot-label,
+.vc-region-popover .vc-assignment-field-label,
+.vc-region-popover .vc-assignment-font-field > span,
+.vc-region-popover .vc-float-opacity-label {
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 .vc-region-popover-main .vc-field {
   margin-bottom: 0.55rem;
 }
 
-.vc-region-popover-section-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
+.vc-region-popover-main .vc-region-popover-section-divider {
+  border: none;
   border-top: 1px solid var(--border);
-}
-
-.vc-region-popover-section-btn {
-  width: 100%;
-  text-align: left;
-  justify-content: flex-start;
-}
-
-.vc-region-popover-section-btn.is-active {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
-}
-
-.vc-region-popover-detail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.55rem;
-}
-
-.vc-region-popover-detail-header h4 {
-  margin: 0;
-  font-size: 0.88rem;
-  font-weight: 600;
+  margin: 0.2rem 0 0.75rem;
 }
 
 .vc-float-numeric {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.4rem;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
 }
 
-.vc-float-numeric .vc-field {
-  margin-bottom: 0.45rem;
+.vc-float-numeric-field {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.2rem;
+  margin: 0;
 }
 
-.vc-float-numeric input {
+.vc-float-numeric-label {
+  line-height: 1;
+  color: var(--muted);
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.vc-float-numeric-input {
   font: inherit;
-  padding: 0.35rem 0.45rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.35rem 0.15rem;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
+  width: 4ch;
+  min-width: 4ch;
+  max-width: 4ch;
+  box-sizing: content-box;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.vc-float-numeric-input::-webkit-outer-spin-button,
+.vc-float-numeric-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.vc-float-appearance-settings {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.vc-region-border-style-block {
+  margin-bottom: 0;
+}
+
+.vc-region-border-style-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   width: 100%;
-  box-sizing: border-box;
+}
+
+.vc-region-background-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.vc-region-lock-defaults-field {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.vc-region-lock-defaults-field input[type='checkbox'] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.vc-region-border-style-field {
+  flex: 0 0 auto;
+  width: min(5.75rem, 38%);
+  margin-bottom: 0;
+}
+
+.vc-region-border-style-field select {
+  width: 100%;
+}
+
+.vc-region-border-color-field {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.vc-region-border-color-field > span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.vc-region-border-thickness-field {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.vc-region-border-thickness-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.vc-region-border-thickness-slider {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.vc-float-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.vc-float-color-fields {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vc-float-color-row .vc-float-color-field {
+  margin-bottom: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.vc-float-grid-defaults-btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.vc-float-color-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.vc-float-opacity-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.vc-float-opacity-row,
+.vc-region-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.vc-float-opacity-slider {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.vc-float-opacity-value {
+  flex: 0 0 2.75rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
 }
 
 .vc-region-popover-actions {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.vc-float-z-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 0.35rem;
+}
+
+.vc-float-z-actions .btn {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .vc-stage-content,
@@ -611,12 +990,8 @@
 }
 
 .vc-field select {
-  font: inherit;
-  padding: 0.45rem 0.55rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text);
+  padding-block: 0.45rem;
+  padding-inline-start: 0.55rem;
 }
 
 .vc-host-picker {
@@ -663,8 +1038,8 @@
 }
 
 .vc-grid-design-panel {
-  max-width: 32rem;
-  width: min(32rem, calc(100vw - 2rem));
+  max-width: 36.8rem;
+  width: min(36.8rem, calc(100vw - 2rem));
 }
 
 .vc-grid-design-body {
@@ -688,11 +1063,129 @@
   line-height: 1.4;
 }
 
-.vc-grid-design-typography-row,
-.vc-grid-design-lines-row {
+.vc-grid-design-swatch-field {
+  margin-bottom: 0;
+  gap: 0;
+}
+
+.vc-grid-design-fullscreen-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.vc-grid-design-fullscreen-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.vc-grid-design-fullscreen-controls .vc-field {
+  margin-bottom: 0;
+}
+
+.vc-grid-design-fullscreen-controls select {
+  width: 100%;
+  min-height: 2.05rem;
+  box-sizing: border-box;
+}
+
+.vc-grid-design-fullscreen-preview {
+  min-height: 5.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--panel) 88%, var(--surface-2));
+  overflow: hidden;
+}
+
+.vc-grid-design-fullscreen-preview-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 5.5rem;
+  object-fit: cover;
+}
+
+.vc-grid-design-typography-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.65rem;
+  align-items: start;
+}
+
+.vc-grid-design-lines-row {
+  display: grid;
+  grid-template-columns: minmax(5.25rem, 0.65fr) minmax(0, 1.75fr) auto;
+  gap: 0.65rem;
+  align-items: end;
+}
+
+.vc-grid-design-typography-field,
+.vc-grid-design-line-field {
+  margin-bottom: 0;
+  gap: 0.35rem;
+}
+
+.vc-grid-design-typography-field select,
+.vc-grid-design-line-field select {
+  width: 100%;
+  min-height: 2.05rem;
+  box-sizing: border-box;
+}
+
+.vc-grid-design-float-background-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.vc-grid-design-float-color-field {
+  margin-bottom: 0;
+  gap: 0.35rem;
+}
+
+.vc-grid-design-line-color-field .vc-color-field {
+  align-self: flex-start;
+}
+
+.vc-grid-design-thickness-row,
+.vc-grid-design-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.05rem;
+  width: 100%;
+}
+
+.vc-grid-design-thickness-row input[type='range'],
+.vc-grid-design-slider-row input[type='range'] {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.vc-grid-design-thickness-row .vc-assignment-value,
+.vc-grid-design-slider-row .vc-assignment-value {
+  flex: 0 0 auto;
+  min-width: 2.25rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.vc-grid-design-opacity-field {
+  margin-bottom: 0;
+}
+
+.vc-grid-design-panel .vc-color-field--compact .clr-field {
+  display: inline-block;
+  position: relative;
+  width: 2.25rem;
+  height: 2.05rem;
+  flex: 0 0 auto;
 }
 
 .vc-grid-design-actions {
@@ -702,8 +1195,16 @@
 
 @media (max-width: 640px) {
   .vc-grid-design-typography-row,
-  .vc-grid-design-lines-row {
+  .vc-grid-design-lines-row,
+  .vc-grid-design-float-background-row,
+  .vc-grid-design-fullscreen-row {
     grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .vc-visualizer-bar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 }
 
@@ -1024,14 +1525,8 @@
   flex: 0 0 auto;
 }
 
-.hc-text-style-row .hc-color-field input[type='color'] {
-  width: 2.5rem;
-  height: 2.05rem;
-  padding: 0.12rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  cursor: pointer;
+.hc-text-style-row .hc-color-field .vc-color-field {
+  display: inline-flex;
 }
 
 .hc-group-members {
@@ -1172,55 +1667,91 @@
   font-size: 0.85rem;
 }
 
-.vc-host-assignment-settings-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+.vc-assignment-settings-intro {
+  margin-top: 0;
+  margin-bottom: calc(0.5rem + 6px);
 }
 
-.vc-host-assignment-settings-head h4 {
+.vc-assignment-orientation {
   margin: 0;
+  font-size: 0.78rem;
+  font-weight: normal;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.vc-assignment-content-type {
+  color: goldenrod;
 }
 
 .vc-assignment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
   margin-bottom: 0.65rem;
 }
 
-.vc-assignment-field.is-overridden {
-  padding-left: 0.45rem;
-  border-left: 2px solid var(--accent, #6ea8fe);
-}
-
-.vc-assignment-field-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.35rem;
-  margin-bottom: 0.25rem;
+.vc-assignment-field-label,
+.vc-assignment-font-field > span {
   font-size: 0.78rem;
   color: var(--muted);
 }
 
-.vc-assignment-reset {
-  border: none;
-  background: none;
-  color: var(--accent, #6ea8fe);
-  font-size: 0.72rem;
-  cursor: pointer;
-  padding: 0;
+.vc-assignment-font-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.45rem 0.6rem;
+  margin-bottom: 0.65rem;
+}
+
+.vc-assignment-font-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1 1 6.5rem;
+  min-width: 0;
+  margin: 0;
+}
+
+.vc-assignment-font-color {
+  flex: 0 0 auto;
+}
+
+.vc-assignment-font-field select,
+.vc-assignment-field select {
+  padding-block: 0.35rem;
+  padding-inline-start: 0.4rem;
+}
+
+.vc-assignment-field input[type='number'] {
+  font: inherit;
+  padding: 0.35rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.vc-assignment-range-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.vc-assignment-range {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
 }
 
 .vc-assignment-value {
-  margin-left: 0.35rem;
+  flex: 0 0 auto;
+  min-width: 2.25rem;
   font-size: 0.78rem;
   color: var(--muted);
-}
-
-.vc-assignment-clear {
-  font-size: 0.72rem;
-  padding: 0.2rem 0.45rem;
+  text-align: right;
 }
 
 .vc-assignment-hint,

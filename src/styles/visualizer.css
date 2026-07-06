@@ -22,13 +22,10 @@
 }
 
 .visualizer-select-wrap select {
-  font: inherit;
   font-size: 0.82rem;
-  color: var(--text);
-  border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--surface-2);
-  padding: 0.35rem 0.65rem;
+  padding-block: 0.35rem;
+  padding-inline-start: 0.65rem;
 }
 
 .visualizer-controls-hint {
@@ -332,12 +329,8 @@
 }
 
 .viz-settings-field select {
-  font: inherit;
-  padding: 0.45rem 0.55rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text);
+  padding-block: 0.45rem;
+  padding-inline-start: 0.55rem;
 }
 
 .viz-settings-empty {

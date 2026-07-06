@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { VisualizerStreamFrame } from '@shared/visualizerMessages';
-import type { VcHotkeyAction, VcOverlayId, VcStatePayload } from '@shared/vcModeTypes';
+import type { VcHotkeyAction, VcOverlayId, VcStatePayload, VcSurfaceConfig } from '@shared/vcModeTypes';
 
 import { getApp } from '../lib/bridge';
 import { FFT_SIZE } from '../visualizers/audioGraph';
@@ -19,6 +19,9 @@ export type VcWindowContext = {
   praiseToken: number;
   /** Bright red area/float outlines — toggled by ⌘⌥D / Ctrl+Alt+D. */
   debugOutlines: boolean;
+  /** Fullscreen layout editing — toggled by ⌘⌥L / Ctrl+Alt+L. */
+  layoutMode: boolean;
+  onChangeSurface: (patch: Partial<import('@shared/vcModeTypes').VcSurfaceConfig>) => void;
 };
 
 export function useVcWindowState(): VcWindowContext {
@@ -29,6 +32,7 @@ export function useVcWindowState(): VcWindowContext {
   const [activeOverlay, setActiveOverlay] = useState<VcOverlayId | null>(null);
   const [praiseToken, setPraiseToken] = useState(0);
   const [debugOutlines, setDebugOutlines] = useState(false);
+  const [layoutMode, setLayoutMode] = useState(false);
   const praiseBusyRef = useRef(false);
 
   useEffect(() => {
@@ -66,6 +70,11 @@ export function useVcWindowState(): VcWindowContext {
         return;
       }
 
+      if (action === 'layoutMode') {
+        setLayoutMode((value) => !value);
+        return;
+      }
+
       const overlayMap: Partial<Record<VcHotkeyAction, VcOverlayId>> = {
         cover: 'cover',
         host: 'host',
@@ -91,7 +100,22 @@ export function useVcWindowState(): VcWindowContext {
     };
   }, []);
 
-  return { state, frequencyData, frame, canvasFrame, activeOverlay, praiseToken, debugOutlines };
+  const onChangeSurface = useCallback((patch: Partial<VcSurfaceConfig>) => {
+    const app = getApp();
+    app?.vc?.updateSurface?.(patch);
+  }, []);
+
+  return {
+    state,
+    frequencyData,
+    frame,
+    canvasFrame,
+    activeOverlay,
+    praiseToken,
+    debugOutlines,
+    layoutMode,
+    onChangeSurface,
+  };
 }
 
 export function useCellClickCooldown(): () => boolean {

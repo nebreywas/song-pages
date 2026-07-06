@@ -3,24 +3,18 @@
  */
 
 import type { HostContentCatalog } from '@shared/hostContent';
-import { clearAllAssignmentOverrides } from '@shared/vcMode/assignmentSettings';
 import type { VcGridDesignSettings } from '@shared/vcMode/gridDesign';
 import {
   SONG_CONTENT_SETTINGS_RULE,
-  type SongContentSettingsRule,
+  VC_INTERACTIVE_SONG_CONTENT,
   type VcCellContent,
   type VcSongSlotSettings,
 } from '@shared/vcModeTypes';
 
 import { GraphicAssignmentControls } from './GraphicAssignmentControls';
+import { AssignmentSettingsIntro } from './AssignmentSettingsIntro';
+import { InteractiveSongAssignmentControls } from './InteractiveSongAssignmentControls';
 import { TextAssignmentControls } from './TextAssignmentControls';
-
-const SETTINGS_HINT: Record<SongContentSettingsRule, string> = {
-  graphic: 'Defaults match Host Graphic settings unless overridden here.',
-  video: 'Defaults match Host Video settings unless overridden here.',
-  'title-text': 'Defaults match Host Title Text settings unless overridden here.',
-  'area-text': 'Defaults match Host Area Text settings unless overridden here.',
-};
 
 type SongAssignmentSettingsProps = {
   content: VcCellContent;
@@ -38,24 +32,33 @@ export function SongAssignmentSettings({
   onChange,
 }: SongAssignmentSettingsProps) {
   const rule = SONG_CONTENT_SETTINGS_RULE[content];
-  const hasOverrides = Object.keys(settings.overrides).length > 0;
+
+  if (VC_INTERACTIVE_SONG_CONTENT.has(content)) {
+    return (
+      <section className="vc-host-assignment-settings">
+        <AssignmentSettingsIntro content={content} />
+        <InteractiveSongAssignmentControls content={content} settings={settings} onChange={onChange} />
+        {content === 'seek-bar' ? (
+          <TextAssignmentControls
+            content={content}
+            item={null}
+            catalog={catalog}
+            gridTypography={gridDesign.defaultTypography}
+            overrides={settings.overrides}
+            onOverridesChange={(overrides) => onChange({ overrides })}
+            showAllCaps
+            showMarkdown={false}
+          />
+        ) : null}
+      </section>
+    );
+  }
 
   if (!rule) return null;
 
   return (
     <section className="vc-host-assignment-settings">
-      <div className="vc-host-assignment-settings-head">
-        <h4>Assignment settings</h4>
-        {hasOverrides ? (
-          <button
-            type="button"
-            className="btn vc-assignment-clear"
-            onClick={() => onChange({ overrides: clearAllAssignmentOverrides(content, settings.overrides) })}
-          >
-            Clear all overrides
-          </button>
-        ) : null}
-      </div>
+      <AssignmentSettingsIntro content={content} />
 
       {rule === 'graphic' ? (
         <GraphicAssignmentControls
@@ -85,6 +88,7 @@ export function SongAssignmentSettings({
           onOverridesChange={(overrides) => onChange({ overrides })}
           showAllCaps
           showMarkdown={false}
+          showTitleOverflow={content === 'song-title'}
         />
       ) : (
         <TextAssignmentControls
@@ -96,10 +100,10 @@ export function SongAssignmentSettings({
           onOverridesChange={(overrides) => onChange({ overrides })}
           showAllCaps={false}
           showMarkdown
+          showLyricsEdgeFade={content === 'lyrics'}
         />
       )}
 
-      <p className="vc-assignment-hint">{SETTINGS_HINT[rule]}</p>
     </section>
   );
 }

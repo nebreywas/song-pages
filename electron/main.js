@@ -13,10 +13,40 @@ const { registerCacheScheme, registerCacheProtocol } = require('./listener/cache
 
 registerCacheScheme();
 
+/**
+ * macOS Discord/OBS window capture only receives audio from the window owner's PID.
+ * Chromium normally plays HTML media in a separate sandboxed "Audio Service" process,
+ * so per-window share gets video but silence. Keep audio in the browser process.
+ * @see https://issues.chromium.org/issues/40273019 (application audio + OOP audio)
+ */
+if (process.platform === 'darwin') {
+  app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
+}
+
+/** Display name for menu bar / Dock — does not control the data folder when userData is pinned below. */
+app.setName('Song Pages');
+
+/**
+ * Pin userData to a stable folder name. Without this, `app.setName()` or product renames
+ * create a fresh ~/Library/Application Support/<name>/ tree (empty DB, lost subscriptions).
+ */
+app.setPath('userData', path.join(app.getPath('appData'), 'song-pages'));
+
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 
 const DEV_SERVER_URL = 'http://localhost:5173';
+
+/** Load Vite dev server — bust Electron's aggressive localhost HTTP cache. */
+async function loadDevServer(mainWindow) {
+  const ses = mainWindow.webContents.session;
+  await ses.clearCache();
+  await ses.clearStorageData({ storages: ['cachestorage'] });
+  const url = `${DEV_SERVER_URL}/?dev=${Date.now()}`;
+  await mainWindow.loadURL(url);
+  mainWindow.setTitle('Song Pages (Dev)');
+  logger.debug('Loading Vite dev server', { url: DEV_SERVER_URL, isPackaged: app.isPackaged });
+}
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -51,8 +81,7 @@ function createMainWindow() {
   installAppMenu(mainWindow, !app.isPackaged);
 
   if (!app.isPackaged) {
-    mainWindow.loadURL(DEV_SERVER_URL);
-    logger.debug('Loading Vite dev server', { url: DEV_SERVER_URL });
+    void loadDevServer(mainWindow);
   } else {
     const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
     mainWindow.loadFile(indexPath);

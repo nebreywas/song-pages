@@ -112,6 +112,11 @@ contextBridge.exposeInMainWorld('app', {
     sendState: (payload) => ipcRenderer.send('vc:sendState', payload),
     sendFrame: (payload) => ipcRenderer.send('vc:sendFrame', payload),
     sendPlaybackStatus: (payload) => ipcRenderer.send('vc:sendPlaybackStatus', payload),
+    sendTransport: (payload) => ipcRenderer.send('vc:sendTransport', payload),
+    updateSurface: (patch) => ipcRenderer.send('vc:updateSurface', patch),
+    commitSurface: (surface) => ipcRenderer.send('vc:commitSurface', surface),
+    requestVisualizerRotate: () => ipcRenderer.send('vc:requestVisualizerRotate'),
+    reportActiveVisualizer: (id) => ipcRenderer.send('vc:reportActiveVisualizer', id),
     onState: (callback) => {
       const handler = (_event, payload) => callback(payload);
       ipcRenderer.on('vc:state', handler);
@@ -146,6 +151,31 @@ contextBridge.exposeInMainWorld('app', {
       const handler = (_event, payload) => callback(payload);
       ipcRenderer.on('vc:playback-status', handler);
       return () => ipcRenderer.removeListener('vc:playback-status', handler);
+    },
+    onTransport: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('vc:transport', handler);
+      return () => ipcRenderer.removeListener('vc:transport', handler);
+    },
+    onSurfacePatch: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('vc:surface-patch', handler);
+      return () => ipcRenderer.removeListener('vc:surface-patch', handler);
+    },
+    onSurfaceCommit: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('vc:surface-commit', handler);
+      return () => ipcRenderer.removeListener('vc:surface-commit', handler);
+    },
+    onVisualizerRotateRequest: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('vc:visualizer-rotate-request', handler);
+      return () => ipcRenderer.removeListener('vc:visualizer-rotate-request', handler);
+    },
+    onActiveVisualizerReport: (callback) => {
+      const handler = (_event, id) => callback(id);
+      ipcRenderer.on('vc:active-visualizer', handler);
+      return () => ipcRenderer.removeListener('vc:active-visualizer', handler);
     },
   },
 

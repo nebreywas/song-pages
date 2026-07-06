@@ -20,11 +20,12 @@
     "release:win": "node scripts/release.mjs --win",
     "release:all": "node scripts/release.mjs --all",
     "icons:win": "node scripts/build-win-icon.mjs",
-    "test": "node --import tsx --test shared/**/*.test.ts compiler/*.test.ts",
+    "test": "node --import tsx --test shared/**/*.test.ts compiler/*.test.ts src/audio/**/*.test.ts",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
+    "@melloware/coloris": "^0.25.0",
     "better-sqlite3": "^11.8.1",
     "butterchurn": "^2.6.7",
     "butterchurn-presets": "^2.4.7",

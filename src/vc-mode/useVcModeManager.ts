@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SongPagesSongManifest } from '@shared/manifests';
-import type { VcModeConfig, VcStatePayload, VcUpcomingSong } from '@shared/vcModeTypes';
+import type { VcModeConfig, VcStatePayload, VcSurfaceConfig, VcUpcomingSong } from '@shared/vcModeTypes';
 import { configUsesVisualizer, normalizeVcConfig } from '@shared/vcModeTypes';
 
 import { getApp } from '../lib/bridge';
@@ -10,16 +10,17 @@ import type { ArtistRow, SongRow } from '../types/app';
 import { isButterchurnExperienceId } from '../visualizers/butterchurn/presets/approved/presetKeys';
 import { normalizeExperienceId } from '../visualizers/native/registry';
 import { useExperienceSettings } from '../visualizers/settings/useExperienceSettings';
-import { getAudioGraphIfExists, setMainSpeakerMuted } from '../visualizers/audioGraph';
 import { useAudioAnalyser } from '../visualizers/useAudioAnalyser';
-import { createDefaultVcConfig } from './vcModeDefaults';
+import { createDefaultVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
 
 const FRAME_INTERVAL_MS = 16;
 const STATE_INTERVAL_MS = 200;
+const SURFACE_SAVE_DEBOUNCE_MS = 500;
 const UPCOMING_MAX = 10;
 
 type UseVcModeManagerOptions = {
-  audioRef: React.RefObject<HTMLAudioElement | null>;
+  /** Hidden mirror for VC visualizer FFT — see useAnalyserPlaybackMirror. */
+  analyserAudioRef: React.RefObject<HTMLAudioElement | null>;
   playingSong: SongRow | null | undefined;
   /** Selected song page when not actively playing — used for Surface designer preview. */
   previewSong?: SongRow | null | undefined;
@@ -33,8 +34,6 @@ type UseVcModeManagerOptions = {
   /** Resolved HLS URL for the active track — mirrored into the VC window for stream capture. */
   activePlaybackUrl: string | null;
   volume: number;
-  bassBoost: boolean;
-  lofi: boolean;
 };
 
 function buildSongPayload(
@@ -54,11 +53,14 @@ function buildSongPayload(
     about: manifest?.about ?? '',
     lyrics: manifest?.lyrics ?? '',
     artistId: song.artist_id,
+    durationSeconds: song.duration_seconds,
+    mainGenre: null,
+    additionalGenres: null,
   };
 }
 
 export function useVcModeManager({
-  audioRef,
+  analyserAudioRef,
   playingSong,
   previewSong,
   sortedSongs,
@@ -70,12 +72,9 @@ export function useVcModeManager({
   duration,
   activePlaybackUrl,
   volume,
-  bassBoost,
-  lofi,
 }: UseVcModeManagerOptions) {
   const [modalOpen, setModalOpen] = useState(false);
   const [vcOpen, setVcOpen] = useState(false);
-  const [vcMirrorAudible, setVcMirrorAudible] = useState(false);
   const [activeConfig, setActiveConfig] = useState<VcModeConfig>(() => createDefaultVcConfig());
   const [canvasMirrorFrame, setCanvasMirrorFrame] = useState<string | null>(null);
   const [songManifest, setSongManifest] = useState<SongPagesSongManifest | null>(null);
@@ -84,14 +83,37 @@ export function useVcModeManager({
   const manifestCacheRef = useRef(new Map<string, SongPagesSongManifest>());
   const timingRef = useRef({ currentTime, duration, isPlaying });
   const canvasMirrorFrameRef = useRef<string | null>(null);
+  const activeConfigRef = useRef(activeConfig);
+  const surfaceSaveTimerRef = useRef<number | null>(null);
+
+  const [reportedVisualizerId, setReportedVisualizerId] = useState<string | null>(null);
+  const prevVcOpenRef = useRef(false);
+
+  useEffect(() => {
+    activeConfigRef.current = activeConfig;
+  }, [activeConfig]);
 
   useEffect(() => {
     canvasMirrorFrameRef.current = canvasMirrorFrame;
   }, [canvasMirrorFrame]);
 
+  useEffect(() => {
+    const wasOpen = prevVcOpenRef.current;
+    prevVcOpenRef.current = vcOpen;
+
+    if (!vcOpen) {
+      setReportedVisualizerId(null);
+      return;
+    }
+
+    if (!wasOpen) {
+      setReportedVisualizerId(normalizeExperienceId(activeConfig.visualizerId));
+    }
+  }, [vcOpen, activeConfig.visualizerId]);
+
   const vcVisualizerId = useMemo(
-    () => normalizeExperienceId(activeConfig.visualizerId),
-    [activeConfig.visualizerId],
+    () => reportedVisualizerId ?? normalizeExperienceId(activeConfig.visualizerId),
+    [activeConfig.visualizerId, reportedVisualizerId],
   );
   const vcUsesButterchurn = isButterchurnExperienceId(vcVisualizerId);
   const vcVisualizerSettings = useExperienceSettings(vcVisualizerId);
@@ -103,7 +125,7 @@ export function useVcModeManager({
   const analyserEnabled = vcOpen && configUsesVisualizer(activeConfig) && playingSong != null;
 
   const { analyser, butterchurnTap, applyButterchurnAudioSettings, audioContext } = useAudioAnalyser({
-    audioRef,
+    audioRef: analyserAudioRef,
     isPlaying,
     enabled: analyserEnabled,
   });
@@ -131,6 +153,7 @@ export function useVcModeManager({
       title: song.title,
       artist: song.artist_name ?? '',
       durationSeconds: song.duration_seconds,
+      coverUrl: resolveAssetUrl(song.page_url, song.cover_url ?? null),
     }));
   }, [playingSongId, sortedSongs]);
 
@@ -201,6 +224,7 @@ export function useVcModeManager({
       artistName: artistProfile?.artist_name ?? playingSong?.artist_name ?? null,
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
+      effectiveVisualizerId: vcVisualizerId,
     };
   }, [
     activeConfig,
@@ -213,6 +237,7 @@ export function useVcModeManager({
     playingSong,
     songManifest,
     upcoming,
+    vcVisualizerId,
     volume,
   ]);
 
@@ -237,6 +262,7 @@ export function useVcModeManager({
       artistName: artistProfile?.artist_name ?? song?.artist_name ?? null,
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
+      effectiveVisualizerId: vcVisualizerId,
     };
   }, [
     activeConfig,
@@ -249,55 +275,81 @@ export function useVcModeManager({
     playingSong,
     songManifest,
     upcoming,
+    vcVisualizerId,
   ]);
-
-  useEffect(() => {
-    if (!vcOpen) {
-      setVcMirrorAudible(false);
-    }
-  }, [vcOpen]);
-
-  useEffect(() => {
-    const app = getApp();
-    if (!app?.vc?.onPlaybackStatus) return;
-
-    const offStatus = app.vc.onPlaybackStatus(({ active }) => {
-      setVcMirrorAudible(Boolean(active));
-    });
-
-    return () => {
-      offStatus();
-      setVcMirrorAudible(false);
-    };
-  }, []);
-
-  /**
-   * Mute main-window speakers only when the VC mirror is actually playing through
-   * a Web Audio graph. Otherwise keep local playback on the listener window.
-   */
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const graph = getAudioGraphIfExists(audio);
-    const shouldMuteMain = vcOpen && vcMirrorAudible && graph != null;
-
-    setMainSpeakerMuted(audio, shouldMuteMain);
-    audio.volume = volume;
-  }, [audioRef, vcOpen, vcMirrorAudible, volume, analyser, bassBoost, lofi]);
 
   useEffect(() => {
     const app = getApp();
     if (!vcOpen || !app?.vc) return;
 
     const pushState = () => app.vc!.sendState(buildStatePayload());
+    const scheduleSurfaceSave = (config: VcModeConfig) => {
+      if (surfaceSaveTimerRef.current != null) {
+        window.clearTimeout(surfaceSaveTimerRef.current);
+      }
+      surfaceSaveTimerRef.current = window.setTimeout(() => {
+        void getApp()?.saveSettings?.(VC_SETTINGS_KEY, config);
+      }, SURFACE_SAVE_DEBOUNCE_MS);
+    };
+    const persistSurfaceNow = (config: VcModeConfig) => {
+      if (surfaceSaveTimerRef.current != null) {
+        window.clearTimeout(surfaceSaveTimerRef.current);
+        surfaceSaveTimerRef.current = null;
+      }
+      void getApp()?.saveSettings?.(VC_SETTINGS_KEY, config);
+    };
+    const applySurfaceConfig = (surface: VcSurfaceConfig, persist: 'debounced' | 'immediate') => {
+      const prev = activeConfigRef.current;
+      const next = normalizeVcConfig({
+        ...prev,
+        surface,
+      });
+      activeConfigRef.current = next;
+      setActiveConfig(next);
+      if (persist === 'immediate') {
+        persistSurfaceNow(next);
+      } else {
+        scheduleSurfaceSave(next);
+      }
+      app.vc!.sendState({ ...buildStatePayload(), config: next });
+      return next;
+    };
+
     pushState();
     const stateId = window.setInterval(pushState, STATE_INTERVAL_MS);
     const offSync = app.vc.onRequestSync?.(() => pushState());
 
+    const offSurfacePatch = app.vc.onSurfacePatch?.((patch: Partial<VcSurfaceConfig>) => {
+      const prev = activeConfigRef.current;
+      applySurfaceConfig(
+        {
+          ...prev.surface,
+          ...patch,
+          dividers: patch.dividers ?? prev.surface.dividers,
+          floats: patch.floats ?? prev.surface.floats,
+        },
+        'debounced',
+      );
+    });
+
+    const offSurfaceCommit = app.vc.onSurfaceCommit?.((surface: VcSurfaceConfig) => {
+      applySurfaceConfig(surface, 'immediate');
+    });
+
+    const offActiveVisualizer = app.vc.onActiveVisualizerReport?.((id: string) => {
+      setReportedVisualizerId(normalizeExperienceId(id));
+    });
+
     return () => {
       window.clearInterval(stateId);
       offSync?.();
+      offSurfacePatch?.();
+      offSurfaceCommit?.();
+      offActiveVisualizer?.();
+      if (surfaceSaveTimerRef.current != null) {
+        window.clearTimeout(surfaceSaveTimerRef.current);
+        surfaceSaveTimerRef.current = null;
+      }
     };
   }, [buildStatePayload, vcOpen]);
 
@@ -335,16 +387,13 @@ export function useVcModeManager({
     const offOpened = app.vc.onOpened(() => setVcOpen(true));
     const offClosed = app.vc.onClosed(() => {
       setVcOpen(false);
-      setVcMirrorAudible(false);
-      const audio = audioRef.current;
-      if (audio) setMainSpeakerMuted(audio, false);
     });
 
     return () => {
       offOpened();
       offClosed();
     };
-  }, [audioRef]);
+  }, []);
 
   const closeVisualizerSurfaces = useCallback(async () => {
     const app = getApp();
@@ -370,11 +419,8 @@ export function useVcModeManager({
     if (!app?.vc) return;
     await app.vc.close();
     setVcOpen(false);
-    setVcMirrorAudible(false);
     setCanvasMirrorFrame(null);
-    const audio = audioRef.current;
-    if (audio) setMainSpeakerMuted(audio, false);
-  }, [audioRef]);
+  }, []);
 
   const openModal = useCallback(() => setModalOpen(true), []);
   const closeModal = useCallback(() => setModalOpen(false), []);
@@ -388,6 +434,7 @@ export function useVcModeManager({
   return {
     modalOpen,
     vcOpen,
+    analyserEnabled,
     vcVisualizerId,
     vcVisualizerSettings,
     butterchurnVcMirrorActive,

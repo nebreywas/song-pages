@@ -23,7 +23,15 @@ export type VcCellContent =
   | 'about'
   | 'artist-name'
   | 'artist-image'
+  | 'artist-bio'
+  | 'artist-bio-name'
   | 'song-title'
+  | 'song-year'
+  | 'song-length'
+  | 'elapsed-remaining'
+  | 'seek-bar'
+  | 'player-controls'
+  | 'upcoming-covers'
   | 'main-genre'
   | 'additional-genres'
   | 'host-graphic'
@@ -43,6 +51,25 @@ export type {
 } from './vcMode/gridDesign';
 export { DEFAULT_VC_GRID_DESIGN, sanitizeGridDesign } from './vcMode/gridDesign';
 import { sanitizeGridDesign, type VcGridDesignSettings } from './vcMode/gridDesign';
+import {
+  DEFAULT_VC_VISUALIZER_CHANGE_RULE,
+  DEFAULT_VC_VISUALIZER_SEQUENCE,
+  sanitizeVisualizerChangeRule,
+  sanitizeVisualizerSequence,
+  type VcVisualizerChangeRule,
+  type VcVisualizerSequence,
+} from './vcMode/visualizerSettings';
+export type { VcVisualizerChangeRule, VcVisualizerSequence } from './vcMode/visualizerSettings';
+export {
+  VC_VISUALIZER_CHANGE_RULE_OPTIONS,
+  VC_VISUALIZER_SEQUENCE_OPTIONS,
+} from './vcMode/visualizerSettings';
+import {
+  pickOptionalBorderStyle,
+  pickOptionalBorderThickness,
+  sanitizeSavedRegionAppearance,
+  type VcRegionAppearanceSnapshot,
+} from './vcMode/gridDesign';
 
 export type VcHostSlotBinding = {
   itemId: string;
@@ -64,10 +91,29 @@ export const SONG_CONTENT_SETTINGS_RULE: Partial<Record<VcCellContent, SongConte
   lyrics: 'area-text',
   about: 'title-text',
   'artist-name': 'title-text',
+  'artist-bio': 'area-text',
+  'artist-bio-name': 'area-text',
   'song-title': 'title-text',
+  'song-year': 'title-text',
+  'song-length': 'title-text',
+  'elapsed-remaining': 'title-text',
   'main-genre': 'title-text',
   'additional-genres': 'title-text',
 };
+
+/** Interactive song slots — assignment settings use dedicated controls, not typography rules alone. */
+export const VC_INTERACTIVE_SONG_CONTENT = new Set<VcCellContent>([
+  'seek-bar',
+  'player-controls',
+  'upcoming-covers',
+]);
+
+/** May only be assigned to floats (fixed control palette design). */
+export const VC_FLOAT_ONLY_CONTENT = new Set<VcCellContent>(['player-controls']);
+
+export function isFloatOnlyContent(content: VcCellContent): boolean {
+  return VC_FLOAT_ONLY_CONTENT.has(content);
+}
 
 export type VcCycleTime = 'click' | 10 | 15 | 20 | 30 | 45 | 60;
 
@@ -88,6 +134,17 @@ export type VcCellAssignment = {
   cycleTime: VcCycleTime | null;
   /** Per-region transition when cycling between primary and secondary. */
   transitionStyle: VcTransitionStyle;
+  /** Optional per-area background (#rrggbb); falls back to grid design background. */
+  backgroundColor?: string;
+  /** Optional per-area border color (#rrggbb); falls back to grid float line color. */
+  borderColor?: string;
+  /** Optional per-area border style; falls back to grid float line style. */
+  borderStyle?: VcGridLineStyle;
+  /** Optional per-area border thickness (0–20 px); falls back to grid float line thickness. */
+  borderThicknessPx?: number;
+  /** When true, live rendering uses grid defaults; savedRegionAppearance holds the prior values. */
+  lockAppearanceToGrid?: boolean;
+  savedRegionAppearance?: VcRegionAppearanceSnapshot;
 };
 
 /** Base template geometry + floats. Content is stored separately. */
@@ -110,6 +167,10 @@ export type VcModeConfig = {
   /** Content for floats, keyed by float id. */
   floatContent: Record<string, VcCellAssignment>;
   visualizerId: string;
+  /** When and how the live visualizer advances while VC Mode is active. */
+  visualizerChangeRule: VcVisualizerChangeRule;
+  /** Pool used when a rotation rule picks the next visualizer. */
+  visualizerSequence: VcVisualizerSequence;
   /** When false, missing song content renders blank instead of host/system fallbacks. */
   useFallbacks: boolean;
   /** Surface background, divider lines, and default text typography. */
@@ -141,6 +202,8 @@ export type VcSongPayload = {
   about: string;
   lyrics: string;
   artistId: number;
+  /** Total track length in seconds — from library metadata. */
+  durationSeconds?: number | null;
   /** Added soon in song JSON — optional until editor ships. */
   mainGenre?: string | null;
   additionalGenres?: string | null;
@@ -151,6 +214,7 @@ export type VcUpcomingSong = {
   title: string;
   artist: string;
   durationSeconds: number | null;
+  coverUrl: string | null;
 };
 
 export type VcOverlayId = 'cover' | 'host' | 'next' | 'songInfo' | 'upcoming' | 'remaining';
@@ -167,12 +231,22 @@ export type VcStatePayload = {
   artistName: string | null;
   artistBio: string | null;
   artistPhotoUrl: string | null;
+  /** Active visualizer while VC is live — may differ from config.visualizerId when rotating. */
+  effectiveVisualizerId?: string;
 };
 
 export const VC_SONG_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: string }> = [
   { value: 'artist-name', label: 'Artist Name' },
   { value: 'artist-image', label: 'Artist Image' },
+  { value: 'artist-bio', label: 'Artist Bio' },
+  { value: 'artist-bio-name', label: 'Artist Bio and Name' },
   { value: 'song-title', label: 'Song Title' },
+  { value: 'song-year', label: 'Song Year' },
+  { value: 'song-length', label: 'Song Length' },
+  { value: 'elapsed-remaining', label: 'Elapsed / Remaining' },
+  { value: 'seek-bar', label: 'Seek Bar' },
+  { value: 'player-controls', label: 'Player Controls (float only)' },
+  { value: 'upcoming-covers', label: 'Upcoming Covers / Titles' },
   { value: 'about', label: 'About Song' },
   { value: 'main-genre', label: 'Main Genre' },
   { value: 'additional-genres', label: 'Additional Genres' },
@@ -199,7 +273,15 @@ export const VC_CONTENT_LABELS: Record<VcCellContent, string> = {
   about: 'About song',
   'artist-name': 'Artist Name',
   'artist-image': 'Artist Image',
+  'artist-bio': 'Artist Bio',
+  'artist-bio-name': 'Artist Bio and Name',
   'song-title': 'Song Title',
+  'song-year': 'Song Year',
+  'song-length': 'Song Length',
+  'elapsed-remaining': 'Elapsed / Remaining',
+  'seek-bar': 'Seek Bar',
+  'player-controls': 'Player Controls',
+  'upcoming-covers': 'Upcoming Covers',
   'main-genre': 'Main Genre',
   'additional-genres': 'Additional Genres',
   'host-graphic': 'Host graphic',
@@ -230,7 +312,9 @@ export type VcHotkeyAction =
   | 'remaining'
   | 'songInfo'
   | 'upcoming'
-  | 'debugOutlines';
+  | 'debugOutlines'
+  /** Toggle fullscreen layout editing on the VC projection surface (⌘⌥L). */
+  | 'layoutMode';
 
 export const VC_SETTINGS_KEY = 'vc.lastConfig';
 
@@ -264,7 +348,7 @@ export function emptyCell(): VcCellAssignment {
 
 /** Song content kinds with per-assignment presentation settings. */
 export function isSongConfigurableContent(content: VcCellContent): boolean {
-  return content in SONG_CONTENT_SETTINGS_RULE;
+  return content in SONG_CONTENT_SETTINGS_RULE || VC_INTERACTIVE_SONG_CONTENT.has(content);
 }
 
 export function songSlotSettingsForContent(
@@ -332,6 +416,10 @@ function sanitizeSongSlot(raw: unknown): VcSongSlotSettings {
   return { overrides: sanitizeAssignmentOverrides(value.overrides) };
 }
 
+function pickOptionalHex(raw: unknown): string | undefined {
+  return typeof raw === 'string' && /^#[0-9a-f]{6}$/i.test(raw) ? raw : undefined;
+}
+
 function sanitizeCell(raw: unknown): VcCellAssignment {
   if (!raw || typeof raw !== 'object') return emptyCell();
   const cell = raw as Partial<VcCellAssignment>;
@@ -343,7 +431,28 @@ function sanitizeCell(raw: unknown): VcCellAssignment {
   const songSlotB = isSongConfigurableContent(slotB) ? sanitizeSongSlot(cell.songSlotB) : null;
   const cycleTime = cell.cycleTime ?? null;
   const transitionStyle = cell.transitionStyle === 'fade' ? 'fade' : 'replace';
-  return { slotA, slotB, hostSlotA, hostSlotB, songSlotA, songSlotB, cycleTime, transitionStyle };
+  const backgroundColor = pickOptionalHex(cell.backgroundColor);
+  const borderColor = pickOptionalHex(cell.borderColor);
+  const borderStyle = pickOptionalBorderStyle(cell.borderStyle);
+  const borderThicknessPx = pickOptionalBorderThickness(cell.borderThicknessPx);
+  const lockAppearanceToGrid = cell.lockAppearanceToGrid === true ? true : undefined;
+  const savedRegionAppearance = sanitizeSavedRegionAppearance(cell.savedRegionAppearance, 'area');
+  return {
+    slotA,
+    slotB,
+    hostSlotA,
+    hostSlotB,
+    songSlotA,
+    songSlotB,
+    cycleTime,
+    transitionStyle,
+    ...(backgroundColor !== undefined ? { backgroundColor } : {}),
+    ...(borderColor !== undefined ? { borderColor } : {}),
+    ...(borderStyle !== undefined ? { borderStyle } : {}),
+    ...(borderThicknessPx !== undefined ? { borderThicknessPx } : {}),
+    ...(lockAppearanceToGrid ? { lockAppearanceToGrid: true } : {}),
+    ...(savedRegionAppearance ? { savedRegionAppearance } : {}),
+  };
 }
 
 function sanitizeCells(raw: unknown): VcCellAssignment[] {
@@ -382,6 +491,8 @@ export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
     cells,
     floatContent,
     visualizerId: config.visualizerId,
+    visualizerChangeRule: sanitizeVisualizerChangeRule(config.visualizerChangeRule),
+    visualizerSequence: sanitizeVisualizerSequence(config.visualizerSequence),
     useFallbacks: config.useFallbacks !== false,
     gridDesign: sanitizeGridDesign(config.gridDesign),
   };

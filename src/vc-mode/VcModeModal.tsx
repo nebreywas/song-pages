@@ -10,8 +10,10 @@ import { VC_TEMPLATES } from '@shared/vcSurface/templates';
 import {
   bringFloatToFront,
   canAddFloat,
+  clampFloat,
   createFloat,
   sendFloatToBack,
+  type VcFloatGeometry,
 } from '@shared/vcSurface/floats';
 import {
   allContentAssignments,
@@ -26,6 +28,8 @@ import {
   type VcModeConfig,
   type VcStatePayload,
   type VcTemplateId,
+  VC_VISUALIZER_CHANGE_RULE_OPTIONS,
+  VC_VISUALIZER_SEQUENCE_OPTIONS,
 } from '@shared/vcModeTypes';
 import {
   createDefaultHostContentCatalog,
@@ -38,6 +42,7 @@ import { listUnresolvedHostAssignments } from '@shared/vcMode/assignmentValidati
 
 import { getApp } from '../lib/bridge';
 import { listVisualizers, visualizerSupportsSurface } from '../visualizers/registry';
+import { useVcVisualizerRotation } from './useVcVisualizerRotation';
 import { DesignerCanvas, type DesignerSelection } from './designer/DesignerCanvas';
 import { GridDesignSettingsPanel } from './designer/GridDesignSettingsPanel';
 import { RegionContentPopover, type RegionTarget } from './designer/RegionContentPopover';
@@ -105,6 +110,24 @@ function applyCellPatch(
 ): VcModeConfig {
   const mergeCell = (cell: VcCellAssignment, cellPatch: Partial<VcCellAssignment>): VcCellAssignment => {
     const next = { ...cell, ...cellPatch };
+    if (cellPatch.backgroundColor === undefined && 'backgroundColor' in cellPatch) {
+      delete next.backgroundColor;
+    }
+    if (cellPatch.borderColor === undefined && 'borderColor' in cellPatch) {
+      delete next.borderColor;
+    }
+    if (cellPatch.borderStyle === undefined && 'borderStyle' in cellPatch) {
+      delete next.borderStyle;
+    }
+    if (cellPatch.borderThicknessPx === undefined && 'borderThicknessPx' in cellPatch) {
+      delete next.borderThicknessPx;
+    }
+    if (cellPatch.lockAppearanceToGrid === false && 'lockAppearanceToGrid' in cellPatch) {
+      delete next.lockAppearanceToGrid;
+    }
+    if (cellPatch.savedRegionAppearance === undefined && 'savedRegionAppearance' in cellPatch) {
+      delete next.savedRegionAppearance;
+    }
     if (cellPatch.slotA !== undefined) {
       if (!isHostContentKind(next.slotA)) next.hostSlotA = null;
       if (!isSongConfigurableContent(next.slotA)) next.songSlotA = null;
@@ -230,6 +253,13 @@ export function VcModeModal({ open, onClose, onStart, previewState = null }: VcM
       ),
     [],
   );
+
+  const designerVisualizerRotation = useVcVisualizerRotation({
+    vcOpen: open && visualizerAssigned,
+    config,
+    playingSongId:
+      previewState?.audioMirror?.songId ?? previewState?.currentSong?.id ?? null,
+  });
 
   const designerPreview = useMemo((): VcStatePayload => {
     if (!previewState) {
@@ -446,21 +476,65 @@ export function VcModeModal({ open, onClose, onStart, previewState = null }: VcM
               </div>
 
               {visualizerAssigned ? (
-                <label className="vc-visualizer-bar vc-field">
-                  <span>Visualizer plugin</span>
-                  <select
-                    value={config.visualizerId}
-                    onChange={(e) => {
-                      setConfig((prev) => ({ ...prev, visualizerId: e.target.value }));
-                    }}
-                  >
-                    {windowVisualizers.map((plugin) => (
-                      <option key={plugin.id} value={plugin.id}>
-                        {plugin.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="vc-visualizer-bar">
+                  <label className="vc-field vc-visualizer-bar-plugin">
+                    <span>Visualizer plugin</span>
+                    <select
+                      value={config.visualizerId}
+                      onChange={(e) => {
+                        setConfig((prev) => ({ ...prev, visualizerId: e.target.value }));
+                      }}
+                    >
+                      {windowVisualizers.map((plugin) => (
+                        <option key={plugin.id} value={plugin.id}>
+                          {plugin.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="vc-field vc-visualizer-bar-rule">
+                    <span>Change Rule</span>
+                    <select
+                      value={config.visualizerChangeRule}
+                      onChange={(e) =>
+                        setConfig((prev) =>
+                          normalizeVcConfig({
+                            ...prev,
+                            visualizerChangeRule:
+                              e.target.value as VcModeConfig['visualizerChangeRule'],
+                          }),
+                        )
+                      }
+                    >
+                      {VC_VISUALIZER_CHANGE_RULE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="vc-field vc-visualizer-bar-sequence">
+                    <span>Sequence</span>
+                    <select
+                      value={config.visualizerSequence}
+                      onChange={(e) =>
+                        setConfig((prev) =>
+                          normalizeVcConfig({
+                            ...prev,
+                            visualizerSequence:
+                              e.target.value as VcModeConfig['visualizerSequence'],
+                          }),
+                        )
+                      }
+                    >
+                      {VC_VISUALIZER_SEQUENCE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               ) : null}
 
               <p className="vc-content-hint vc-canvas-hint">
@@ -476,6 +550,9 @@ export function VcModeModal({ open, onClose, onStart, previewState = null }: VcM
                 onSelect={setSelection}
                 onChangeSurface={setSurface}
                 onRegionContextMenu={openRegionPopover}
+                previewVisualizerId={designerVisualizerRotation.effectiveVisualizerId}
+                onPreviewVisualizerClick={designerVisualizerRotation.rotateVisualizer}
+                previewVisualizerClickEnabled={designerVisualizerRotation.visualizerClickEnabled}
               />
             </div>
           ) : null}
@@ -581,8 +658,32 @@ export function VcModeModal({ open, onClose, onStart, previewState = null }: VcM
                   ? (field, pct) =>
                       setSurface({
                         floats: config.surface.floats.map((f) =>
-                          f.id === popover.target.id ? { ...f, [field]: pct / 100 } : f,
+                          f.id === popover.target.id ? clampFloat({ ...f, [field]: pct / 100 }) : f,
                         ),
+                      })
+                  : undefined
+              }
+              onUpdateFloat={
+                popover.target.kind === 'float' && popoverFloat
+                  ? (patch) =>
+                      setSurface({
+                        floats: config.surface.floats.map((f) => {
+                          if (f.id !== popover.target.id) return f;
+                          const next: VcFloatGeometry = { ...f, ...patch };
+                          if (patch.backgroundColor === undefined) delete next.backgroundColor;
+                          if (patch.borderColor === undefined) delete next.borderColor;
+                          if (patch.borderStyle === undefined) delete next.borderStyle;
+                          if (patch.borderThicknessPx === undefined) delete next.borderThicknessPx;
+                          if (patch.backgroundOpacityPct === undefined) {
+                            delete next.backgroundOpacityPct;
+                          }
+                          if (patch.contentOpacityPct === undefined) delete next.contentOpacityPct;
+                          if (patch.lockAppearanceToGrid === false) delete next.lockAppearanceToGrid;
+                          if (patch.savedRegionAppearance === undefined && 'savedRegionAppearance' in patch) {
+                            delete next.savedRegionAppearance;
+                          }
+                          return clampFloat(next);
+                        }),
                       })
                   : undefined
               }
@@ -593,6 +694,7 @@ export function VcModeModal({ open, onClose, onStart, previewState = null }: VcM
           {designerTab === 'surface' && gridDesignOpen ? (
             <GridDesignSettingsPanel
               gridDesign={config.gridDesign}
+              hostCatalog={hostCatalog}
               onChange={updateGridDesign}
               onClose={closeGridDesignSettings}
             />

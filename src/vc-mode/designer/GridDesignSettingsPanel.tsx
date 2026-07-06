@@ -10,16 +10,21 @@ import {
 } from '@shared/hostContent';
 import {
   DEFAULT_VC_GRID_DESIGN,
+  DEFAULT_VC_FULLSCREEN_GRAPHIC,
   VC_GRID_LINE_STYLE_OPTIONS,
   type VcGridDesignSettings,
   type VcGridLineSettings,
   type VcGridLineStyle,
 } from '@shared/vcMode/gridDesign';
+import { findHostContentItem, listItemsByType, type HostContentCatalog } from '@shared/hostContent';
 
 import { DesignerOverlayLayer } from './DesignerOverlayLayer';
+import { VcColorField } from '../../components/color/VcColorField';
+import { useResolvedMediaUrl } from '../../vc-window/useResolvedMediaUrl';
 
 type GridDesignSettingsPanelProps = {
   gridDesign: VcGridDesignSettings;
+  hostCatalog: HostContentCatalog;
   onChange: (gridDesign: VcGridDesignSettings) => void;
   onClose: () => void;
 };
@@ -45,6 +50,39 @@ function patchLineSettings(
   };
 }
 
+/** Thumbnail beside fullscreen graphic controls; empty box until a graphic is selected. */
+function FullscreenGraphicPreview({
+  itemId,
+  catalog,
+  opacityPct,
+}: {
+  itemId: string | null;
+  catalog: HostContentCatalog;
+  opacityPct: number;
+}) {
+  const item = itemId ? findHostContentItem(catalog, itemId) : null;
+  const mediaPath = item?.type === 'graphic' ? item.mediaPath : null;
+  const { url } = useResolvedMediaUrl(null, mediaPath);
+  const graphicName = item?.type === 'graphic' ? item.name : null;
+
+  return (
+    <div
+      className="vc-grid-design-fullscreen-preview"
+      aria-hidden={!itemId}
+      title={graphicName ?? undefined}
+    >
+      {url ? (
+        <img
+          className="vc-grid-design-fullscreen-preview-image"
+          src={url}
+          alt={graphicName ?? ''}
+          style={{ opacity: opacityPct / 100 }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function LineSettingsFields({
   lines,
   onPatch,
@@ -54,7 +92,7 @@ function LineSettingsFields({
 }) {
   return (
     <div className="vc-grid-design-lines-row">
-      <label className="vc-field">
+      <label className="vc-field vc-grid-design-line-field">
         <span>Style</span>
         <select value={lines.style} onChange={(e) => onPatch({ style: e.target.value as VcGridLineStyle })}>
           {VC_GRID_LINE_STYLE_OPTIONS.map((opt) => (
@@ -64,20 +102,28 @@ function LineSettingsFields({
           ))}
         </select>
       </label>
-      <label className="vc-field">
+      <label className="vc-field vc-grid-design-line-field vc-grid-design-thickness-field">
         <span>Thickness</span>
-        <input
-          type="range"
-          min={0}
-          max={20}
-          value={lines.thicknessPx}
-          onChange={(e) => onPatch({ thicknessPx: Number(e.target.value) })}
-        />
-        <span className="vc-assignment-value">{lines.thicknessPx}px</span>
+        <div className="vc-grid-design-thickness-row">
+          <input
+            type="range"
+            min={0}
+            max={20}
+            value={lines.thicknessPx}
+            onChange={(e) => onPatch({ thicknessPx: Number(e.target.value) })}
+            aria-label="Line thickness"
+          />
+          <span className="vc-assignment-value">{lines.thicknessPx}px</span>
+        </div>
       </label>
-      <label className="vc-field">
+      <label className="vc-field vc-grid-design-line-field vc-grid-design-line-color-field">
         <span>Color</span>
-        <input type="color" value={lines.color} onChange={(e) => onPatch({ color: e.target.value })} />
+        <VcColorField
+          variant="compact"
+          value={lines.color}
+          onChange={(color) => onPatch({ color })}
+          aria-label="Line color"
+        />
       </label>
     </div>
   );
@@ -85,10 +131,13 @@ function LineSettingsFields({
 
 export function GridDesignSettingsPanel({
   gridDesign,
+  hostCatalog,
   onChange,
   onClose,
 }: GridDesignSettingsPanelProps) {
   const typography = gridDesign.defaultTypography;
+  const graphicOptions = listItemsByType(hostCatalog, 'graphic');
+  const fullscreenGraphic = gridDesign.fullscreenGraphic ?? DEFAULT_VC_FULLSCREEN_GRAPHIC;
 
   return (
     <DesignerOverlayLayer ariaLabel="Grid design settings" onClose={onClose} className="vc-grid-design-panel">
@@ -101,22 +150,84 @@ export function GridDesignSettingsPanel({
 
       <div className="vc-grid-design-body">
         <section className="vc-grid-design-section">
-          <h4>Background color</h4>
-          <label className="vc-field vc-field-inline">
-            <input
-              type="color"
+          <h4>Overall background color</h4>
+          <p className="vc-grid-design-note">Sets the default color for your VC mode surface</p>
+          <label className="vc-field vc-grid-design-swatch-field">
+            <VcColorField
+              variant="compact"
               value={gridDesign.backgroundColor}
-              onChange={(e) => onChange({ ...gridDesign, backgroundColor: e.target.value })}
+              onChange={(backgroundColor) => onChange({ ...gridDesign, backgroundColor })}
+              aria-label="Overall background color"
             />
-            <span>{gridDesign.backgroundColor}</span>
           </label>
+        </section>
+
+        <section className="vc-grid-design-section">
+          <h4>Fullscreen graphic</h4>
+          <p className="vc-grid-design-note">
+            Stretches selected host graphic beneath entire surface area
+          </p>
+          <div className="vc-grid-design-fullscreen-row">
+            <div className="vc-grid-design-fullscreen-controls">
+              <label className="vc-field">
+                <span>Graphic</span>
+                <select
+                  value={fullscreenGraphic.itemId ?? ''}
+                  onChange={(e) =>
+                    onChange({
+                      ...gridDesign,
+                      fullscreenGraphic: {
+                        ...fullscreenGraphic,
+                        itemId: e.target.value || null,
+                      },
+                    })
+                  }
+                >
+                  <option value="">None</option>
+                  {graphicOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="vc-field vc-grid-design-opacity-field">
+                <span>Opacity</span>
+                <div className="vc-grid-design-slider-row">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    disabled={!fullscreenGraphic.itemId}
+                    value={fullscreenGraphic.opacityPct}
+                    onChange={(e) =>
+                      onChange({
+                        ...gridDesign,
+                        fullscreenGraphic: {
+                          ...fullscreenGraphic,
+                          opacityPct: Number(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                  <span className="vc-assignment-value">{fullscreenGraphic.opacityPct}%</span>
+                </div>
+              </label>
+            </div>
+            <FullscreenGraphicPreview
+              itemId={fullscreenGraphic.itemId}
+              catalog={hostCatalog}
+              opacityPct={fullscreenGraphic.opacityPct}
+            />
+          </div>
         </section>
 
         <section className="vc-grid-design-section">
           <h4>Default typography</h4>
           <p className="vc-grid-design-note">Applies to text content unless overridden per assignment.</p>
           <div className="vc-grid-design-typography-row">
-            <label className="vc-field">
+            <label className="vc-field vc-grid-design-typography-field">
               <span>Font style</span>
               <select
                 value={typography.fontStyle}
@@ -131,7 +242,7 @@ export function GridDesignSettingsPanel({
                 ))}
               </select>
             </label>
-            <label className="vc-field">
+            <label className="vc-field vc-grid-design-typography-field">
               <span>Font size</span>
               <select
                 value={typography.fontSize}
@@ -146,12 +257,13 @@ export function GridDesignSettingsPanel({
                 ))}
               </select>
             </label>
-            <label className="vc-field">
-              <span>Font color</span>
-              <input
-                type="color"
+            <label className="vc-field vc-grid-design-typography-field">
+              <span>Color</span>
+              <VcColorField
+                variant="compact"
                 value={typography.color}
-                onChange={(e) => onChange(patchTypography(gridDesign, { color: e.target.value }))}
+                onChange={(color) => onChange(patchTypography(gridDesign, { color }))}
+                aria-label="Default font color"
               />
             </label>
           </div>
@@ -173,6 +285,51 @@ export function GridDesignSettingsPanel({
             lines={gridDesign.floatLines}
             onPatch={(patch) => onChange(patchLineSettings(gridDesign, 'floatLines', patch))}
           />
+        </section>
+
+        <section className="vc-grid-design-section">
+          <h4>Default float background</h4>
+          <p className="vc-grid-design-note">
+            Default fill behind float content. Each float can override in Float layout.
+          </p>
+          <div className="vc-grid-design-float-background-row">
+            <label className="vc-field vc-grid-design-float-color-field">
+              <span>Color</span>
+              <VcColorField
+                variant="compact"
+                value={gridDesign.floatBackground.color}
+                onChange={(color) =>
+                  onChange({
+                    ...gridDesign,
+                    floatBackground: { ...gridDesign.floatBackground, color },
+                  })
+                }
+                aria-label="Default float background color"
+              />
+            </label>
+            <label className="vc-field vc-grid-design-opacity-field">
+              <span>Background opacity</span>
+              <div className="vc-grid-design-slider-row">
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={gridDesign.floatBackground.opacityPct}
+                  onChange={(e) =>
+                    onChange({
+                      ...gridDesign,
+                      floatBackground: {
+                        ...gridDesign.floatBackground,
+                        opacityPct: Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+                <span className="vc-assignment-value">{gridDesign.floatBackground.opacityPct}%</span>
+              </div>
+            </label>
+          </div>
         </section>
 
         <div className="vc-grid-design-actions">

@@ -1,0 +1,101 @@
+/* Coloris picker must sit above VC modals (z-index 1100). */
+.clr-picker {
+  z-index: 1200;
+}
+
+.vc-color-field {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.vc-color-field .clr-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+}
+
+.vc-color-field .clr-field button {
+  width: 2.25rem;
+  height: 2.05rem;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--muted) 45%, transparent);
+  box-shadow: none;
+  overflow: hidden;
+  /* HEX-only fields — skip Coloris checkerboard (shows as bright corner arcs). */
+  background-image: none;
+}
+
+.vc-color-field .clr-field button::after {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.vc-color-field .clr-field input.clr-color {
+  width: 6.25rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.35rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.vc-color-field .clr-field input.clr-color:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
+/* Swatch only — hex editing happens inside the Coloris picker dialog. */
+.vc-color-field--compact .clr-field,
+.vc-region-popover .vc-color-field .clr-field {
+  display: inline-block;
+  position: relative;
+  width: 2.25rem;
+  height: 2.05rem;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.vc-color-field--compact .clr-field button,
+.vc-region-popover .vc-color-field .clr-field button {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  right: auto;
+  top: auto;
+  transform: none;
+  margin: 0;
+  padding: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--muted) 45%, transparent);
+  box-shadow: none;
+  overflow: hidden;
+  background-image: none;
+}
+
+.vc-color-field--compact .clr-field input,
+.vc-region-popover .vc-color-field .clr-field input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+
+.vc-float-color-field .vc-color-field--compact .clr-field,
+.vc-region-popover .vc-float-color-field .vc-color-field .clr-field {
+  width: 2rem;
+  height: 1.75rem;
+}

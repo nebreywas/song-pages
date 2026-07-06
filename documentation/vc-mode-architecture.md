@@ -4,6 +4,8 @@ This document describes how **VC Mode** works in the Song Pages desktop app: the
 
 For surface geometry and designer UX rules, see [song-pages-vc-mode-surface-view-designer-spec.md](./song-pages-vc-mode-surface-view-designer-spec.md). For host content catalog design, see [Host-content-design.md](./Host-content-design.md). For persistence keys, see [settings-and-persistence.md](./settings-and-persistence.md).
 
+**Canonical audio reference (main/mirror split, Discord incident, debug tooling):** [audio-pipeline.md](./audio-pipeline.md).
+
 ---
 
 ## Purpose
@@ -120,23 +122,28 @@ Song content kinds map to presentation rule sets via `SONG_CONTENT_SETTINGS_RULE
 
 ## Audio architecture
 
-### Main window (timing source)
+**See [audio-pipeline.md](./audio-pipeline.md)** for the full pipeline, Discord incident log, and engineering rules. Summary for VC:
 
-- HLS plays on the Listener `<audio>` element.
-- **Web Audio graph** (`src/visualizers/audioGraph.ts`): source → bass boost → lo-fi → analyser → **speakerGain** → destination.
-- Bass boost and lo-fi apply **only on the main graph**. The VC mirror receives **clean HLS** (no processed branch today).
-- When VC is open and the mirror reports active playback, `setMainSpeakerMuted()` sets `speakerGain` to 0 so local speakers are not doubled. The analyser and Butterchurn tap **stay live** on the main window.
+### Main window (timing source + visualizer FFT)
 
-### VC window (capture source)
+- **Audible HLS** plays on the main `<audio>` element — **never** wired to Web Audio (native path; capturable when sharing the main window with FX off).
+- **Hidden mirror `<audio>`** duplicates HLS for Web Audio (visualizers, bass boost / lo-fi). See `useAnalyserPlaybackMirror`, `useAudioAnalyser`, `audioGraph.ts`.
+- When VC is open, **main playback stays audible** so hosts can share the **main Song Pages window** in Discord without silencing themselves. You may hear **doubled audio locally** (main + VC window mirror) — use headphones or share only one window.
+
+### VC window (alternate capture source)
 
 - `useVcPlaybackAudio` loads the same HLS URL from `state.audioMirror` (`playbackUrl`, `songId`, `volume`).
+- Plain `<audio>` — **no** Web Audio graph on the VC element.
 - Syncs play/pause and seeks when drift exceeds **0.4s** (`SEEK_DRIFT_SECONDS`).
-- Reports `{ active: boolean }` via `vc:sendPlaybackStatus` so main knows when to mute.
+- Reports `{ active: boolean }` via `vc:sendPlaybackStatus` (status IPC; main is **not** auto-muted on active mirror in current builds).
 - VC BrowserWindow uses `autoplayPolicy: 'no-user-gesture-required'` (`electron/vcWindow.js`) so mirrored playback can start without a click in the VC window.
 
-### Fallback behavior
+### Which window to share?
 
-If the mirror fails to start (autoplay block, HLS error, no URL), main **keeps local speakers audible** — mute only happens after the mirror confirms active playback.
+| Goal | Share | FX |
+|------|-------|-----|
+| Main player + visualizers in share | Main **Song Pages** window | Off for reliable capture |
+| VC layout / host content | **Song Pages — VC Mode** window | N/A (VC mirror is clean HLS) |
 
 Playback URL resolution: `activePlaybackUrl ?? playingSong?.playback_url` in `useVcModeManager.buildStatePayload()`.
 
@@ -184,8 +191,8 @@ Use this when verifying window-only capture (not full desktop share).
 |-------|---------------|
 | VC window visuals | Layout, song content, host content, visualizer render in VC window |
 | VC window audio | Music audible in VC window (DevTools → check `<audio>` not paused) |
-| Main window audio | Muted locally while VC mirror is active (no double audio on same machine) |
-| Close VC | Main window audio returns immediately |
+| Main window audio | Still audible while VC open (may double with VC locally) |
+| Close VC | VC audio stops; main unchanged |
 | Skip track | Mirror loads new song; brief gap acceptable; sync within ~0.4s |
 | Pause / resume | Both windows follow transport |
 | Seek | Mirror seeks when drift exceeds threshold |
@@ -195,15 +202,39 @@ Use this when verifying window-only capture (not full desktop share).
 | Symptom | Likely cause |
 |---------|----------------|
 | Video in Discord, no music | Sharing main window instead of VC window; or desktop share not including VC process audio |
-| Music on main only | Mirror not starting — check `audioMirror.playbackUrl`, HLS errors in VC DevTools, autoplay policy |
-| Double audio locally | `vc:playback-status` not reporting active; main not muting `speakerGain` |
-| Music stops when opening VC | Main muted before mirror ready — should not happen with current handoff logic; file a bug |
-| Effects differ VC vs main | Expected today — bass boost / lo-fi are main-graph only |
+| Video in Discord, no music (main player) | FX on (main ducked) or `AudioServiceOutOfProcess` not disabled; see [audio-pipeline.md](./audio-pipeline.md) |
+| Music on main only (VC share) | VC mirror not starting — check `audioMirror.playbackUrl`, HLS errors in VC DevTools |
+| Double audio locally | Expected when VC open — main + VC both play; use headphones or share one window |
+| Effects differ VC vs main | Expected — bass boost / lo-fi run on main-window mirror graph only |
 
 ### macOS notes
 
-- Screen Recording permission may be required for capture apps.
-- Discord window capture audio behavior varies by Discord client version and OS audio routing — if window capture has no audio option, test OBS with "Application Audio Capture" on the VC window as a control.
+- **Electron audio process (critical)** — Chromium plays media in a separate macOS audio utility process by default. Discord window capture only hooks the window owner's process, so share gets silence. Song Pages disables `AudioServiceOutOfProcess` in `electron/main.js` so HTML audio stays in-process and capturable.
+- **Dev mode permission** — When running `npm run dev`, also allow **Electron.app** (under `node_modules/electron/dist/Electron.app`) in System Settings → Privacy & Security → **Screen & System Audio Recording**, not only Discord. Discord's picker may list the window as **Electron** or **Song Pages**.
+- **Discord needs permission** — System Settings → Privacy & Security → **Screen & System Audio Recording** → enable **Discord**. Fully quit Discord (Cmd+Q) and reopen after changing this.
+- **Enable stream audio** — When sharing, check **Share computer audio** (may be hidden if Discord lacks permission). macOS **13+** is required for application audio sharing in Discord.
+- **Discord experimental capture** — User Settings → Voice & Video → Screen Share → enable **Use an experimental method to capture audio from applications**, then restart Discord.
+- **Share the VC window** — Pick **Song Pages — VC Mode**, not the main Listener window. Entire-screen share routes audio differently and is less reliable on Mac.
+- **Verify capture target** — For **main-window share**, confirm main `<audio>` is playing with FX off. For **VC share**, confirm VC `<audio>` is advancing in DevTools.
+- **OBS control test** — Application Audio Capture in OBS. If OBS gets music but Discord does not, suspect Discord routing/permissions.
+- **BlackHole workaround** — Route system or app audio through [BlackHole](https://existential.audio/blackhole/) and select it as Discord's microphone input if window capture stays silent.
+
+### Diagnose VC mirror (2 minutes)
+
+1. Play a song in Listener Mode, open VC Mode.
+2. Open DevTools on the **VC window** (View → Toggle Developer Tools in dev builds).
+3. Confirm `<audio class="vc-playback-audio">` is **not paused** and `currentTime` is advancing.
+4. If sharing VC in Discord: window capture **Song Pages — VC Mode** with **Share computer audio** enabled.
+5. If sharing main player: window capture **Song Pages** (main) with FX **off** — see [audio-pipeline.md](./audio-pipeline.md#discord-main-window-fx-off).
+
+### Code-side issues (fixed / watch for)
+
+| Issue | Symptom | Status |
+|-------|---------|--------|
+| Web Audio on main audible element | Discord silent when sharing main window | **Fixed** — graph on mirror only |
+| Mirror HTML-muted with graph | Visualizers flat (peak bin 0) | **Fixed** — `ensureMirrorElementFeedsGraph` |
+| Mirror only loads when playback active | VC silent if nothing playing | By design — start playback before sharing |
+| Discord macOS window audio | Video, no remote music | Often platform permissions + OOP audio flag — see audio-pipeline doc |
 
 ### Known limitations
 
@@ -216,5 +247,6 @@ Use this when verifying window-only capture (not full desktop share).
 ## Related reading
 
 - [song-pages-vc-mode-surface-view-designer-spec.md](./song-pages-vc-mode-surface-view-designer-spec.md) — product spec and designer rules
+- [audio-pipeline.md](./audio-pipeline.md) — canonical playback/mirror/Discord reference
 - [visualizer-architecture.md](./visualizer-architecture.md) — Web Audio graph and projection visualizer
 - [settings-and-persistence.md](./settings-and-persistence.md) — `vc.lastConfig`, `vc.hostContent` keys

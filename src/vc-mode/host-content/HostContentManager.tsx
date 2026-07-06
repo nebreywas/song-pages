@@ -25,6 +25,7 @@ import {
 } from '@shared/hostContent';
 
 import { DesignerOverlayLayer } from '../designer/DesignerOverlayLayer';
+import { VcColorField } from '../../components/color/VcColorField';
 import { getApp } from '../../lib/bridge';
 import { HostContentPreview } from './HostContentPreview';
 import { useHostContentCatalog } from '../../host-content/useHostContentCatalog';
@@ -363,7 +364,12 @@ function HostContentEditor({
             </label>
             <label className="vc-field hc-compact-field hc-color-field">
               <span>Color</span>
-              <input type="color" value={item.color} onChange={(e) => onChange({ color: e.target.value })} />
+              <VcColorField
+                variant="compact"
+                value={item.color}
+                onChange={(color) => onChange({ color })}
+                aria-label="Text color"
+              />
             </label>
           </div>
           {item.type === 'title-text' ? (

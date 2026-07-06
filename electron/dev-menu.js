@@ -40,6 +40,18 @@ function installDevMenu() {
         },
         { type: 'separator' },
         {
+          label: 'Toggle Audio Debug Panel',
+          accelerator: process.platform === 'darwin' ? 'Cmd+Ctrl+Alt+A' : 'Ctrl+Alt+A',
+          click: (_item, focusedWindow) => {
+            if (!focusedWindow) return;
+            focusedWindow.webContents.executeJavaScript(`
+              localStorage.setItem('songpages:audio-debug-panel', '1');
+              localStorage.setItem('songpages:audio-debug', '1');
+              window.dispatchEvent(new Event('songpages-audio-debug-changed'));
+            `);
+          },
+        },
+        {
           label: 'Open User Data Folder',
           click: () => {
             shell.openPath(app.getPath('userData'));

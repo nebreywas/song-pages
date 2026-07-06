@@ -75,6 +75,7 @@ The application should remain modular so future releases can expand either exper
 - [manifest-schemas.md](./manifest-schemas.md) — PoC manifest contracts
 - [guest-rendering-security.md](./guest-rendering-security.md) — Untrusted song page webviews
 - [security-model-and-completed-actions.md](./security-model-and-completed-actions.md) — Security checklist
+- [audio-pipeline.md](./audio-pipeline.md) — Playback, mirror, Discord capture, debug tooling (canonical)
 - [vc-mode-architecture.md](./vc-mode-architecture.md) — VC Mode runtime and audio mirror
 - [visualizer-architecture.md](./visualizer-architecture.md) — Web Audio and projection visualizers
 - [settings-and-persistence.md](./settings-and-persistence.md) — Settings keys and disk paths
@@ -309,7 +310,7 @@ These should guide the next sprints:
 3. **Constrained power** — VC Mode and host tools favor guided layouts over infinite flexibility (see surface designer spec).
 4. **Clean boundaries** — `shared/` for cross-window logic; migrations for every persisted shape change; guest content never gets app privileges.
 5. **Modular growth** — New presentation features (visualizers, VC regions) plug into registry/resolution patterns rather than one-off branches.
-6. **Capture-aware playback** — When users share VC window, audio and visuals must originate from that window's process where platform capture requires it.
+6. **Capture-aware playback** — When users share a window, audio must be capturable on that window's process. See [audio-pipeline.md](./audio-pipeline.md).
 
 ---
 

@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import { hostTextCssStyle } from '@shared/hostContent';
 import type { HostContentCatalog } from '@shared/hostContent';
 import type { ResolvedVcContent } from '@shared/vcMode/contentResolution';
+import type { VcTextAlign } from '@shared/vcMode/assignmentSettings';
 import { resolveVcCellContent } from '@shared/vcMode/contentResolution';
 import {
   isHostContentKind,
@@ -22,10 +23,13 @@ import {
 } from '@shared/vcModeTypes';
 
 import { renderMarkdownPreview } from '../../lib/markdownPreview';
+import { getVisualizer } from '../../visualizers/registry';
+import { lyricsScrollClassName } from '../../vc-window/lyricsScrollClassName';
 import { systemFallbackUrl } from '../../vc-window/systemFallbackUrls';
 import { useResolvedMediaUrl } from '../../vc-window/useResolvedMediaUrl';
 import { VcMediaPresentation } from '../../vc-window/VcMediaPresentation';
 import { VcResolvedContentView } from '../../vc-window/VcResolvedContentView';
+import { VcTitleLineText } from '../../vc-window/VcTitleLineText';
 
 type DesignerContentPreviewProps = {
   content: VcCellContent;
@@ -33,6 +37,9 @@ type DesignerContentPreviewProps = {
   songBinding: VcSongSlotSettings | null;
   hostCatalog: HostContentCatalog;
   state: VcStatePayload | null;
+  previewVisualizerId?: string;
+  onPreviewVisualizerClick?: () => void;
+  previewVisualizerClickEnabled?: boolean;
 };
 
 function DesignerGraphicPreview({
@@ -67,8 +74,11 @@ function designerTextStyle(
   fontStyle: Parameters<typeof hostTextCssStyle>[0] | undefined,
   fontSize: Parameters<typeof hostTextCssStyle>[1] | undefined,
   color: string | undefined,
+  textAlign?: VcTextAlign,
 ): React.CSSProperties | undefined {
-  if (!fontStyle || !fontSize || !color) return undefined;
+  if (!fontStyle || !fontSize || !color) {
+    return textAlign ? { textAlign } : undefined;
+  }
   const style = hostTextCssStyle(fontStyle, fontSize, color);
   return {
     color: style.color,
@@ -77,6 +87,7 @@ function designerTextStyle(
     fontWeight: style.fontWeight,
     fontStretch: style.fontStretch,
     lineHeight: style.lineHeight,
+    ...(textAlign ? { textAlign } : {}),
   };
 }
 
@@ -99,31 +110,57 @@ function DesignerSongResolvedPreview({
       );
     case 'text': {
       const display = resolved.allCaps ? resolved.text.toUpperCase() : resolved.text;
+      const style = designerTextStyle(
+        resolved.fontStyle,
+        resolved.fontSize,
+        resolved.color,
+        resolved.titleLine ? undefined : resolved.textAlign,
+      );
+      if (resolved.titleLine) {
+        return (
+          <VcTitleLineText
+            text={display}
+            style={style ?? {}}
+            overflow={resolved.lineOverflow ?? 'static'}
+            textAlign={resolved.textAlign}
+          />
+        );
+      }
       return (
-        <div className="vc-designer-preview-text" style={designerTextStyle(resolved.fontStyle, resolved.fontSize, resolved.color)}>
+        <div className="vc-designer-preview-text" style={style}>
           {display}
         </div>
       );
     }
     case 'lyrics': {
       const progress = playback.duration > 0 ? playback.currentTime / playback.duration : 0;
-      const textStyle = designerTextStyle(resolved.fontStyle, resolved.fontSize, resolved.color);
+      const textStyle = designerTextStyle(
+        resolved.fontStyle,
+        resolved.fontSize,
+        resolved.color,
+        resolved.textAlign,
+      );
+      const scrollClass = lyricsScrollClassName(resolved.lyricsEdgeFade, true);
       if (resolved.markdownSource) {
         const html = renderMarkdownPreview(resolved.text);
         return (
-          <div
-            className="vc-designer-preview-text vc-designer-preview-lyrics markdown-body"
-            style={{ ...textStyle, transform: `translateY(-${progress * 35}%)` }}
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          <div className={scrollClass}>
+            <div
+              className="vc-lyrics-inner vc-designer-preview-text vc-designer-preview-lyrics markdown-body"
+              style={{ ...textStyle, transform: `translateY(-${progress * 35}%)` }}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          </div>
         );
       }
       return (
-        <div
-          className="vc-designer-preview-text vc-designer-preview-lyrics"
-          style={{ ...textStyle, transform: `translateY(-${progress * 35}%)` }}
-        >
-          {resolved.text}
+        <div className={scrollClass}>
+          <div
+            className="vc-lyrics-inner vc-designer-preview-text vc-designer-preview-lyrics"
+            style={{ ...textStyle, transform: `translateY(-${progress * 35}%)` }}
+          >
+            {resolved.text}
+          </div>
         </div>
       );
     }
@@ -139,7 +176,7 @@ function DesignerSongResolvedPreview({
           : resolved.caption
         : null;
       return (
-        <div className="vc-designer-preview-about">
+        <div className="vc-designer-preview-about" style={resolved.textAlign ? { textAlign: resolved.textAlign } : undefined}>
           {resolved.coverUrl ? (
             <img className="vc-designer-preview-media vc-designer-preview-about-cover" src={resolved.coverUrl} alt="" />
           ) : null}
@@ -149,13 +186,13 @@ function DesignerSongResolvedPreview({
           {aboutHtml ? (
             <div
               className="vc-designer-preview-text markdown-body"
-              style={designerTextStyle(resolved.fontStyle, resolved.fontSize, resolved.color)}
+              style={designerTextStyle(resolved.fontStyle, resolved.fontSize, resolved.color, resolved.textAlign)}
               dangerouslySetInnerHTML={{ __html: aboutHtml }}
             />
           ) : (
             <div
               className="vc-designer-preview-text"
-              style={designerTextStyle(resolved.fontStyle, resolved.fontSize, resolved.color)}
+              style={designerTextStyle(resolved.fontStyle, resolved.fontSize, resolved.color, resolved.textAlign)}
             >
               {displayAbout}
             </div>
@@ -179,6 +216,9 @@ export function DesignerContentPreview({
   songBinding,
   hostCatalog,
   state,
+  previewVisualizerId,
+  onPreviewVisualizerClick,
+  previewVisualizerClickEnabled = false,
 }: DesignerContentPreviewProps) {
   const playback = state?.playback ?? { currentTime: 0, duration: 0, isPlaying: false };
 
@@ -190,7 +230,10 @@ export function DesignerContentPreview({
         {
           song: state?.currentSong ?? null,
           artistName: state?.artistName ?? null,
+          artistBio: state?.artistBio ?? null,
           artistPhotoUrl: state?.artistPhotoUrl ?? null,
+          playback,
+          upcoming: state?.upcoming ?? [],
           catalog: hostCatalog,
           useFallbacks: state?.currentSong ? false : state?.config?.useFallbacks !== false,
           gridDesign: state?.config?.gridDesign,
@@ -202,9 +245,12 @@ export function DesignerContentPreview({
       hostBinding,
       songBinding,
       hostCatalog,
+      playback,
       state?.currentSong,
       state?.artistName,
+      state?.artistBio,
       state?.artistPhotoUrl,
+      state?.upcoming,
       state?.config?.useFallbacks,
       state?.config?.gridDesign,
     ],
@@ -215,9 +261,40 @@ export function DesignerContentPreview({
   }
 
   if (content === 'visualizer') {
+    const plugin = getVisualizer(
+      previewVisualizerId ?? state?.config.visualizerId ?? 'spectrum',
+    );
     return (
-      <div className="vc-designer-preview-placeholder vc-designer-preview-visualizer">
-        <span>Visualizer</span>
+      <div
+        className={`vc-designer-preview-placeholder vc-designer-preview-visualizer${
+          previewVisualizerClickEnabled ? ' is-clickable' : ''
+        }`}
+        onClick={
+          previewVisualizerClickEnabled
+            ? (event) => {
+                event.stopPropagation();
+                onPreviewVisualizerClick?.();
+              }
+            : undefined
+        }
+        onKeyDown={
+          previewVisualizerClickEnabled
+            ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onPreviewVisualizerClick?.();
+                }
+              }
+            : undefined
+        }
+        role={previewVisualizerClickEnabled ? 'button' : undefined}
+        tabIndex={previewVisualizerClickEnabled ? 0 : undefined}
+      >
+        <span>{plugin?.name ?? 'Visualizer'}</span>
+        {previewVisualizerClickEnabled ? (
+          <span className="vc-designer-preview-visualizer-hint">Click to change</span>
+        ) : null}
       </div>
     );
   }
@@ -238,9 +315,27 @@ export function DesignerContentPreview({
   }
 
   if (resolved.kind === 'visualizer') {
+    const plugin = getVisualizer(
+      previewVisualizerId ?? state?.config.visualizerId ?? 'spectrum',
+    );
     return (
-      <div className="vc-designer-preview-placeholder vc-designer-preview-visualizer">
-        <span>Visualizer</span>
+      <div
+        className={`vc-designer-preview-placeholder vc-designer-preview-visualizer${
+          previewVisualizerClickEnabled ? ' is-clickable' : ''
+        }`}
+        onClick={
+          previewVisualizerClickEnabled
+            ? (event) => {
+                event.stopPropagation();
+                onPreviewVisualizerClick?.();
+              }
+            : undefined
+        }
+      >
+        <span>{plugin?.name ?? 'Visualizer'}</span>
+        {previewVisualizerClickEnabled ? (
+          <span className="vc-designer-preview-visualizer-hint">Click to change</span>
+        ) : null}
       </div>
     );
   }
@@ -255,7 +350,14 @@ export function DesignerContentPreview({
 
   return (
     <div className="vc-designer-preview-live">
-      <DesignerSongResolvedPreview resolved={resolved} playback={playback} />
+      {resolved.kind === 'seek-bar' ||
+      resolved.kind === 'player-controls' ||
+      resolved.kind === 'upcoming-covers' ||
+      resolved.kind === 'artist-bio-name' ? (
+        <VcResolvedContentView resolved={resolved} playback={playback} animateGroup={false} />
+      ) : (
+        <DesignerSongResolvedPreview resolved={resolved} playback={playback} />
+      )}
     </div>
   );
 }

@@ -5,37 +5,12 @@
 import type { HostContentCatalog, HostContentItem } from '@shared/hostContent';
 import {
   getAssignmentDefaults,
-  isOverrideActive,
   patchAssignmentOverride,
   type VcAssignmentOverrides,
 } from '@shared/vcMode/assignmentSettings';
 import type { VcCellContent } from '@shared/vcModeTypes';
 
-function OverrideField({
-  label,
-  overridden,
-  onReset,
-  children,
-}: {
-  label: string;
-  overridden: boolean;
-  onReset: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={`vc-assignment-field${overridden ? ' is-overridden' : ''}`}>
-      <div className="vc-assignment-field-head">
-        <span>{label}</span>
-        {overridden ? (
-          <button type="button" className="vc-assignment-reset" onClick={onReset}>
-            Reset
-          </button>
-        ) : null}
-      </div>
-      {children}
-    </div>
-  );
-}
+import { AssignmentField } from './AssignmentField';
 
 type GraphicAssignmentControlsProps = {
   content: VcCellContent;
@@ -77,59 +52,46 @@ export function GraphicAssignmentControls({
 
   return (
     <>
-      <OverrideField
-        label="Inset %"
-        overridden={isOverrideActive(content, item, catalog, overrides, 'insetPct')}
-        onReset={() => patch('insetPct', defaults.insetPct)}
-      >
-        <input
-          type="range"
-          min={0}
-          max={70}
-          value={effectiveInset}
-          onChange={(e) => patch('insetPct', Number(e.target.value))}
-        />
-        <span className="vc-assignment-value">{effectiveInset}%</span>
-      </OverrideField>
+      <AssignmentField label="Inset %">
+        <div className="vc-assignment-range-row">
+          <input
+            type="range"
+            className="vc-assignment-range"
+            min={0}
+            max={70}
+            value={effectiveInset}
+            onChange={(e) => patch('insetPct', Number(e.target.value))}
+          />
+          <span className="vc-assignment-value">{effectiveInset}%</span>
+        </div>
+      </AssignmentField>
 
-      <OverrideField
-        label="Fit mode"
-        overridden={isOverrideActive(content, item, catalog, overrides, 'fitMode')}
-        onReset={() => patch('fitMode', defaults.fitMode)}
-      >
+      <AssignmentField label="Fit mode">
         <select value={effectiveFit} onChange={(e) => patch('fitMode', e.target.value)}>
           <option value="stretch">Stretch</option>
           <option value="max-x">Max size X</option>
           <option value="max-y">Max size Y</option>
           <option value="original">Original size</option>
         </select>
-      </OverrideField>
+      </AssignmentField>
 
       {showOverflow ? (
-        <OverrideField
-          label="Overflow"
-          overridden={isOverrideActive(content, item, catalog, overrides, 'overflow')}
-          onReset={() => patch('overflow', defaults.overflow)}
-        >
+        <AssignmentField label="Overflow">
           <select value={effectiveOverflow} onChange={(e) => patch('overflow', e.target.value)}>
             <option value="static">Static</option>
             <option value="scroll">Scroll</option>
             <option value="auto-scroll">Auto scroll</option>
             <option value="bounce">Bounce</option>
           </select>
-        </OverrideField>
+        </AssignmentField>
       ) : (
-        <OverrideField
-          label="Playback"
-          overridden={isOverrideActive(content, item, catalog, overrides, 'playback')}
-          onReset={() => patch('playback', defaults.playback)}
-        >
+        <AssignmentField label="Playback">
           <select value={effectivePlayback} onChange={(e) => patch('playback', e.target.value)}>
             <option value="loop">Loop</option>
             <option value="once">Play once</option>
             <option value="bounce">Bounce</option>
           </select>
-        </OverrideField>
+        </AssignmentField>
       )}
     </>
   );

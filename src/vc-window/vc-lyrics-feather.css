@@ -1,0 +1,54 @@
+/**
+ * Feathered top/bottom edges for scrolling lyrics — overlays match the region
+ * background so text dissolves into the surface instead of turning semi-transparent.
+ */
+
+.vc-lyrics-scroll,
+.vc-designer-lyrics-scroll {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  --vc-lyrics-feather-size: 2rem;
+}
+
+.vc-lyrics-scroll {
+  padding: 1rem 1.25rem;
+}
+
+.vc-designer-lyrics-scroll {
+  padding: 0.35rem;
+}
+
+.vc-lyrics-scroll--edge-fade::before,
+.vc-lyrics-scroll--edge-fade::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--vc-lyrics-feather-size);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.vc-lyrics-scroll--edge-fade::before {
+  top: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--vc-lyrics-fade-bg, var(--vc-grid-bg, #000000)) 0%,
+    color-mix(in srgb, var(--vc-lyrics-fade-bg, var(--vc-grid-bg, #000000)) 78%, transparent) 42%,
+    color-mix(in srgb, var(--vc-lyrics-fade-bg, var(--vc-grid-bg, #000000)) 28%, transparent) 72%,
+    transparent 100%
+  );
+}
+
+.vc-lyrics-scroll--edge-fade::after {
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    var(--vc-lyrics-fade-bg, var(--vc-grid-bg, #000000)) 0%,
+    color-mix(in srgb, var(--vc-lyrics-fade-bg, var(--vc-grid-bg, #000000)) 78%, transparent) 42%,
+    color-mix(in srgb, var(--vc-lyrics-fade-bg, var(--vc-grid-bg, #000000)) 28%, transparent) 72%,
+    transparent 100%
+  );
+}

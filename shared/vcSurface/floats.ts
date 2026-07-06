@@ -3,6 +3,14 @@
  */
 
 import {
+  pickOptionalBorderStyle,
+  pickOptionalBorderThickness,
+  sanitizeSavedRegionAppearance,
+  type VcGridLineStyle,
+  type VcRegionAppearanceSnapshot,
+} from '../vcMode/gridDesign';
+
+import {
   VC_DEFAULT_FLOAT_INSET,
   VC_DEFAULT_FLOAT_SIZE,
   VC_MAX_FLOATS,
@@ -20,7 +28,45 @@ export type VcFloatGeometry = {
   /** Top-left Y, normalized 0–1. */
   y: number;
   zIndex: number;
+  /** Override grid float background color (#rrggbb). */
+  backgroundColor?: string;
+  /** Override grid float border color (#rrggbb). */
+  borderColor?: string;
+  /** Override grid float border style. */
+  borderStyle?: VcGridLineStyle;
+  /** Override grid float border thickness (0–20 px). */
+  borderThicknessPx?: number;
+  /** Override grid float background opacity (0–100). */
+  backgroundOpacityPct?: number;
+  /** Fade float content including text and images (0–100, default 100). */
+  contentOpacityPct?: number;
+  /** When true, live rendering uses grid defaults; savedRegionAppearance holds the prior values. */
+  lockAppearanceToGrid?: boolean;
+  savedRegionAppearance?: VcRegionAppearanceSnapshot;
 };
+
+function clampOpacityPct(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function pickOptionalHex(raw: unknown): string | undefined {
+  return typeof raw === 'string' && /^#[0-9a-f]{6}$/i.test(raw) ? raw : undefined;
+}
+
+function preserveFloatAppearance(float: VcFloatGeometry, next: VcFloatGeometry): VcFloatGeometry {
+  return {
+    ...next,
+    backgroundColor: float.backgroundColor,
+    borderColor: float.borderColor,
+    borderStyle: float.borderStyle,
+    borderThicknessPx: float.borderThicknessPx,
+    backgroundOpacityPct: float.backgroundOpacityPct,
+    contentOpacityPct: float.contentOpacityPct,
+    lockAppearanceToGrid: float.lockAppearanceToGrid,
+    savedRegionAppearance: float.savedRegionAppearance,
+  };
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -33,7 +79,7 @@ export function clampFloat(float: VcFloatGeometry): VcFloatGeometry {
   const x = clamp(float.x, 0, 1 - width);
   const y = clamp(float.y, 0, 1 - height);
   const zIndex = Number.isFinite(float.zIndex) ? float.zIndex : 1;
-  return { id: float.id, width, height, x, y, zIndex };
+  return preserveFloatAppearance(float, { id: float.id, width, height, x, y, zIndex });
 }
 
 export function canAddFloat(floats: VcFloatGeometry[]): boolean {
@@ -125,6 +171,14 @@ export function sanitizeFloats(raw: unknown): VcFloatGeometry[] {
         x: toNorm(value.x ?? value.xPct, 0),
         y: toNorm(value.y ?? value.yPct, 0),
         zIndex: typeof value.zIndex === 'number' ? value.zIndex : floats.length + 1,
+        backgroundColor: pickOptionalHex(value.backgroundColor),
+        borderColor: pickOptionalHex(value.borderColor),
+        borderStyle: pickOptionalBorderStyle(value.borderStyle),
+        borderThicknessPx: pickOptionalBorderThickness(value.borderThicknessPx),
+        backgroundOpacityPct: clampOpacityPct(value.backgroundOpacityPct),
+        contentOpacityPct: clampOpacityPct(value.contentOpacityPct),
+        lockAppearanceToGrid: value.lockAppearanceToGrid === true ? true : undefined,
+        savedRegionAppearance: sanitizeSavedRegionAppearance(value.savedRegionAppearance, 'float'),
       }),
     );
     if (floats.length >= VC_MAX_FLOATS) break;

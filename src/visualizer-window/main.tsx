@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import { VisualizerWindowApp } from './VisualizerWindowApp';
 import '../styles/themes.css';
+import '../styles/select.css';
 import '../styles/app.css';
 import '../styles/visualizer.css';
 
