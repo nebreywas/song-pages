@@ -66,7 +66,9 @@ export function VcColorField({
 
     const onInput = () => commit(readColorFieldValue(input));
     const onPick = (event: Event) => {
-      const detail = (event as CustomEvent<{ color?: string }>).detail;
+      const detail = (event as CustomEvent<{ color?: string; currentEl?: HTMLInputElement }>).detail;
+      // Coloris broadcasts one pick to the document — ignore picks for other fields.
+      if (detail?.currentEl !== input) return;
       if (detail?.color) commit(detail.color);
     };
 

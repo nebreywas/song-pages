@@ -193,6 +193,63 @@
   transition: transform 0.35s linear;
 }
 
+/* ALARE vertical multi-line lyrics */
+.vc-alare-lyrics {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.vc-alare-lyrics-viewport {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.vc-alare-lyrics-track {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+}
+
+.vc-alare-lyrics-stack {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.15em;
+}
+
+.vc-alare-lyrics-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 0.15em;
+  transition: opacity 0.35s ease;
+}
+
+.vc-alare-lyrics-block-gap {
+  /* Preserves blank-line section breaks from source lyrics in plain-text view. */
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.vc-alare-lyrics-line.is-active {
+  font-weight: inherit;
+}
+
+.vc-alare-lyrics-preview {
+  min-height: 4rem;
+}
+
 .vc-about-stack,
 .vc-artist-stack {
   height: 100%;
@@ -490,7 +547,7 @@
   font-size: 0.88rem;
 }
 
-.vc-praise-layer {
+.vc-kudo-layer-root {
   position: absolute;
   inset: 0;
   z-index: 30;
@@ -498,26 +555,115 @@
   overflow: hidden;
 }
 
-.vc-praise-heart {
+.vc-kudo-layer {
   position: absolute;
-  color: #ff6b8a;
-  opacity: 0.85;
-  animation: vc-heart-float 2.8s ease-out forwards;
-  text-shadow: 0 0 12px rgba(255, 80, 120, 0.45);
+  inset: 0;
+  overflow: hidden;
 }
 
-@keyframes vc-heart-float {
-  0% {
-    transform: translateY(0) scale(0.6);
-    opacity: 0;
-  }
-  15% {
-    opacity: 0.95;
-  }
-  100% {
-    transform: translateY(calc(-80px + var(--drift, 0px))) scale(1.05);
-    opacity: 0;
-  }
+.vc-kudo-instance {
+  position: absolute;
+  inset: 0;
+}
+
+.vc-kudo-particle {
+  position: absolute;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.vc-kudo-particle img,
+.vc-kudo-tinted-flat,
+.vc-kudo-tinted-shaded {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+}
+
+.vc-kudo-tinted-flat {
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.vc-kudo-tinted-shaded {
+  position: relative;
+}
+
+.vc-kudo-tinted-shaded img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.vc-kudo-tinted-shaded-overlay {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: color;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  pointer-events: none;
+}
+
+.vc-kudo-particle.is-emoji span {
+  display: block;
+  line-height: 1;
+  text-align: center;
+  font-size: 1em;
+  user-select: none;
+}
+
+.vc-kudo-text-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.vc-kudo-text-instance {
+  position: absolute;
+  pointer-events: none;
+  will-change: transform, opacity;
+  width: max-content;
+  max-width: none;
+}
+
+.vc-kudo-text-effect {
+  position: relative;
+  display: inline-block;
+  transform-origin: center center;
+}
+
+.vc-kudo-text-main,
+.vc-kudo-text-echo {
+  display: inline-block;
+}
+
+.vc-kudo-phrase-emoji {
+  display: inline-block;
+  vertical-align: baseline;
+  color: unset;
+  -webkit-text-fill-color: initial;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  paint-order: normal;
+}
+
+.vc-kudo-text-echo {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
 }
 
 .vc-media-shell {

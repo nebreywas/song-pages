@@ -118,6 +118,12 @@ Both designer preview and live VC use **`shared/vcMode/contentResolution.ts`** t
 
 Song content kinds map to presentation rule sets via `SONG_CONTENT_SETTINGS_RULE` in `shared/vcModeTypes.ts` (graphic, video, title-text, area-text). Host slots reference catalog item ids with optional per-assignment overrides.
 
+**Lyrics display options** (per lyrics assignment, applied in content resolution):
+
+- **Lyric tracking** — `simple-scroll` (default, compatibility) or `alare` (approximate line timeline). See [ALARE.md](./ALARE.md).
+- `lyricsEdgeFade` — top/bottom feather while scrolling (Simple Scroll; default on)
+- `lyricsRemoveBracketed` — strip `[Chorus]`-style annotations via `stripBracketedLyricsText` from `shared/lyricsText.ts` (Simple Scroll only; default off). ALARE strips brackets automatically.
+
 ---
 
 ## Audio architecture

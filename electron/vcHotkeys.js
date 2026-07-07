@@ -23,6 +23,10 @@ const VC_HOTKEYS = [
   { accelerator: 'CommandOrControl+Alt+D', action: 'debugOutlines' },
   // Toggle fullscreen layout editing — move/resize areas and floats on the VC surface.
   { accelerator: 'CommandOrControl+Alt+L', action: 'layoutMode' },
+  // ALARE lyric scroll trim — small live correction (cleared only via ⌘⌥0).
+  { accelerator: 'CommandOrControl+Alt+=', action: 'alareSpeedUp' },
+  { accelerator: 'CommandOrControl+Alt+-', action: 'alareSpeedDown' },
+  { accelerator: 'CommandOrControl+Alt+0', action: 'alareSpeedReset' },
 ];
 
 function registerVcHotkeys(onHotkey) {

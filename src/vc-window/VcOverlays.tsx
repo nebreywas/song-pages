@@ -1,68 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import type { VcOverlayId, VcStatePayload } from '@shared/vcModeTypes';
 
 import { formatTime } from '../listener/formatTime';
 
-type PraiseHeartsProps = {
-  token: number;
-};
-
-type Heart = {
-  id: number;
-  x: number;
-  y: number;
-  size: number;
-  drift: number;
-};
-
-/** Random floating hearts for ⌘⌥P praise hotkey. */
-export function PraiseHearts({ token }: PraiseHeartsProps) {
-  const [hearts, setHearts] = useState<Heart[]>([]);
-
-  useEffect(() => {
-    if (token <= 0) return;
-    const batch = Array.from({ length: 14 }, (_, index) => ({
-      id: token * 100 + index,
-      x: 5 + Math.random() * 90,
-      y: 10 + Math.random() * 80,
-      size: 16 + Math.random() * 22,
-      drift: -20 + Math.random() * 40,
-    }));
-    setHearts(batch);
-    const timerId = window.setTimeout(() => setHearts([]), 3000);
-    return () => window.clearTimeout(timerId);
-  }, [token]);
-
-  return (
-    <div className="vc-praise-layer" aria-hidden="true">
-      {hearts.map((heart) => (
-        <span
-          key={heart.id}
-          className="vc-praise-heart"
-          style={
-            {
-              left: `${heart.x}%`,
-              top: `${heart.y}%`,
-              fontSize: `${heart.size}px`,
-              '--drift': `${heart.drift}px`,
-            } as React.CSSProperties
-          }
-        >
-          ♥
-        </span>
-      ))}
-    </div>
-  );
-}
-
 type VcOverlaysProps = {
   state: VcStatePayload;
   activeOverlay: VcOverlayId | null;
-  praiseToken: number;
 };
 
-export function VcOverlays({ state, activeOverlay, praiseToken }: VcOverlaysProps) {
+export function VcOverlays({ state, activeOverlay }: VcOverlaysProps) {
   const song = state.currentSong;
   const playback = state.playback;
 
@@ -74,8 +21,6 @@ export function VcOverlays({ state, activeOverlay, praiseToken }: VcOverlaysProp
 
   return (
     <>
-      <PraiseHearts token={praiseToken} />
-
       {activeOverlay === 'remaining' ? (
         <div className="vc-overlay vc-overlay-remaining">{elapsedRemaining}</div>
       ) : null}

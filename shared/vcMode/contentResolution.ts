@@ -27,6 +27,11 @@ import {
   resolveSeekBarPresentation,
   resolveSongAreaTextPresentation,
   resolveLyricsEdgeFade,
+  resolveLyricsRemoveBracketed,
+  resolveLyricTracking,
+  resolveAlareFadeEnabled,
+  resolveAlareTargetVisibleLines,
+  type VcLyricTracking,
   resolveSongGraphicPresentation,
   resolveSongTitleTextPresentation,
   resolveSongVideoPresentation,
@@ -52,6 +57,7 @@ import {
 } from '../vcModeTypes';
 import type { VcGridDefaultTypography, VcGridDesignSettings } from './gridDesign';
 import { DEFAULT_VC_GRID_DESIGN } from './gridDesign';
+import { normalizeAlareLyricsText, stripBracketedLyricsText } from '../lyricsText';
 
 export type VcResolutionContext = {
   song: VcSongPayload | null;
@@ -105,6 +111,12 @@ export type ResolvedLyrics = {
   markdownSource?: boolean;
   textAlign?: VcTextAlign;
   lyricsEdgeFade?: boolean;
+  lyricTracking?: VcLyricTracking;
+  alareFadeEnabled?: boolean;
+  alareTargetVisibleLines?: number;
+  /** For ALARE timeline — manifest/catalog duration when available. */
+  manifestDurationSeconds?: number | null;
+  songId?: string | null;
 };
 
 export type ResolvedAbout = {
@@ -552,14 +564,41 @@ function applySongPresentation(
   if (rule === 'area-text') {
     const presentation = resolveSongAreaTextPresentation(overrides, typography);
     if (resolved.kind === 'lyrics') {
+      const tracking = resolveLyricTracking(overrides);
+      const manifestDuration = songDurationSeconds(ctx);
+      const songId = ctx.song?.id != null ? String(ctx.song.id) : null;
+
+      if (tracking === 'alare') {
+        return {
+          ...resolved,
+          text: normalizeAlareLyricsText(resolved.text),
+          fontStyle: presentation.fontStyle,
+          fontSize: presentation.fontSize,
+          color: presentation.color,
+          markdownSource: false,
+          textAlign: presentation.textAlign,
+          lyricTracking: 'alare',
+          alareFadeEnabled: resolveAlareFadeEnabled(overrides),
+          alareTargetVisibleLines: resolveAlareTargetVisibleLines(overrides),
+          manifestDurationSeconds: manifestDuration,
+          songId,
+        };
+      }
+
+      const removeBracketed = resolveLyricsRemoveBracketed(overrides);
+      const text = removeBracketed ? stripBracketedLyricsText(resolved.text) : resolved.text;
       return {
         ...resolved,
+        text,
         fontStyle: presentation.fontStyle,
         fontSize: presentation.fontSize,
         color: presentation.color,
         markdownSource: presentation.markdownSource,
         textAlign: presentation.textAlign,
+        lyricTracking: 'simple-scroll',
         lyricsEdgeFade: resolveLyricsEdgeFade(overrides),
+        manifestDurationSeconds: manifestDuration,
+        songId,
       };
     }
     if (resolved.kind === 'text') {

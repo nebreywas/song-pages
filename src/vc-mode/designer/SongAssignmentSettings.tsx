@@ -100,7 +100,9 @@ export function SongAssignmentSettings({
           onOverridesChange={(overrides) => onChange({ overrides })}
           showAllCaps={false}
           showMarkdown
+          showLyricsTracking={content === 'lyrics'}
           showLyricsEdgeFade={content === 'lyrics'}
+          showLyricsRemoveBracketed={content === 'lyrics'}
         />
       )}
 

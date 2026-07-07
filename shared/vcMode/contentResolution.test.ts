@@ -206,6 +206,39 @@ test('resolveVcCellContent applies lyrics edge fade override', () => {
   }
 });
 
+test('resolveVcCellContent applies ALARE lyric tracking', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: '[Verse]\nLine one\nLine two' },
+  });
+
+  const alare = resolveVcCellContent('lyrics', null, ctx, { lyricTracking: 'alare' });
+  assert.equal(alare.kind, 'lyrics');
+  if (alare.kind === 'lyrics') {
+    assert.equal(alare.lyricTracking, 'alare');
+    assert.equal(alare.markdownSource, false);
+    assert.equal(alare.text.includes('['), false);
+    assert.equal(alare.alareFadeEnabled, true);
+  }
+});
+
+test('resolveVcCellContent strips bracketed lyrics when configured', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: '[Verse 1]\nHello [softly] world\n[Chorus]\nAgain' },
+  });
+
+  const raw = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(raw.kind, 'lyrics');
+  if (raw.kind === 'lyrics') {
+    assert.equal(raw.text, '[Verse 1]\nHello [softly] world\n[Chorus]\nAgain');
+  }
+
+  const stripped = resolveVcCellContent('lyrics', null, ctx, { lyricsRemoveBracketed: true });
+  assert.equal(stripped.kind, 'lyrics');
+  if (stripped.kind === 'lyrics') {
+    assert.equal(stripped.text, '\nHello world\n\nAgain');
+  }
+});
+
 test('resolveVcCellContent resolves song year, length, and elapsed/remaining', () => {
   const ctx = baseContext({
     song: songPayload(),

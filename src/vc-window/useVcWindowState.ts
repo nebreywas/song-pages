@@ -10,13 +10,17 @@ export const VC_CELL_CLICK_COOLDOWN_MS = 800;
 
 const CENTER_OVERLAYS: VcOverlayId[] = ['cover', 'host', 'songInfo', 'upcoming'];
 
+/** Minimum ms between praise/Kudo cycle triggers (blocks OS key-repeat bursts). */
+const KUDO_TRIGGER_DEBOUNCE_MS = 350;
+
 export type VcWindowContext = {
   state: VcStatePayload | null;
   frequencyData: Uint8Array;
   frame: number;
   canvasFrame: string | null;
   activeOverlay: VcOverlayId | null;
-  praiseToken: number;
+  /** Incremented on ⌘⌥P — cycles Kudo presets on the VC surface. */
+  kudoTriggerToken: number;
   /** Bright red area/float outlines — toggled by ⌘⌥D / Ctrl+Alt+D. */
   debugOutlines: boolean;
   /** Fullscreen layout editing — toggled by ⌘⌥L / Ctrl+Alt+L. */
@@ -30,10 +34,10 @@ export function useVcWindowState(): VcWindowContext {
   const [frame, setFrame] = useState(0);
   const [canvasFrame, setCanvasFrame] = useState<string | null>(null);
   const [activeOverlay, setActiveOverlay] = useState<VcOverlayId | null>(null);
-  const [praiseToken, setPraiseToken] = useState(0);
+  const [kudoTriggerToken, setKudoTriggerToken] = useState(0);
   const [debugOutlines, setDebugOutlines] = useState(false);
   const [layoutMode, setLayoutMode] = useState(false);
-  const praiseBusyRef = useRef(false);
+  const lastKudoTriggerAtRef = useRef(0);
 
   useEffect(() => {
     const app = getApp();
@@ -56,12 +60,10 @@ export function useVcWindowState(): VcWindowContext {
 
     const offHotkey = app.vc.onHotkey(({ action }: { action: VcHotkeyAction }) => {
       if (action === 'praise') {
-        if (praiseBusyRef.current) return;
-        praiseBusyRef.current = true;
-        setPraiseToken((value) => value + 1);
-        window.setTimeout(() => {
-          praiseBusyRef.current = false;
-        }, 3200);
+        const now = Date.now();
+        if (now - lastKudoTriggerAtRef.current < KUDO_TRIGGER_DEBOUNCE_MS) return;
+        lastKudoTriggerAtRef.current = now;
+        setKudoTriggerToken((value) => value + 1);
         return;
       }
 
@@ -111,7 +113,7 @@ export function useVcWindowState(): VcWindowContext {
     frame,
     canvasFrame,
     activeOverlay,
-    praiseToken,
+    kudoTriggerToken,
     debugOutlines,
     layoutMode,
     onChangeSurface,

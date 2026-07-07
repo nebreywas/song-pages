@@ -9,8 +9,10 @@ import { VcOverlays } from './VcOverlays';
 import { VcSurface } from './VcSurface';
 import { VcVisualizerRotationProvider } from './VcVisualizerRotationContext';
 import { useHostContentCatalog } from '../host-content/useHostContentCatalog';
+import { VcAlareNudgeProvider } from './VcAlareNudgeContext';
 import { useVcPlaybackAudio } from './useVcPlaybackAudio';
 import { useVcWindowState } from './useVcWindowState';
+import { KudoLayer } from '../kudos/KudoLayer';
 
 /** VC Mode display surface — template areas + floats + host hotkey overlays. */
 export function VcWindowApp() {
@@ -20,7 +22,7 @@ export function VcWindowApp() {
     frame,
     canvasFrame,
     activeOverlay,
-    praiseToken,
+    kudoTriggerToken,
     debugOutlines,
     layoutMode,
     onChangeSurface,
@@ -129,6 +131,7 @@ export function VcWindowApp() {
           <p className="vc-window-hint">Start VC Mode from the main window while a song is playing.</p>
         </div>
       ) : (
+        <VcAlareNudgeProvider playingSongId={displayState.currentSong?.id ?? null}>
         <div className={`vc-window-shell${layoutMode ? ' vc-window-layout-mode' : ''}`}>
           {layoutMode ? (
             <div className="vc-layout-mode-hud" aria-live="polite">
@@ -150,10 +153,17 @@ export function VcWindowApp() {
               onChangeSurface={layoutMode ? handleChangeSurface : undefined}
             />
             {!layoutMode ? (
-              <VcOverlays state={displayState} activeOverlay={activeOverlay} praiseToken={praiseToken} />
+              <>
+                <KudoLayer
+                  presets={displayState.kudoPresets ?? []}
+                  triggerToken={kudoTriggerToken}
+                />
+                <VcOverlays state={displayState} activeOverlay={activeOverlay} />
+              </>
             ) : null}
           </VcVisualizerRotationProvider>
         </div>
+        </VcAlareNudgeProvider>
       )}
     </>
   );

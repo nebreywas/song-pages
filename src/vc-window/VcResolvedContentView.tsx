@@ -13,6 +13,7 @@ import { VcMediaPresentation } from './VcMediaPresentation';
 import { VcTitleLineText } from './VcTitleLineText';
 import { VcTransportBar } from './VcTransportBar';
 import { VcUpcomingCoversView } from './VcUpcomingCoversView';
+import { VcAlareLyricsView } from './VcAlareLyricsView';
 import { lyricsScrollClassName } from './lyricsScrollClassName';
 
 type VcResolvedContentViewProps = {
@@ -162,6 +163,11 @@ function ResolvedLyricsView({
   markdownSource,
   textAlign,
   lyricsEdgeFade,
+  lyricTracking,
+  alareFadeEnabled,
+  alareTargetVisibleLines,
+  manifestDurationSeconds,
+  songId,
 }: {
   text: string;
   playback: VcPlaybackState;
@@ -171,7 +177,29 @@ function ResolvedLyricsView({
   markdownSource?: boolean;
   textAlign?: VcTextAlign;
   lyricsEdgeFade?: boolean;
+  lyricTracking?: 'simple-scroll' | 'alare';
+  alareFadeEnabled?: boolean;
+  alareTargetVisibleLines?: number;
+  manifestDurationSeconds?: number | null;
+  songId?: string | null;
 }) {
+  if (lyricTracking === 'alare' && fontStyle && fontSize && color) {
+    return (
+      <VcAlareLyricsView
+        text={text}
+        songId={songId ?? null}
+        manifestDurationSeconds={manifestDurationSeconds}
+        playback={playback}
+        fontStyle={fontStyle}
+        fontSize={fontSize}
+        color={color}
+        textAlign={textAlign}
+        fadeEnabled={alareFadeEnabled}
+        targetVisibleLines={alareTargetVisibleLines}
+      />
+    );
+  }
+
   const progress = playback.duration > 0 ? playback.currentTime / playback.duration : 0;
   const textStyle =
     fontStyle && fontSize && color ? hostTextStyle(fontStyle, fontSize, color, textAlign) : textAlign ? { textAlign } : undefined;
@@ -344,6 +372,11 @@ export function VcResolvedContentView({
           markdownSource={resolved.markdownSource}
           textAlign={resolved.textAlign}
           lyricsEdgeFade={resolved.lyricsEdgeFade}
+          lyricTracking={resolved.lyricTracking}
+          alareFadeEnabled={resolved.alareFadeEnabled}
+          alareTargetVisibleLines={resolved.alareTargetVisibleLines}
+          manifestDurationSeconds={resolved.manifestDurationSeconds}
+          songId={resolved.songId}
         />
       );
     case 'about':

@@ -12,6 +12,7 @@ import { normalizeExperienceId } from '../visualizers/native/registry';
 import { useExperienceSettings } from '../visualizers/settings/useExperienceSettings';
 import { useAudioAnalyser } from '../visualizers/useAudioAnalyser';
 import { createDefaultVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
+import { useKudoPresets } from '../kudos/useKudoPresets';
 
 const FRAME_INTERVAL_MS = 16;
 const STATE_INTERVAL_MS = 200;
@@ -88,6 +89,7 @@ export function useVcModeManager({
 
   const [reportedVisualizerId, setReportedVisualizerId] = useState<string | null>(null);
   const prevVcOpenRef = useRef(false);
+  const kudos = useKudoPresets();
 
   useEffect(() => {
     activeConfigRef.current = activeConfig;
@@ -225,6 +227,7 @@ export function useVcModeManager({
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
       effectiveVisualizerId: vcVisualizerId,
+      kudoPresets: kudos.presets,
     };
   }, [
     activeConfig,
@@ -233,6 +236,7 @@ export function useVcModeManager({
     currentTime,
     duration,
     isPlaying,
+    kudos.presets,
     nextSongPreview,
     playingSong,
     songManifest,
@@ -263,6 +267,7 @@ export function useVcModeManager({
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
       effectiveVisualizerId: vcVisualizerId,
+      kudoPresets: kudos.presets,
     };
   }, [
     activeConfig,
@@ -271,6 +276,7 @@ export function useVcModeManager({
     designerSong,
     duration,
     isPlaying,
+    kudos.presets,
     nextSongPreview,
     playingSong,
     songManifest,
@@ -352,6 +358,12 @@ export function useVcModeManager({
       }
     };
   }, [buildStatePayload, vcOpen]);
+
+  /** Push Kudo preset changes to VC immediately. */
+  useEffect(() => {
+    if (!vcOpen) return;
+    getApp()?.vc?.sendState(buildStatePayload());
+  }, [buildStatePayload, kudos.presets, vcOpen]);
 
   useEffect(() => {
     const app = getApp();
@@ -447,5 +459,6 @@ export function useVcModeManager({
     closeModal,
     startVcMode,
     closeVcMode,
+    kudos,
   };
 }

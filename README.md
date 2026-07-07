@@ -27,6 +27,8 @@ Beyond the core loop, the desktop app also includes VC Mode (surface designer + 
 | [settings-and-persistence.md](documentation/settings-and-persistence.md) | Settings keys and disk paths |
 | [song-pages-vc-mode-surface-view-designer-spec.md](documentation/song-pages-vc-mode-surface-view-designer-spec.md) | VC surface designer product spec |
 | [Host-content-design.md](documentation/Host-content-design.md) | Host content catalog design |
+| [shared-utilities.md](documentation/shared-utilities.md) | Reusable `shared/` helpers (lyrics, time, markdown) |
+| [ALARE.md](documentation/ALARE.md) | Approximate lyric allocation & rendering (VC lyric tracking) |
 
 ## Technology Stack
 
@@ -78,7 +80,7 @@ song-pages/
 ├── documentation/          # Architecture, security, product specs
 ├── electron/               # Main process, IPC, SQLite, windows, host content media
 ├── compiler/               # Static site + manifest generator (+ Node tests)
-├── shared/                 # Cross-process types: manifests, VC surface, host content, CSP
+├── shared/                 # Cross-process types + reusable helpers (see shared-utilities.md)
 ├── artist-page-templates/  # HTML/CSS/JS templates for compiled sites
 ├── src/                    # React renderer
 │   ├── listener/           # Listener Mode, HLS player, song page webview

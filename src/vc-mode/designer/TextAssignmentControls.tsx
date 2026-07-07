@@ -11,14 +11,18 @@ import {
   type HostContentItem,
 } from '@shared/hostContent';
 import {
+  DEFAULT_VC_LYRIC_TRACKING,
   DEFAULT_VC_TEXT_ALIGN,
   DEFAULT_VC_TITLE_OVERFLOW,
   getAssignmentDefaults,
   patchAssignmentOverride,
+  VC_LYRIC_TRACKING_IDS,
+  VC_LYRIC_TRACKING_LABELS,
   VC_TEXT_ALIGN_IDS,
   VC_TEXT_ALIGN_LABELS,
   VC_TITLE_OVERFLOW_OPTIONS,
   type VcAssignmentOverrides,
+  type VcLyricTracking,
   type VcTextAlign,
   type VcTitleOverflow,
 } from '@shared/vcMode/assignmentSettings';
@@ -41,6 +45,10 @@ type TextAssignmentControlsProps = {
   showTitleOverflow?: boolean;
   /** Lyrics-only: top/bottom edge fade while scrolling. */
   showLyricsEdgeFade?: boolean;
+  /** Lyrics-only: hide [bracketed annotation] segments. */
+  showLyricsRemoveBracketed?: boolean;
+  /** Lyrics-only: Simple Scroll vs ALARE tracking mode. */
+  showLyricsTracking?: boolean;
 };
 
 function patchOverrides(
@@ -66,6 +74,8 @@ export function TextAssignmentControls({
   showMarkdown,
   showTitleOverflow = false,
   showLyricsEdgeFade = false,
+  showLyricsRemoveBracketed = false,
+  showLyricsTracking = false,
 }: TextAssignmentControlsProps) {
   const defaults = getAssignmentDefaults(content, item, catalog, gridTypography);
 
@@ -76,6 +86,12 @@ export function TextAssignmentControls({
   const markdownSource = overrides.markdownSource ?? defaults.markdownSource ?? false;
   const textAlign = overrides.textAlign ?? defaults.textAlign ?? DEFAULT_VC_TEXT_ALIGN;
   const lyricsEdgeFade = overrides.lyricsEdgeFade ?? defaults.lyricsEdgeFade ?? true;
+  const lyricsRemoveBracketed =
+    overrides.lyricsRemoveBracketed ?? defaults.lyricsRemoveBracketed ?? false;
+  const lyricTracking = overrides.lyricTracking ?? defaults.lyricTracking ?? DEFAULT_VC_LYRIC_TRACKING;
+  const alareFadeEnabled = overrides.alareFadeEnabled ?? defaults.alareFadeEnabled ?? true;
+  const alareTargetVisibleLines = overrides.alareTargetVisibleLines ?? defaults.alareTargetVisibleLines;
+  const isAlare = lyricTracking === 'alare';
   const titleOverflow = (overrides.overflow ??
     defaults.overflow ??
     DEFAULT_VC_TITLE_OVERFLOW) as VcTitleOverflow;
@@ -138,7 +154,22 @@ export function TextAssignmentControls({
         </AssignmentField>
       ) : null}
 
-      {showMarkdown ? (
+      {showLyricsTracking ? (
+        <AssignmentField label="Lyric tracking">
+          <select
+            value={lyricTracking}
+            onChange={(e) => patch('lyricTracking', e.target.value as VcLyricTracking)}
+          >
+            {VC_LYRIC_TRACKING_IDS.map((mode) => (
+              <option key={mode} value={mode}>
+                {VC_LYRIC_TRACKING_LABELS[mode]}
+              </option>
+            ))}
+          </select>
+        </AssignmentField>
+      ) : null}
+
+      {showMarkdown && !isAlare ? (
         <AssignmentField label="Display">
           <label className="vc-field vc-field-inline">
             <input
@@ -166,7 +197,20 @@ export function TextAssignmentControls({
         </AssignmentField>
       ) : null}
 
-      {showLyricsEdgeFade ? (
+      {showLyricsRemoveBracketed && !isAlare ? (
+        <AssignmentField label="Bracketed text">
+          <label className="vc-field vc-field-inline">
+            <input
+              type="checkbox"
+              checked={lyricsRemoveBracketed}
+              onChange={(e) => patch('lyricsRemoveBracketed', e.target.checked)}
+            />
+            <span>Remove bracketed text</span>
+          </label>
+        </AssignmentField>
+      ) : null}
+
+      {showLyricsEdgeFade && !isAlare ? (
         <AssignmentField label="Scroll fade">
           <label className="vc-field vc-field-inline">
             <input
@@ -177,6 +221,34 @@ export function TextAssignmentControls({
             <span>Edge fade bars</span>
           </label>
         </AssignmentField>
+      ) : null}
+
+      {showLyricsTracking && isAlare ? (
+        <>
+          <AssignmentField label="ALARE fade">
+            <label className="vc-field vc-field-inline">
+              <input
+                type="checkbox"
+                checked={alareFadeEnabled}
+                onChange={(e) => patch('alareFadeEnabled', e.target.checked)}
+              />
+              <span>Line fade profile</span>
+            </label>
+          </AssignmentField>
+          <AssignmentField label="Target visible lines">
+            <input
+              type="number"
+              min={1}
+              max={15}
+              placeholder="Auto"
+              value={alareTargetVisibleLines ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value.trim();
+                patch('alareTargetVisibleLines', raw === '' ? undefined : Number(raw));
+              }}
+            />
+          </AssignmentField>
+        </>
       ) : null}
     </>
   );

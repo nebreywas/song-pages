@@ -31,6 +31,7 @@ import {
   VC_VISUALIZER_CHANGE_RULE_OPTIONS,
   VC_VISUALIZER_SEQUENCE_OPTIONS,
 } from '@shared/vcModeTypes';
+import type { KudoPreset } from '@shared/kudos';
 import {
   createDefaultHostContentCatalog,
   HOST_CONTENT_SETTINGS_KEY,
@@ -47,6 +48,7 @@ import { DesignerCanvas, type DesignerSelection } from './designer/DesignerCanva
 import { GridDesignSettingsPanel } from './designer/GridDesignSettingsPanel';
 import { RegionContentPopover, type RegionTarget } from './designer/RegionContentPopover';
 import { HostContentManager } from './host-content/HostContentManager';
+import { KudosManager } from './kudos/KudosManager';
 import { createDefaultVcConfig, migrateVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
 import { useAutoSaveVcConfig, vcConfigSaveStatusLabel } from './useAutoSaveVcConfig';
 
@@ -55,6 +57,13 @@ type VcModeModalProps = {
   onClose: () => void;
   onStart: (config: VcModeConfig) => void;
   previewState?: VcStatePayload | null;
+  kudos?: {
+    presets: KudoPreset[];
+    addPreset: (preset: KudoPreset) => Promise<unknown>;
+    updatePreset: (id: string, patch: Partial<KudoPreset>) => Promise<unknown>;
+    deletePreset: (id: string) => Promise<unknown>;
+    movePreset: (id: string, direction: -1 | 1) => Promise<unknown>;
+  };
 };
 
 type PopoverState = {
@@ -183,7 +192,7 @@ function applyCellPatch(
   return normalizeVcConfig(next);
 }
 
-export function VcModeModal({ open, onClose, onStart, previewState = null }: VcModeModalProps) {
+export function VcModeModal({ open, onClose, onStart, previewState = null, kudos }: VcModeModalProps) {
   const [config, setConfig] = useState<VcModeConfig>(() => createDefaultVcConfig());
   const [hostCatalog, setHostCatalog] = useState<HostContentCatalog>(() => createDefaultHostContentCatalog());
   const [designerTab, setDesignerTab] = useState<DesignerTab>('surface');
@@ -570,12 +579,22 @@ export function VcModeModal({ open, onClose, onStart, previewState = null }: VcM
 
           {designerTab === 'kudos' ? (
             <div
-              className="vc-designer-tab-panel vc-tab-placeholder"
+              className="vc-designer-tab-panel"
               role="tabpanel"
               id="vc-designer-panel-kudos"
               aria-labelledby="vc-designer-tab-kudos"
             >
-              <p className="vc-tab-placeholder-lead">Kudos configuration will live here.</p>
+              {kudos ? (
+                <KudosManager
+                  presets={kudos.presets}
+                  onAddPreset={kudos.addPreset}
+                  onUpdatePreset={kudos.updatePreset}
+                  onDeletePreset={kudos.deletePreset}
+                  onMovePreset={kudos.movePreset}
+                />
+              ) : (
+                <p className="vc-tab-placeholder-lead">Loading Kudos…</p>
+              )}
             </div>
           ) : null}
 

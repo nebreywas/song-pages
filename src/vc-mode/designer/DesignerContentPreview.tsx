@@ -25,6 +25,7 @@ import {
 import { renderMarkdownPreview } from '../../lib/markdownPreview';
 import { getVisualizer } from '../../visualizers/registry';
 import { lyricsScrollClassName } from '../../vc-window/lyricsScrollClassName';
+import { VcAlareLyricsPreview } from '../../vc-window/VcAlareLyricsView';
 import { systemFallbackUrl } from '../../vc-window/systemFallbackUrls';
 import { useResolvedMediaUrl } from '../../vc-window/useResolvedMediaUrl';
 import { VcMediaPresentation } from '../../vc-window/VcMediaPresentation';
@@ -133,6 +134,20 @@ function DesignerSongResolvedPreview({
       );
     }
     case 'lyrics': {
+      if (resolved.lyricTracking === 'alare' && resolved.fontStyle && resolved.fontSize && resolved.color) {
+        return (
+          <VcAlareLyricsPreview
+            text={resolved.text}
+            fontStyle={resolved.fontStyle}
+            fontSize={resolved.fontSize}
+            color={resolved.color}
+            textAlign={resolved.textAlign}
+            fadeEnabled={resolved.alareFadeEnabled}
+            targetVisibleLines={resolved.alareTargetVisibleLines ?? 5}
+          />
+        );
+      }
+
       const progress = playback.duration > 0 ? playback.currentTime / playback.duration : 0;
       const textStyle = designerTextStyle(
         resolved.fontStyle,

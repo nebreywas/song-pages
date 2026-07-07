@@ -1,5 +1,6 @@
 /** VC Mode — listening party visual mixer types (shared main ↔ VC window). */
 
+import type { KudoPreset } from './kudos';
 import { VC_MAX_BASE_AREAS, VC_SAFE_TEMPLATE_ID } from './vcSurface/constants';
 import { sanitizeFloats, type VcFloatGeometry } from './vcSurface/floats';
 import { resolveDividers } from './vcSurface/geometry';
@@ -233,6 +234,8 @@ export type VcStatePayload = {
   artistPhotoUrl: string | null;
   /** Active visualizer while VC is live — may differ from config.visualizerId when rotating. */
   effectiveVisualizerId?: string;
+  /** Host Kudo presets in list order (cycle trigger follows this order). */
+  kudoPresets?: KudoPreset[];
 };
 
 export const VC_SONG_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: string }> = [
@@ -314,7 +317,13 @@ export type VcHotkeyAction =
   | 'upcoming'
   | 'debugOutlines'
   /** Toggle fullscreen layout editing on the VC projection surface (⌘⌥L). */
-  | 'layoutMode';
+  | 'layoutMode'
+  /** Nudge ALARE lyric scroll slightly faster (⌘⌥=). Resets each song. */
+  | 'alareSpeedUp'
+  /** Nudge ALARE lyric scroll slightly slower (⌘⌥-). Resets each song. */
+  | 'alareSpeedDown'
+  /** Reset ALARE lyric scroll trim to default (⌘⌥0). */
+  | 'alareSpeedReset';
 
 export const VC_SETTINGS_KEY = 'vc.lastConfig';
 

@@ -49,6 +49,18 @@ export const VC_TITLE_OVERFLOW_OPTIONS: Array<{ value: VcTitleOverflow; label: s
 
 export const DEFAULT_VC_TITLE_OVERFLOW: VcTitleOverflow = 'static';
 
+/** VC lyrics progression mode (ALARE §20). */
+export type VcLyricTracking = 'simple-scroll' | 'alare';
+
+export const VC_LYRIC_TRACKING_IDS = ['simple-scroll', 'alare'] as const satisfies readonly VcLyricTracking[];
+
+export const VC_LYRIC_TRACKING_LABELS: Record<VcLyricTracking, string> = {
+  'simple-scroll': 'Simple Scroll',
+  alare: 'ALARE',
+};
+
+export const DEFAULT_VC_LYRIC_TRACKING: VcLyricTracking = 'simple-scroll';
+
 /** Sparse overrides stored on hostSlotA / hostSlotB — only explicit diffs from inherited defaults. */
 export type VcAssignmentOverrides = {
   insetPct?: number;
@@ -78,6 +90,14 @@ export type VcAssignmentOverrides = {
   upcomingLayout?: VcUpcomingLayout;
   /** Lyrics scroll container: feather top/bottom edges into the region background. */
   lyricsEdgeFade?: boolean;
+  /** Lyrics: omit [bracketed annotation] segments at display time (Simple Scroll only). */
+  lyricsRemoveBracketed?: boolean;
+  /** Lyrics progression — Simple Scroll (default) or ALARE approximate timeline. */
+  lyricTracking?: VcLyricTracking;
+  /** ALARE: per-line opacity fade (default on). */
+  alareFadeEnabled?: boolean;
+  /** ALARE: host preference for visible lines; renderer clamps to geometry. */
+  alareTargetVisibleLines?: number;
 };
 
 export type EffectiveMediaPresentation = {
@@ -132,6 +152,7 @@ const SLIDE_PLAYBACK = new Set<VcSlideshowPlayback>(['once', 'loop']);
 const GALLERY_LAYOUTS = new Set<VcGalleryLayout>(['static', 'scroll', 'coverflow']);
 const UPCOMING_LAYOUTS = new Set<VcUpcomingLayout>(['gallery', 'overflow']);
 const TEXT_ALIGNS = new Set<VcTextAlign>(VC_TEXT_ALIGN_IDS);
+const LYRIC_TRACKING_MODES = new Set<VcLyricTracking>(VC_LYRIC_TRACKING_IDS);
 
 export const SYSTEM_ASSIGNMENT_DEFAULTS = {
   insetPct: 0,
@@ -150,7 +171,18 @@ const OVERRIDE_KEYS_BY_CONTENT: Partial<Record<VcCellContent, Array<keyof VcAssi
   cover: ['insetPct', 'fitMode', 'overflow'],
   'video-cover': ['insetPct', 'fitMode', 'playback'],
   'artist-image': ['insetPct', 'fitMode', 'overflow'],
-  lyrics: ['fontStyle', 'fontSize', 'color', 'markdownSource', 'textAlign', 'lyricsEdgeFade'],
+  lyrics: [
+    'fontStyle',
+    'fontSize',
+    'color',
+    'markdownSource',
+    'textAlign',
+    'lyricsEdgeFade',
+    'lyricsRemoveBracketed',
+    'lyricTracking',
+    'alareFadeEnabled',
+    'alareTargetVisibleLines',
+  ],
   about: ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
   'artist-name': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
   'song-title': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign', 'overflow'],
@@ -247,6 +279,13 @@ export function sanitizeAssignmentOverrides(raw: unknown): VcAssignmentOverrides
   const upcomingLayout = pickEnum(value.upcomingLayout, UPCOMING_LAYOUTS);
   if (upcomingLayout) next.upcomingLayout = upcomingLayout;
   if (typeof value.lyricsEdgeFade === 'boolean') next.lyricsEdgeFade = value.lyricsEdgeFade;
+  if (typeof value.lyricsRemoveBracketed === 'boolean') next.lyricsRemoveBracketed = value.lyricsRemoveBracketed;
+  const lyricTracking = pickEnum(value.lyricTracking, LYRIC_TRACKING_MODES);
+  if (lyricTracking) next.lyricTracking = lyricTracking;
+  if (typeof value.alareFadeEnabled === 'boolean') next.alareFadeEnabled = value.alareFadeEnabled;
+  if (typeof value.alareTargetVisibleLines === 'number' && Number.isFinite(value.alareTargetVisibleLines)) {
+    next.alareTargetVisibleLines = Math.min(15, Math.max(1, Math.round(value.alareTargetVisibleLines)));
+  }
 
   return next;
 }
@@ -366,6 +405,9 @@ export function getAssignmentDefaults(
       markdownSource: false,
       textAlign: DEFAULT_VC_TEXT_ALIGN,
       lyricsEdgeFade: true,
+      lyricsRemoveBracketed: false,
+      lyricTracking: DEFAULT_VC_LYRIC_TRACKING,
+      alareFadeEnabled: true,
     };
   }
 
@@ -525,6 +567,23 @@ export function resolveSongTitleTextPresentation(
 /** Whether lyrics use top/bottom edge fade (default on). */
 export function resolveLyricsEdgeFade(overrides: VcAssignmentOverrides): boolean {
   return overrides.lyricsEdgeFade ?? true;
+}
+
+/** Whether lyrics omit [bracketed annotation] segments when displayed (Simple Scroll; default off). */
+export function resolveLyricsRemoveBracketed(overrides: VcAssignmentOverrides): boolean {
+  return overrides.lyricsRemoveBracketed ?? false;
+}
+
+export function resolveLyricTracking(overrides: VcAssignmentOverrides): VcLyricTracking {
+  return overrides.lyricTracking ?? DEFAULT_VC_LYRIC_TRACKING;
+}
+
+export function resolveAlareFadeEnabled(overrides: VcAssignmentOverrides): boolean {
+  return overrides.alareFadeEnabled ?? true;
+}
+
+export function resolveAlareTargetVisibleLines(overrides: VcAssignmentOverrides): number | undefined {
+  return overrides.alareTargetVisibleLines;
 }
 
 /** Resolve song area-style text presentation from assignment overrides. */
