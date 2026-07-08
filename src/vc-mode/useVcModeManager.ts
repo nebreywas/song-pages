@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SongPagesSongManifest } from '@shared/manifests';
 import type { VcModeConfig, VcStatePayload, VcSurfaceConfig, VcUpcomingSong } from '@shared/vcModeTypes';
+import { deriveCommandRuntimeContextFromVcState } from '@shared/commands';
 import { configUsesVisualizer, normalizeVcConfig } from '@shared/vcModeTypes';
 
 import { getApp } from '../lib/bridge';
 import { resolveAssetUrl } from '../lib/resolveAssetUrl';
+import { isVirtualPlaylistSong, vcArtistDisplayName } from '@shared/listener/playlistKinds';
 import type { ArtistRow, SongRow } from '../types/app';
 import { isButterchurnExperienceId } from '../visualizers/butterchurn/presets/approved/presetKeys';
 import { normalizeExperienceId } from '../visualizers/native/registry';
@@ -43,10 +45,13 @@ function buildSongPayload(
   artist: ArtistRow | null,
 ): VcStatePayload['currentSong'] {
   if (!song) return null;
+  const profileArtist = isVirtualPlaylistSong(song) ? null : artist;
+  const trackArtist =
+    song.artist_name?.trim() || manifest?.artistName?.trim() || profileArtist?.artist_name?.trim() || '';
   return {
     id: song.id,
     title: song.title,
-    artist: song.artist_name ?? artist?.artist_name ?? '',
+    artist: trackArtist,
     year: song.year,
     caption: song.caption,
     coverUrl: resolveAssetUrl(song.page_url, song.cover_url ?? manifest?.coverUrl ?? null),
@@ -193,6 +198,10 @@ export function useVcModeManager({
       return;
     }
     const cached = artists.find((row) => row.id === designerSong.artist_id) ?? null;
+    if (isVirtualPlaylistSong(designerSong)) {
+      setArtistProfile(null);
+      return;
+    }
     setArtistProfile(cached);
 
     const app = getApp();
@@ -201,6 +210,7 @@ export function useVcModeManager({
     let cancelled = false;
     void app.listener.ensureArtistManifest(designerSong.artist_id).then((result) => {
       if (cancelled || !result.ok || !result.data) return;
+      if (isVirtualPlaylistSong(designerSong) || result.data.id !== designerSong.artist_id) return;
       setArtistProfile(result.data);
     });
 
@@ -211,6 +221,7 @@ export function useVcModeManager({
 
   const buildStatePayload = useCallback((): VcStatePayload => {
     const config = normalizeVcConfig(activeConfig);
+    const displaySong = playingSong ?? previewSong ?? null;
     return {
       config,
       playback: { currentTime, duration, isPlaying },
@@ -219,11 +230,11 @@ export function useVcModeManager({
         playbackUrl: activePlaybackUrl ?? playingSong?.playback_url ?? null,
         volume,
       },
-      currentSong: buildSongPayload(playingSong, songManifest, artistProfile),
+      currentSong: buildSongPayload(displaySong, songManifest, artistProfile),
       nextSong: nextSongPreview,
       upcoming,
       hostGraphicUrl: null,
-      artistName: artistProfile?.artist_name ?? playingSong?.artist_name ?? null,
+      artistName: vcArtistDisplayName(displaySong, artistProfile, songManifest?.artistName),
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
       effectiveVisualizerId: vcVisualizerId,
@@ -239,6 +250,7 @@ export function useVcModeManager({
     kudos.presets,
     nextSongPreview,
     playingSong,
+    previewSong,
     songManifest,
     upcoming,
     vcVisualizerId,
@@ -263,7 +275,7 @@ export function useVcModeManager({
       nextSong: nextSongPreview,
       upcoming,
       hostGraphicUrl: null,
-      artistName: artistProfile?.artist_name ?? song?.artist_name ?? null,
+      artistName: vcArtistDisplayName(song, artistProfile, songManifest?.artistName),
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
       effectiveVisualizerId: vcVisualizerId,
@@ -288,7 +300,13 @@ export function useVcModeManager({
     const app = getApp();
     if (!vcOpen || !app?.vc) return;
 
-    const pushState = () => app.vc!.sendState(buildStatePayload());
+    const pushState = () => {
+      const payload = buildStatePayload();
+      app.vc!.sendState(payload);
+      app.commands?.setRuntimeContext?.(
+        deriveCommandRuntimeContextFromVcState(payload, { vcModeActive: true }),
+      );
+    };
     const scheduleSurfaceSave = (config: VcModeConfig) => {
       if (surfaceSaveTimerRef.current != null) {
         window.clearTimeout(surfaceSaveTimerRef.current);
@@ -359,10 +377,19 @@ export function useVcModeManager({
     };
   }, [buildStatePayload, vcOpen]);
 
+  useEffect(() => {
+    if (vcOpen) return;
+    getApp()?.commands?.setRuntimeContext?.({ vcModeActive: false });
+  }, [vcOpen]);
+
   /** Push Kudo preset changes to VC immediately. */
   useEffect(() => {
     if (!vcOpen) return;
-    getApp()?.vc?.sendState(buildStatePayload());
+    const payload = buildStatePayload();
+    getApp()?.vc?.sendState(payload);
+    getApp()?.commands?.setRuntimeContext?.(
+      deriveCommandRuntimeContextFromVcState(payload, { vcModeActive: true }),
+    );
   }, [buildStatePayload, kudos.presets, vcOpen]);
 
   useEffect(() => {

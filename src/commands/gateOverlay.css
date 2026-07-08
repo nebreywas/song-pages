@@ -1,0 +1,114 @@
+.gate-overlay-list {
+  border: 1px solid rgba(120, 170, 255, 0.45);
+  border-radius: 10px;
+  padding: 0.85rem;
+  background: rgba(120, 170, 255, 0.06);
+}
+
+.gate-overlay-list-live {
+  border-color: rgba(120, 170, 255, 0.65);
+  background: rgba(120, 170, 255, 0.1);
+  box-shadow: 0 0 0 1px rgba(120, 170, 255, 0.15);
+}
+
+.gate-overlay-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.gate-overlay-list-title {
+  margin: 0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.gate-overlay-countdown {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: #ffb86b;
+}
+
+.gate-overlay-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.gate-overlay-footer {
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(120, 170, 255, 0.25);
+}
+
+.gate-overlay-row {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.gate-overlay-row.is-unavailable {
+  opacity: 0.55;
+}
+
+.gate-overlay-key {
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0;
+  background: var(--surface-2);
+}
+
+.gate-overlay-label {
+  color: var(--text);
+}
+
+.gate-overlay-unavailable-tag {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gate-overlay-empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.gate-overlay-preview-wrap {
+  margin-top: 0.25rem;
+}
+
+.gate-overlay-preview-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.keybindings-gate-timeout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.keybindings-gate-timeout label {
+  color: var(--text-muted);
+}
+
+.keybindings-gate-timeout select {
+  min-width: 6rem;
+}

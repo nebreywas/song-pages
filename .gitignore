@@ -10,3 +10,4 @@ electron/compiler-dist/
 .env
 .env.*
 !.env.release.example
+static-tests-prototypes/

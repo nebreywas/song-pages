@@ -1,0 +1,34 @@
+.settings-modal-wide {
+  width: min(100%, 56rem);
+  max-height: min(90vh, 820px);
+  overflow: auto;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-tab {
+  font: inherit;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 0.55rem 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.settings-tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.keybindings-loading {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}

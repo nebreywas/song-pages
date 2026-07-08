@@ -45,6 +45,18 @@ contextBridge.exposeInMainWorld('app', {
       ipcRenderer.invoke('listener:probeSongAvailability', pageUrl, playbackUrl),
     resolveSongAccess: (songId, source) =>
       ipcRenderer.invoke('listener:resolveSongAccess', songId, source),
+    countSunoDemoSongs: () => ipcRenderer.invoke('listener:countSunoDemoSongs'),
+    addSunoDemoSong: (input) => ipcRenderer.invoke('listener:addSunoDemoSong', input),
+    getPlaylistOrderState: (playlistKey, currentSongIds) =>
+      ipcRenderer.invoke('listener:getPlaylistOrderState', playlistKey, currentSongIds),
+    savePlaylistCustomOrder: (playlistKey, orderedSongIds) =>
+      ipcRenderer.invoke('listener:savePlaylistCustomOrder', playlistKey, orderedSongIds),
+    clearPlaylistCustomOrder: (playlistKey) =>
+      ipcRenderer.invoke('listener:clearPlaylistCustomOrder', playlistKey),
+    setCatalogSongSkipped: (artistId, externalId, skipped) =>
+      ipcRenderer.invoke('listener:setCatalogSongSkipped', artistId, externalId, skipped),
+    removeLikedSong: (payload) => ipcRenderer.invoke('listener:removeLikedSong', payload),
+    removeSunoDemoSong: (songId) => ipcRenderer.invoke('listener:removeSunoDemoSong', songId),
     cacheStats: () => ipcRenderer.invoke('listener:cacheStats'),
     cacheEvents: (limit) => ipcRenderer.invoke('listener:cacheEvents', limit),
     cacheClearEvents: () => ipcRenderer.invoke('listener:cacheClearEvents'),
@@ -183,5 +195,50 @@ contextBridge.exposeInMainWorld('app', {
     pickAndImportMedia: (payload) => ipcRenderer.invoke('hostContent:pickAndImportMedia', payload),
     resolveMediaUrl: (relativePath) => ipcRenderer.invoke('hostContent:resolveMediaUrl', relativePath),
     deleteMedia: (relativePath) => ipcRenderer.invoke('hostContent:deleteMedia', relativePath),
+  },
+
+  commands: {
+    getState: () => ipcRenderer.invoke('commands:getState'),
+    saveState: (state) => ipcRenderer.invoke('commands:saveState', state),
+    dispatch: (invocation) => ipcRenderer.invoke('commands:dispatch', invocation),
+    sendGatedKey: (key) => ipcRenderer.invoke('commands:gatedKey', key),
+    onMappingState: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('commands:mapping-state', handler);
+      return () => ipcRenderer.removeListener('commands:mapping-state', handler);
+    },
+    onGateState: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('commands:gate-state', handler);
+      return () => ipcRenderer.removeListener('commands:gate-state', handler);
+    },
+    onGateEvent: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('commands:gate-event', handler);
+      return () => ipcRenderer.removeListener('commands:gate-event', handler);
+    },
+    onInvoke: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('command:invoke', handler);
+      return () => ipcRenderer.removeListener('command:invoke', handler);
+    },
+    setRuntimeContext: (context) => ipcRenderer.send('commands:setRuntimeContext', context),
+    getRuntimeContext: () => ipcRenderer.invoke('commands:getRuntimeContext'),
+    onRuntimeContext: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('commands:runtime-context', handler);
+      return () => ipcRenderer.removeListener('commands:runtime-context', handler);
+    },
+    onRegistrationStatus: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('commands:registration-status', handler);
+      return () => ipcRenderer.removeListener('commands:registration-status', handler);
+    },
+  },
+
+  controller: {
+    open: () => ipcRenderer.invoke('controller:open'),
+    close: () => ipcRenderer.invoke('controller:close'),
+    status: () => ipcRenderer.invoke('controller:status'),
   },
 });

@@ -1,0 +1,314 @@
+.keybindings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  min-width: 0;
+}
+
+.keybindings-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.keybindings-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.keybindings-toolbar .keybindings-lead {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.keybindings-restore {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.keybindings-save-status {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  align-self: center;
+}
+
+.keybindings-save-status-ok {
+  color: var(--accent, #5b9bd5);
+}
+
+.keybindings-save-status-error {
+  color: #e07070;
+}
+
+.keybindings-lead,
+.keybindings-warnings {
+  flex-shrink: 0;
+}
+
+.keybindings-lead {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.keybindings-loading {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.keybindings-warnings {
+  border: 1px solid rgba(255, 107, 107, 0.45);
+  background: rgba(255, 107, 107, 0.08);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.keybindings-warnings ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.keybindings-table-wrap {
+  overflow: auto;
+}
+
+.keybindings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.keybindings-table th,
+.keybindings-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.45rem 0.35rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.keybindings-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.keybindings-table select {
+  width: 100%;
+  min-width: 6.5rem;
+}
+
+.keybindings-command-label {
+  display: block;
+  font-weight: 600;
+}
+
+.keybindings-command-id {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.keybindings-command-hint {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--accent, #5b9bd5);
+  margin-top: 0.15rem;
+}
+
+.keybindings-reserve {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.keybindings-reserve-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.keybindings-muted {
+  color: var(--text-muted);
+}
+
+.keybindings-layout {
+  display: grid;
+  grid-template-columns: minmax(11rem, 16rem) minmax(0, 1fr);
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.keybindings-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  padding: 0.75rem;
+}
+
+.keybindings-sidebar-title {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.keybindings-sidebar-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.keybindings-sidebar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  max-height: 14rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.keybindings-sidebar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.keybindings-sidebar-item.is-selected,
+.keybindings-sidebar-item:hover {
+  border-color: var(--border);
+  background: rgba(120, 170, 255, 0.08);
+}
+
+.keybindings-sidebar-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+.keybindings-sidebar-about {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+
+.keybindings-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.keybindings-action-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.keybindings-action-button:hover .keybindings-command-label {
+  color: var(--accent, #5b9bd5);
+}
+
+.keybindings-remove {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+}
+
+.keybindings-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.keybindings-dialog {
+  width: min(34rem, 100%);
+  max-height: min(85vh, 42rem);
+  overflow: auto;
+  padding: 1rem;
+}
+
+.keybindings-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.keybindings-dialog-header h3 {
+  margin: 0;
+}
+
+.keybindings-dialog-close {
+  min-width: 2rem;
+  padding: 0.15rem 0.45rem;
+}
+
+.keybindings-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.keybindings-dialog-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.keybindings-dialog-step-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.keybindings-layer-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.keybindings-layer-tab {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.keybindings-layer-tab.is-active {
+  border-color: rgba(120, 170, 255, 0.65);
+  background: rgba(120, 170, 255, 0.12);
+}

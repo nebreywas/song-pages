@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Hls from 'hls.js';
 
+import { loadDirectAudioPlayback, shouldUseDirectAudioPlayback } from '../../listener/directAudioPlayback';
 import { audioDebug } from '../debug/audioDebug';
 import { getAudioGraphIfExists } from '../graph/registry';
 import { mirrorCanPlay, tryPlayMirror } from './mirrorPlayback';
@@ -57,8 +58,11 @@ export function useAnalyserPlaybackMirror({
       return;
     }
 
-    if (loadedUrlRef.current === playbackUrl && (hlsRef.current != null || mirror.readyState > 0)) {
-      return;
+    if (loadedUrlRef.current === playbackUrl) {
+      const ready = shouldUseDirectAudioPlayback(playbackUrl)
+        ? mirror.readyState > 0
+        : hlsRef.current != null || mirror.readyState > 0;
+      if (ready) return;
     }
 
     const generation = ++loadGenerationRef.current;
@@ -81,7 +85,17 @@ export function useAnalyserPlaybackMirror({
       }
     };
 
-    audioDebug.log('mirror', 'Loading mirror HLS', { playbackUrl: playbackUrl.slice(0, 80) });
+    audioDebug.log('mirror', 'Loading mirror audio', { playbackUrl: playbackUrl.slice(0, 80) });
+
+    if (shouldUseDirectAudioPlayback(playbackUrl)) {
+      const cleanup = loadDirectAudioPlayback(mirror, playbackUrl, {
+        onReady: startPlayback,
+        onError: () => {
+          audioDebug.log('mirror', 'Mirror direct audio error', {}, 'error');
+        },
+      });
+      return cleanup;
+    }
 
     if (Hls.isSupported()) {
       const hls = new Hls({

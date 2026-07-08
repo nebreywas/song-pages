@@ -28,58 +28,70 @@ export function useKudoPresets() {
     };
   }, []);
 
-  const persist = useCallback(async (next: KudoSystemState) => {
-    const normalized = sanitizeKudosStateForSave(next);
-    setState(normalized);
+  const persist = useCallback(async (updater: (prev: KudoSystemState) => KudoSystemState) => {
+    let normalized: KudoSystemState | undefined;
+    setState((prev) => {
+      normalized = sanitizeKudosStateForSave(updater(prev));
+      return normalized;
+    });
+    if (!normalized) return migrateKudosState(null);
     await getApp()?.saveSettings?.(KUDOS_SETTINGS_KEY, normalized);
     return normalized;
   }, []);
 
   const savePresets = useCallback(
-    async (presets: KudoPreset[]) => {
-      return persist({ ...state, presets });
+    async (presets: KudoPreset[] | ((current: KudoPreset[]) => KudoPreset[])) => {
+      return persist((prev) => ({
+        ...prev,
+        presets: typeof presets === 'function' ? presets(prev.presets) : presets,
+      }));
     },
-    [persist, state],
+    [persist],
   );
 
   const addPreset = useCallback(
     async (preset: KudoPreset) => {
-      return savePresets([...state.presets, preset]);
+      return savePresets((current) => [...current, preset]);
     },
-    [savePresets, state.presets],
+    [savePresets],
   );
 
   const updatePreset = useCallback(
     async (id: string, patch: Partial<KudoPreset>) => {
       const now = Date.now();
-      return savePresets(
-        state.presets.map((row) =>
-          row.id === id ? { ...row, ...patch, updatedAt: now } : row,
-        ),
+      return savePresets((current) =>
+        current.map((row) => (row.id === id ? { ...row, ...patch, updatedAt: now } : row)),
       );
     },
-    [savePresets, state.presets],
+    [savePresets],
   );
 
   const deletePreset = useCallback(
     async (id: string) => {
-      return savePresets(state.presets.filter((row) => row.id !== id));
+      return savePresets((current) => current.filter((row) => row.id !== id));
     },
-    [savePresets, state.presets],
+    [savePresets],
   );
 
-  const movePreset = useCallback(
-    async (id: string, direction: -1 | 1) => {
-      const index = state.presets.findIndex((row) => row.id === id);
-      if (index < 0) return state;
-      const target = index + direction;
-      if (target < 0 || target >= state.presets.length) return state;
-      const next = [...state.presets];
-      const [row] = next.splice(index, 1);
-      next.splice(target, 0, row!);
-      return savePresets(next);
+  const reorderPresets = useCallback(
+    async (fromIndex: number, toIndex: number) => {
+      if (fromIndex === toIndex) return;
+      return savePresets((current) => {
+        if (
+          fromIndex < 0 ||
+          toIndex < 0 ||
+          fromIndex >= current.length ||
+          toIndex >= current.length
+        ) {
+          return current;
+        }
+        const next = [...current];
+        const [row] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, row!);
+        return next;
+      });
     },
-    [savePresets, state],
+    [savePresets],
   );
 
   return {
@@ -89,6 +101,6 @@ export function useKudoPresets() {
     addPreset,
     updatePreset,
     deletePreset,
-    movePreset,
+    reorderPresets,
   };
 }

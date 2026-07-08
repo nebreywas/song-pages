@@ -6,8 +6,12 @@ export function peakTextEffectScale(effectId: string): number {
   switch (effectId) {
     case 'slam':
       return 2.4;
+    case 'stamp':
+      return 2.2;
     case 'balloon':
       return 1.08;
+    case 'zoom':
+      return 1.05;
     default:
       return 1;
   }

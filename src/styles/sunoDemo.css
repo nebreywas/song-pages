@@ -1,0 +1,114 @@
+.suno-demo-song-page {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  padding: 1.5rem 2rem 2rem;
+}
+
+.suno-demo-song-header {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.suno-demo-song-cover {
+  width: 10rem;
+  height: 10rem;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  flex-shrink: 0;
+  background: var(--panel-border, #333);
+}
+
+.suno-demo-song-cover-fallback {
+  display: grid;
+  place-items: center;
+  font-size: 2.5rem;
+  color: var(--text-muted, #888);
+}
+
+.suno-demo-song-meta {
+  min-width: 0;
+  padding-top: 0.25rem;
+}
+
+.suno-demo-song-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.suno-demo-song-artist {
+  margin: 0;
+  color: var(--text-muted, #aaa);
+  font-size: 1.05rem;
+}
+
+.suno-demo-song-lyrics h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, #aaa);
+}
+
+.suno-demo-song-lyrics-body {
+  white-space: pre-wrap;
+  line-height: 1.55;
+  font-size: 0.95rem;
+}
+
+.suno-demo-song-muted {
+  color: var(--text-muted, #888);
+  font-style: italic;
+}
+
+.suno-only-panel {
+  padding: 1.5rem 2rem;
+}
+
+.suno-only-panel-copy {
+  max-width: 36rem;
+  line-height: 1.5;
+  color: var(--text-muted, #aaa);
+}
+
+.suno-only-panel-count {
+  font-weight: 600;
+  margin: 1rem 0;
+}
+
+.suno-only-panel-secret-hint {
+  margin-top: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-muted, #777);
+}
+
+.suno-only-panel-secret-hint kbd {
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.2rem;
+  border: 1px solid var(--panel-border, #444);
+  background: var(--panel-bg, #222);
+}
+
+.suno-demo-add-dialog {
+  width: min(28rem, 92vw);
+}
+
+.suno-demo-add-hint {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: var(--text-muted, #aaa);
+  line-height: 1.45;
+}
+
+.suno-demo-add-hint code {
+  font-size: 0.85em;
+}
+
+.artist-item-suno-only .artist-item-avatar-fallback {
+  font-size: 1.1rem;
+}

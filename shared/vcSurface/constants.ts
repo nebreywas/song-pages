@@ -5,7 +5,7 @@ export const VC_MIN_BASE_AREA = 0.1;
 export const VC_MIN_FLOAT = 0.05;
 
 export const VC_MAX_BASE_AREAS = 4;
-export const VC_MAX_FLOATS = 6;
+export const VC_MAX_FLOATS = 10;
 
 /** Default float size when created (25% × 25%). */
 export const VC_DEFAULT_FLOAT_SIZE = 0.25;

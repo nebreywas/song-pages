@@ -27,6 +27,7 @@ export function KudoTextLayer({ instances }: KudoTextLayerProps) {
             phrase={frame.visibleText}
             textStyle={textStyle}
             preserveEmojiColors={preserveEmojiColors}
+            graphemeOffsets={frame.graphemeOffsets}
           />
         );
 

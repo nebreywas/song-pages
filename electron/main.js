@@ -72,6 +72,11 @@ function createMainWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    require('./commands/commandService').setWindowRefs({
+      mainWindow,
+      vcWindow: null,
+      controllerWindow: null,
+    });
   });
 
   mainWindow.on('closed', () => {
@@ -106,6 +111,7 @@ app.whenReady().then(async () => {
   registerCacheProtocol();
   configureSongPageGuestSession();
   database.initDatabase();
+  require('./commands/commandService').initCommandService();
   registerIpcHandlers();
   createMainWindow();
 

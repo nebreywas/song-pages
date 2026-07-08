@@ -17,6 +17,7 @@ Registry of where Song Pages stores configuration, library data, and media on di
 | `visualizer.preference.mainPlayer` | `VISUALIZER_MAIN_PLAYER_PREFERENCE_KEY` | `useVisualizerManager` | Main player visualizer preference |
 | `visualizer.settings.{id}` | `visualizerSettingsKey()` | `settings/persistence/store.ts` | Per-experience visualizer settings |
 | `ui.theme` | `THEME_SETTING_KEY` in `src/lib/themes.ts` | `useAppTheme` | App light/dark theme |
+| `commands.mappings` | `COMMAND_MAPPINGS_SETTINGS_KEY` in `shared/commands/constants.ts` | `useCommandMappings`, `commandService` (main) | VC command bindings v2: configured action set, direct/gated/F13–F24, Kudo reserve placeholders |
 | `ui.listenerSidebarCollapsed` | `SIDEBAR_COLLAPSED_KEY` in `ListenerSidebar.tsx` | `ListenerMode` | Listener sidebar state |
 | `artist:projects` | — | `electron/ipc.js` | Artist workspace (v2 multi-project) |
 | `artist:draft` | — | *(migration read only)* | Legacy single draft → migrated to projects |
@@ -65,6 +66,7 @@ When changing persisted JSON shapes, update **all** load paths:
 | Host catalog | `migrateHostContentCatalog()` | `shared/hostContent/migrate.ts` |
 | VC cells (legacy content strings) | `migrateCellContent()` | `shared/vcModeTypes.ts` |
 | Artist draft → projects | `loadProjects` migration | `electron/ipc.js` |
+| Command mappings v1 → v2 | `migrateCommandMappingState()` | `shared/commands/migrate.ts` (+ `electron/commands/bindingCodec.js` mirror) |
 | Visualizer plugin → experience | read fallback chain | `useVisualizerManager.ts` |
 
 **Rule:** `normalizeVcConfig()` / `normalizeHostContentCatalog()` run after migrate on save. Missing fields in `migrateVcConfig` (e.g. `gridDesign`) are dropped silently.

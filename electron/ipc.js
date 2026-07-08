@@ -58,6 +58,11 @@ function registerIpcHandlers() {
 
   ipcMain.handle('listener:listSongs', (_event, artistId) => {
     const likedSongs = require('./listener/likedSongs');
+    const { SUNO_DEMO_ARTIST_ID } = require('./listener/sunoDemo/feature');
+    const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
+    if (artistId === SUNO_DEMO_ARTIST_ID) {
+      return sunoDemoSongs.listSunoDemoSongs();
+    }
     if (artistId === 0) {
       return likedSongs.listLikedSongs();
     }
@@ -188,6 +193,17 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('listener:fetchSongManifest', async (_event, url) => {
+    const { parseManifestSongId } = require('./listener/sunoDemo/feature');
+    const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
+    const sunoSongId = parseManifestSongId(url);
+    if (sunoSongId != null) {
+      const manifest = sunoDemoSongs.buildManifestForSongId(sunoSongId);
+      if (!manifest) {
+        return { ok: false, error: 'Suno demo song not found.' };
+      }
+      return { ok: true, data: manifest };
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30000);
     try {
@@ -212,7 +228,113 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('listener:updateSongDuration', (_event, songId, durationSeconds) => {
+    const { isSunoDemoSongId } = require('./listener/sunoDemo/feature');
+    const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
+    if (isSunoDemoSongId(songId)) {
+      return sunoDemoSongs.updateSunoDemoSongDuration(songId, durationSeconds);
+    }
     return listenerLibrary.updateSongDurationSeconds(songId, durationSeconds);
+  });
+
+  ipcMain.handle('listener:countSunoDemoSongs', () => {
+    const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
+    return sunoDemoSongs.countSunoDemoSongs();
+  });
+
+  ipcMain.handle('listener:addSunoDemoSong', async (_event, input) => {
+    const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
+    try {
+      return await sunoDemoSongs.addSunoDemoSongByUrl(input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:getPlaylistOrderState', (_event, playlistKey, currentSongIds) => {
+    const playlistOrder = require('./listener/playlistOrder');
+    try {
+      if (typeof playlistKey !== 'string' || !Array.isArray(currentSongIds)) {
+        return { ok: false, error: 'Invalid playlist order request.' };
+      }
+      const data = playlistOrder.getPlaylistOrderState(playlistKey, currentSongIds);
+      return { ok: true, data };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:savePlaylistCustomOrder', (_event, playlistKey, orderedSongIds) => {
+    const playlistOrder = require('./listener/playlistOrder');
+    try {
+      if (typeof playlistKey !== 'string' || !Array.isArray(orderedSongIds)) {
+        return { ok: false, error: 'Invalid playlist order save.' };
+      }
+      playlistOrder.saveCustomOrder(playlistKey, orderedSongIds);
+      return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:clearPlaylistCustomOrder', (_event, playlistKey) => {
+    const playlistOrder = require('./listener/playlistOrder');
+    try {
+      if (typeof playlistKey !== 'string') {
+        return { ok: false, error: 'Invalid playlist key.' };
+      }
+      playlistOrder.clearCustomOrder(playlistKey);
+      return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:setCatalogSongSkipped', (_event, artistId, externalId, skipped) => {
+    const songSkips = require('./listener/songSkips');
+    try {
+      if (typeof artistId !== 'number' || typeof externalId !== 'string') {
+        return { ok: false, error: 'Invalid catalog skip request.' };
+      }
+      songSkips.setCatalogSongSkipped(artistId, externalId, Boolean(skipped));
+      return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:removeLikedSong', (_event, payload) => {
+    const likedSongs = require('./listener/likedSongs');
+    try {
+      const songId = payload?.songId;
+      const likedId = payload?.likedId;
+      if (typeof songId !== 'number') {
+        return { ok: false, error: 'Invalid liked song id.' };
+      }
+      const data = likedSongs.removeLikedSong({ songId, likedId });
+      return { ok: true, data };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:removeSunoDemoSong', (_event, songId) => {
+    const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
+    try {
+      if (typeof songId !== 'number') {
+        return { ok: false, error: 'Invalid Suno demo song id.' };
+      }
+      const data = sunoDemoSongs.removeSunoDemoSong(songId);
+      return { ok: true, data };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
   });
 
   // --- Artist Mode (compile) ---
@@ -418,6 +540,58 @@ function registerIpcHandlers() {
       vcWindow.forwardVcActiveVisualizerReport(id);
     }
   });
+
+  // --- Command input system ---
+
+  const commandService = require('./commands/commandService');
+  const controllerWindow = require('./controllerWindow');
+
+  ipcMain.on('commands:setRuntimeContext', (_event, payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    commandService.setRuntimeContext(payload);
+  });
+
+  ipcMain.handle('commands:getRuntimeContext', () => ({
+    ok: true,
+    data: commandService.getRuntimeContext(),
+  }));
+
+  ipcMain.handle('commands:getState', () => ({
+    ok: true,
+    data: commandService.getMappingState(),
+  }));
+
+  ipcMain.handle('commands:saveState', (_event, state) => {
+    if (!state || typeof state !== 'object') {
+      return { ok: false, error: 'Invalid command mapping state.' };
+    }
+    try {
+      return { ok: true, data: commandService.saveMappingState(state) };
+    } catch (error) {
+      return { ok: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('commands:dispatch', (_event, invocation) => {
+    return commandService.dispatchCommand(invocation);
+  });
+
+  ipcMain.handle('commands:gatedKey', (_event, key) => {
+    return commandService.handleGatedKey(key);
+  });
+
+  ipcMain.handle('controller:open', (event) => {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!mainWindow) return { ok: false, error: 'Main window not found.' };
+    return controllerWindow.openControllerWindow(mainWindow);
+  });
+
+  ipcMain.handle('controller:close', () => controllerWindow.closeControllerWindow());
+
+  ipcMain.handle('controller:status', () => ({
+    ok: true,
+    data: { open: controllerWindow.isControllerWindowOpen() },
+  }));
 }
 
 module.exports = { registerIpcHandlers };

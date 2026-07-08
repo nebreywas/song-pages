@@ -10,8 +10,10 @@ export const VC_CELL_CLICK_COOLDOWN_MS = 800;
 
 const CENTER_OVERLAYS: VcOverlayId[] = ['cover', 'host', 'songInfo', 'upcoming'];
 
-/** Minimum ms between praise/Kudo cycle triggers (blocks OS key-repeat bursts). */
-const KUDO_TRIGGER_DEBOUNCE_MS = 350;
+export type KudoTriggerState = {
+  token: number;
+  presetId: string | null;
+};
 
 export type VcWindowContext = {
   state: VcStatePayload | null;
@@ -19,8 +21,7 @@ export type VcWindowContext = {
   frame: number;
   canvasFrame: string | null;
   activeOverlay: VcOverlayId | null;
-  /** Incremented on ⌘⌥P — cycles Kudo presets on the VC surface. */
-  kudoTriggerToken: number;
+  kudoTrigger: KudoTriggerState;
   /** Bright red area/float outlines — toggled by ⌘⌥D / Ctrl+Alt+D. */
   debugOutlines: boolean;
   /** Fullscreen layout editing — toggled by ⌘⌥L / Ctrl+Alt+L. */
@@ -34,10 +35,13 @@ export function useVcWindowState(): VcWindowContext {
   const [frame, setFrame] = useState(0);
   const [canvasFrame, setCanvasFrame] = useState<string | null>(null);
   const [activeOverlay, setActiveOverlay] = useState<VcOverlayId | null>(null);
-  const [kudoTriggerToken, setKudoTriggerToken] = useState(0);
+  const [kudoTrigger, setKudoTrigger] = useState<KudoTriggerState>({ token: 0, presetId: null });
   const [debugOutlines, setDebugOutlines] = useState(false);
   const [layoutMode, setLayoutMode] = useState(false);
-  const lastKudoTriggerAtRef = useRef(0);
+
+  const fireKudo = useCallback((presetId: string) => {
+    setKudoTrigger((current) => ({ token: current.token + 1, presetId }));
+  }, []);
 
   useEffect(() => {
     const app = getApp();
@@ -59,14 +63,6 @@ export function useVcWindowState(): VcWindowContext {
     });
 
     const offHotkey = app.vc.onHotkey(({ action }: { action: VcHotkeyAction }) => {
-      if (action === 'praise') {
-        const now = Date.now();
-        if (now - lastKudoTriggerAtRef.current < KUDO_TRIGGER_DEBOUNCE_MS) return;
-        lastKudoTriggerAtRef.current = now;
-        setKudoTriggerToken((value) => value + 1);
-        return;
-      }
-
       if (action === 'debugOutlines') {
         setDebugOutlines((value) => !value);
         return;
@@ -95,12 +91,17 @@ export function useVcWindowState(): VcWindowContext {
       });
     });
 
+    const offCommand = app.commands?.onInvoke?.((payload) => {
+      if (payload.kudoPresetId) fireKudo(payload.kudoPresetId);
+    });
+
     return () => {
       offState();
       offFrame();
       offHotkey();
+      offCommand?.();
     };
-  }, []);
+  }, [fireKudo]);
 
   const onChangeSurface = useCallback((patch: Partial<VcSurfaceConfig>) => {
     const app = getApp();
@@ -113,7 +114,7 @@ export function useVcWindowState(): VcWindowContext {
     frame,
     canvasFrame,
     activeOverlay,
-    kudoTriggerToken,
+    kudoTrigger,
     debugOutlines,
     layoutMode,
     onChangeSurface,

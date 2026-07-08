@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { kudoPresetAtCycleIndex, nextKudoCycleIndex, type KudoPreset } from '@shared/kudos';
+import type { KudoPreset } from '@shared/kudos';
 
 import { KudoParticleLayer } from './KudoParticleLayer';
 import { KudoTextLayer } from './KudoTextLayer';
@@ -9,8 +9,9 @@ import { useKudoTextInstances } from './useKudoTextInstances';
 
 type KudoLayerProps = {
   presets: KudoPreset[];
-  /** Increment to fire next preset in cycle (⌘⌥P). */
+  /** Increment when a specific preset should fire. */
   triggerToken: number;
+  triggerPresetId: string | null;
 };
 
 function triggerForPreset(
@@ -18,6 +19,11 @@ function triggerForPreset(
   triggerParticle: (preset: KudoPreset) => boolean,
   triggerText: (preset: KudoPreset) => boolean,
 ): void {
+  if (preset.contentType === 'hybrid') {
+    triggerText(preset);
+    triggerParticle(preset);
+    return;
+  }
   if (preset.contentType === 'text' || preset.contentType === 'text-emoji') {
     triggerText(preset);
     return;
@@ -27,13 +33,9 @@ function triggerForPreset(
   }
 }
 
-/**
- * VC Kudo renderer — cycles host presets on praise hotkey (§28.2).
- * Fires only when triggerToken advances (not when presets re-sync from state).
- */
-export function KudoLayer({ presets, triggerToken }: KudoLayerProps) {
+/** VC Kudo renderer — fires a specific preset from the command registry. */
+export function KudoLayer({ presets, triggerToken, triggerPresetId }: KudoLayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const cycleIndexRef = useRef(-1);
   const lastTriggerTokenRef = useRef(0);
   const presetsRef = useRef(presets);
   const { instances: particleInstances, triggerPreset: triggerParticle } = useKudoInstances(containerRef);
@@ -44,14 +46,11 @@ export function KudoLayer({ presets, triggerToken }: KudoLayerProps) {
   useEffect(() => {
     if (triggerToken <= 0 || triggerToken === lastTriggerTokenRef.current) return;
     lastTriggerTokenRef.current = triggerToken;
+    if (!triggerPresetId) return;
 
-    const list = presetsRef.current;
-    const nextIndex = nextKudoCycleIndex(list, cycleIndexRef.current);
-    if (nextIndex == null) return;
-    cycleIndexRef.current = nextIndex;
-    const preset = kudoPresetAtCycleIndex(list, nextIndex);
+    const preset = presetsRef.current.find((row) => row.id === triggerPresetId);
     if (preset) triggerForPreset(preset, triggerParticle, triggerText);
-  }, [triggerToken, triggerParticle, triggerText]);
+  }, [triggerToken, triggerPresetId, triggerParticle, triggerText]);
 
   return (
     <div ref={containerRef} className="vc-kudo-layer-root">

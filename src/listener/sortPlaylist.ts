@@ -1,6 +1,6 @@
 import type { SongRow } from '../types/app';
 
-export type SortColumn = 'order' | 'title' | 'artist' | 'album' | 'year' | 'length';
+export type SortColumn = 'order' | 'custom' | 'title' | 'artist' | 'album' | 'year' | 'length';
 export type SortDirection = 'asc' | 'desc';
 
 function compareText(a: string, b: string): number {
@@ -27,6 +27,7 @@ export function sortPlaylistSongs(
 
     switch (column) {
       case 'order':
+      case 'custom':
         result = a.sort_order - b.sort_order;
         break;
       case 'title':

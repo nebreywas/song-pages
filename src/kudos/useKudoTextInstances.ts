@@ -4,6 +4,7 @@ import {
   KUDOS_MAX_CONCURRENT,
   isTextEffectImplemented,
   kudoTextFontSizePx,
+  phraseIncludesEmoji,
   type KudoPreset,
   type TextKudoConfig,
 } from '@shared/kudos';
@@ -29,7 +30,9 @@ export type ActiveTextKudoInstance = {
 let textInstanceCounter = 0;
 
 function canRenderTextPreset(preset: KudoPreset): preset is KudoPreset & { text: TextKudoConfig } {
-  if (preset.contentType !== 'text' && preset.contentType !== 'text-emoji') return false;
+  if (preset.contentType !== 'text' && preset.contentType !== 'text-emoji' && preset.contentType !== 'hybrid') {
+    return false;
+  }
   if (!preset.text) return false;
   return isTextEffectImplemented(preset.text.effectId);
 }
@@ -57,7 +60,9 @@ export function useKudoTextInstances(containerRef: React.RefObject<HTMLElement |
         presetId: preset.id,
         presetName: preset.name,
         config,
-        preserveEmojiColors: preset.contentType === 'text-emoji',
+        preserveEmojiColors:
+          preset.contentType === 'text-emoji' ||
+          (preset.contentType === 'hybrid' && phraseIncludesEmoji(config.value)),
         startedAt: now,
         durationMs: config.durationMs,
         fontSizePx: kudoTextFontSizePx(width, config.value, config.effectId),

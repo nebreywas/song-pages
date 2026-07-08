@@ -615,6 +615,10 @@
   pointer-events: none;
 }
 
+.vc-kudo-particle.is-comet {
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.35));
+}
+
 .vc-kudo-particle.is-emoji span {
   display: block;
   line-height: 1;

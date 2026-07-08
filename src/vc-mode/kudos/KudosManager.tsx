@@ -2,21 +2,22 @@ import { useMemo, useState } from 'react';
 
 import {
   defaultEmojiParticleConfig,
+  defaultHybridParticleConfig,
   defaultParticleConfig,
   defaultTextEmojiKudoConfig,
   defaultTextKudoConfig,
-  KUDO_PARTICLE_EFFECTS,
-  KUDOS_PARTICLE_COUNT_MAX,
-  KUDOS_PARTICLE_COUNT_MIN,
+  KUDO_CONTENT_TYPE_OPTIONS,
+  phraseIncludesEmoji,
   resolveParticleCount,
   type KudoContentType,
   type KudoPreset,
 } from '@shared/kudos';
 
 import { KudoLayer } from '../../kudos/KudoLayer';
-import { KUDO_ASSET_CATALOG } from '../../kudos/catalog/kudoAssetCatalog.generated';
-import { KudoEmojiElementsEditor } from './KudoEmojiElementsEditor';
-import { KudoIconColorControls } from './KudoIconColorControls';
+import { useCommandMappings } from '../../commands/useCommandMappings';
+import { formatReservedBindingLabel } from '@shared/commands';
+import { KudoParticleEditor } from './KudoParticleEditor';
+import { KudosPresetList } from './KudosPresetList';
 import { KudoTextEditor } from './KudoTextEditor';
 
 type KudosManagerProps = {
@@ -24,30 +25,33 @@ type KudosManagerProps = {
   onAddPreset: (preset: KudoPreset) => Promise<unknown>;
   onUpdatePreset: (id: string, patch: Partial<KudoPreset>) => Promise<unknown>;
   onDeletePreset: (id: string) => Promise<unknown>;
-  onMovePreset: (id: string, direction: -1 | 1) => Promise<unknown>;
+  onReorderPresets: (fromIndex: number, toIndex: number) => Promise<unknown>;
 };
 
-const PHASE_A_EFFECTS = KUDO_PARTICLE_EFFECTS.filter((row) => row.phase === 'A');
-
-const CONTENT_TYPES: { value: KudoContentType; label: string }[] = [
-  { value: 'builtin-assets', label: 'Built-in icons' },
-  { value: 'emoji', label: 'OS emoji' },
-  { value: 'text', label: 'Text' },
-  { value: 'text-emoji', label: 'Words + emoji' },
-];
+const CONTENT_TYPES = KUDO_CONTENT_TYPE_OPTIONS;
 
 function newPresetId(): string {
   return `kudo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-type EditableContentType = 'builtin-assets' | 'emoji' | 'text' | 'text-emoji';
+type EditableContentType = 'builtin-assets' | 'emoji' | 'text' | 'text-emoji' | 'hybrid';
 
 function isEditableContentType(type: KudoContentType): type is EditableContentType {
-  return type === 'builtin-assets' || type === 'emoji' || type === 'text' || type === 'text-emoji';
+  return (
+    type === 'builtin-assets' ||
+    type === 'emoji' ||
+    type === 'text' ||
+    type === 'text-emoji' ||
+    type === 'hybrid'
+  );
 }
 
-function isTextContentType(type: EditableContentType): type is 'text' | 'text-emoji' {
-  return type === 'text' || type === 'text-emoji';
+function showsTextEditor(type: EditableContentType): boolean {
+  return type === 'text' || type === 'text-emoji' || type === 'hybrid';
+}
+
+function showsParticleEditor(type: EditableContentType): boolean {
+  return type === 'builtin-assets' || type === 'emoji' || type === 'hybrid';
 }
 
 /** VC designer — create, order, and preview host Kudo presets. */
@@ -56,10 +60,11 @@ export function KudosManager({
   onAddPreset,
   onUpdatePreset,
   onDeletePreset,
-  onMovePreset,
+  onReorderPresets,
 }: KudosManagerProps) {
   const [selectedId, setSelectedId] = useState<string | null>(presets[0]?.id ?? null);
   const [previewToken, setPreviewToken] = useState(0);
+  const { state: commandMappings, assignKudoPresetToReservedKey } = useCommandMappings();
 
   const selected = useMemo(
     () => presets.find((row) => row.id === selectedId) ?? presets[0] ?? null,
@@ -71,11 +76,14 @@ export function KudosManager({
 
   const particle =
     selected?.particle ??
-    (contentType === 'emoji' ? defaultEmojiParticleConfig() : defaultParticleConfig());
+    (contentType === 'emoji'
+      ? defaultEmojiParticleConfig()
+      : contentType === 'hybrid'
+        ? defaultHybridParticleConfig()
+        : defaultParticleConfig());
   const text =
     selected?.text ??
     (contentType === 'text-emoji' ? defaultTextEmojiKudoConfig() : defaultTextKudoConfig());
-  const particleCount = resolveParticleCount(particle);
 
   const savePresetPatch = (patch: Partial<KudoPreset>) => {
     if (!selected) return;
@@ -83,7 +91,7 @@ export function KudosManager({
   };
 
   const saveParticlePatch = (patch: Partial<typeof particle>) => {
-    if (!selected) return;
+    if (!selected || !showsParticleEditor(contentType)) return;
     const nextParticle = { ...particle, ...patch };
     void onUpdatePreset(selected.id, {
       contentType,
@@ -95,7 +103,7 @@ export function KudosManager({
   };
 
   const saveTextPatch = (patch: Partial<typeof text>) => {
-    if (!selected || !isTextContentType(contentType)) return;
+    if (!selected || !showsTextEditor(contentType)) return;
     void onUpdatePreset(selected.id, {
       contentType,
       text: { ...text, ...patch },
@@ -110,6 +118,14 @@ export function KudosManager({
     }
     if (next === 'text-emoji') {
       savePresetPatch({ contentType: 'text-emoji', text: defaultTextEmojiKudoConfig(), particle: undefined });
+      return;
+    }
+    if (next === 'hybrid') {
+      savePresetPatch({
+        contentType: 'hybrid',
+        text: defaultTextKudoConfig(),
+        particle: defaultHybridParticleConfig(),
+      });
       return;
     }
     savePresetPatch({
@@ -136,232 +152,147 @@ export function KudosManager({
     selected && isEditableContentType(selected.contentType)
       ? {
           ...selected,
-          particle: isTextContentType(contentType) ? undefined : particle,
-          text: isTextContentType(contentType) ? text : selected.text,
+          particle: showsParticleEditor(contentType) ? particle : undefined,
+          text: showsTextEditor(contentType) ? text : undefined,
         }
       : null;
+
+  const textVariant =
+    contentType === 'text-emoji' || (contentType === 'hybrid' && phraseIncludesEmoji(text.value))
+      ? 'text-emoji'
+      : 'text';
+
+  const reservedKudoOptions = commandMappings.reservedKudoKeys.map((key) => ({
+    key,
+    label: formatReservedBindingLabel(key),
+  }));
+
+  const selectedReservedKey =
+    reservedKudoOptions.find(
+      (option) => commandMappings.kudoPresetByReservedKey[option.key] === selected?.id,
+    )?.key ?? '';
 
   return (
     <div className="vc-kudos-manager">
       <div className="vc-kudos-manager-header">
-        <div>
-          <h3 className="vc-kudos-manager-title">Kudos</h3>
-          <p className="vc-kudos-manager-hint">
-            ⌘⌥P cycles presets in list order on the live VC surface (temporary test trigger).
-          </p>
-        </div>
+        <h3 className="vc-kudos-manager-title">Kudos</h3>
         <button type="button" className="vc-btn" onClick={handleAdd}>
           New Kudo
         </button>
       </div>
 
       <div className="vc-kudos-manager-body">
-        <aside className="vc-kudos-list">
-          {presets.map((preset, index) => (
-            <div
-              key={preset.id}
-              className={`vc-kudos-list-item${selected?.id === preset.id ? ' is-selected' : ''}`}
-            >
-              <button type="button" className="vc-kudos-list-select" onClick={() => setSelectedId(preset.id)}>
-                <span className="vc-kudos-list-order">{index + 1}</span>
-                <span>{preset.name}</span>
-              </button>
-              <div className="vc-kudos-list-actions">
-                <button type="button" aria-label="Move up" disabled={index === 0} onClick={() => void onMovePreset(preset.id, -1)}>
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  aria-label="Move down"
-                  disabled={index === presets.length - 1}
-                  onClick={() => void onMovePreset(preset.id, 1)}
-                >
-                  ↓
-                </button>
-                <button type="button" aria-label="Delete" onClick={() => void onDeletePreset(preset.id)}>
-                  ✕
-                </button>
-              </div>
-            </div>
-          ))}
-        </aside>
+        <KudosPresetList
+          presets={presets}
+          selectedId={selected?.id ?? null}
+          onSelect={setSelectedId}
+          onDelete={(id) => void onDeletePreset(id)}
+          onReorder={(fromIndex, toIndex) => void onReorderPresets(fromIndex, toIndex)}
+        />
 
         {selected && isEditableContentType(selected.contentType) ? (
           <section className="vc-kudos-editor">
-            <label className="vc-field">
-              <span>Name</span>
-              <input
-                type="text"
-                value={selected.name}
-                maxLength={48}
-                onChange={(e) => void onUpdatePreset(selected.id, { name: e.target.value })}
-              />
-            </label>
+            <div className="vc-kudos-editor-top-row">
+              <label className="vc-field vc-kudos-name-field">
+                <span>Name</span>
+                <input
+                  type="text"
+                  value={selected.name}
+                  maxLength={48}
+                  onChange={(e) => void onUpdatePreset(selected.id, { name: e.target.value })}
+                />
+              </label>
 
-            <fieldset className="vc-kudos-variant-radios">
-              <legend>Content type</legend>
-              <div className="vc-kudos-variant-radio-row">
-                {CONTENT_TYPES.map((option) => (
-                  <label key={option.value} className="vc-kudos-variant-radio">
-                    <input
-                      type="radio"
-                      name="kudo-content-type"
-                      value={option.value}
-                      checked={contentType === option.value}
-                      onChange={() => setContentType(option.value as EditableContentType)}
-                    />
-                    <span>{option.label}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+              <label className="vc-field vc-kudos-content-type-field">
+                <span>Content type</span>
+                <select
+                  value={contentType}
+                  onChange={(e) => setContentType(e.target.value as EditableContentType)}
+                >
+                  {CONTENT_TYPES.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
-            {isTextContentType(contentType) ? (
-              <KudoTextEditor
-                text={text}
-                onChange={saveTextPatch}
-                variant={contentType === 'text-emoji' ? 'text-emoji' : 'text'}
-              />
-            ) : (
-              <>
-                {contentType === 'builtin-assets' ? (
-                  <label className="vc-field">
-                    <span>Icon</span>
-                    <select
-                      value={particle.elements[0]?.type === 'builtin-asset' ? particle.elements[0].assetId : 'heart'}
-                      onChange={(e) =>
-                        saveParticlePatch({
-                          elements: [{ type: 'builtin-asset', assetId: e.target.value }],
-                        })
+            {reservedKudoOptions.length > 0 ? (
+              <label className="vc-field">
+                <span>Reserved key</span>
+                <select
+                  value={selectedReservedKey}
+                  onChange={(e) => {
+                    if (!selected) return;
+                    const nextKey = e.target.value;
+                    for (const option of reservedKudoOptions) {
+                      if (commandMappings.kudoPresetByReservedKey[option.key] === selected.id) {
+                        void assignKudoPresetToReservedKey(option.key, null);
                       }
-                    >
-                      {KUDO_ASSET_CATALOG.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {asset.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : (
-                  <KudoEmojiElementsEditor
-                    elements={particle.elements}
-                    onChange={(elements) => saveParticlePatch({ elements })}
-                  />
-                )}
+                    }
+                    if (nextKey) void assignKudoPresetToReservedKey(nextKey, selected.id);
+                  }}
+                >
+                  <option value="">—</option>
+                  {reservedKudoOptions.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="vc-field-hint">
+                  Keys reserved in Key Bindings appear here when a preset is ready to assign.
+                </span>
+              </label>
+            ) : null}
 
-                <label className="vc-field">
-                  <span>Effect</span>
-                  <select
-                    value={particle.effectId}
-                    onChange={(e) => saveParticlePatch({ effectId: e.target.value })}
-                  >
-                    {PHASE_A_EFFECTS.map((effect) => (
-                      <option key={effect.id} value={effect.id}>
-                        {effect.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            {showsTextEditor(contentType) ? (
+              <div className="vc-kudos-hybrid-section">
+                <KudoTextEditor text={text} onChange={saveTextPatch} variant={textVariant} />
+              </div>
+            ) : null}
 
-                <label className="vc-field">
-                  <span>Length ({Math.round(particle.durationMs / 100) / 10}s)</span>
-                  <input
-                    type="range"
-                    min={750}
-                    max={8000}
-                    step={250}
-                    value={particle.durationMs}
-                    onChange={(e) => saveParticlePatch({ durationMs: Number(e.target.value) })}
-                  />
-                </label>
-
-                <label className="vc-field">
-                  <span>Speed</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={particle.speed}
-                    onChange={(e) => saveParticlePatch({ speed: Number(e.target.value) })}
-                  />
-                </label>
-
-                <label className="vc-field">
-                  <span>Particle count ({particleCount})</span>
-                  <input
-                    type="range"
-                    min={KUDOS_PARTICLE_COUNT_MIN}
-                    max={KUDOS_PARTICLE_COUNT_MAX}
-                    step={1}
-                    value={particleCount}
-                    onChange={(e) => saveParticlePatch({ particleCount: Number(e.target.value) })}
-                  />
-                </label>
-
-                <label className="vc-field">
-                  <span>Size</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={particle.size}
-                    onChange={(e) => saveParticlePatch({ size: Number(e.target.value) })}
-                  />
-                </label>
-
-                <label className="vc-field">
-                  <span>Variation</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={particle.variation}
-                    onChange={(e) => saveParticlePatch({ variation: Number(e.target.value) })}
-                  />
-                </label>
-
-                <label className="vc-field">
-                  <span>Origin</span>
-                  <select
-                    value={particle.origin}
-                    onChange={(e) => saveParticlePatch({ origin: e.target.value as typeof particle.origin })}
-                  >
-                    <option value="auto">Auto</option>
-                    <option value="center">Center</option>
-                    <option value="top">Top</option>
-                    <option value="bottom">Bottom</option>
-                    <option value="left">Left</option>
-                    <option value="right">Right</option>
-                    <option value="random">Random</option>
-                  </select>
-                </label>
-
-                {contentType === 'builtin-assets' ? (
-                  <KudoIconColorControls particle={particle} onChange={saveParticlePatch} />
-                ) : null}
-              </>
-            )}
-
-            {previewPreset ? (
-              <div className="vc-kudos-preview-wrap">
-                <div className="vc-kudos-preview-stage">
-                  <KudoLayer presets={[previewPreset]} triggerToken={previewToken} />
-                </div>
-                <button type="button" className="vc-btn" onClick={() => setPreviewToken((t) => t + 1)}>
-                  Preview
-                </button>
+            {showsParticleEditor(contentType) ? (
+              <div className="vc-kudos-hybrid-section">
+                {contentType === 'hybrid' ? <h4 className="vc-kudos-section-title">Particle layer</h4> : null}
+                <KudoParticleEditor
+                  contentType={contentType === 'hybrid' ? 'hybrid' : contentType}
+                  particle={particle}
+                  onChange={saveParticlePatch}
+                />
               </div>
             ) : null}
           </section>
-        ) : selected ? (
-          <p className="vc-kudos-empty">Hybrid Kudos (text + particles) are coming in a later phase.</p>
         ) : (
           <p className="vc-kudos-empty">Create a Kudo to get started.</p>
         )}
       </div>
+
+      <footer className="vc-kudos-preview-dock">
+        <div className="vc-kudos-preview-toolbar">
+          <span className="vc-kudos-preview-label">Preview</span>
+          <button
+            type="button"
+            className="vc-btn"
+            disabled={!previewPreset}
+            onClick={() => setPreviewToken((t) => t + 1)}
+          >
+            Play
+          </button>
+        </div>
+        <div className="vc-kudos-preview-stage">
+          {previewPreset ? (
+            <KudoLayer
+              presets={[previewPreset]}
+              triggerToken={previewToken}
+              triggerPresetId={previewPreset.id}
+            />
+          ) : (
+            <p className="vc-kudos-preview-empty">Select a Kudo to preview.</p>
+          )}
+        </div>
+      </footer>
     </div>
   );
 }

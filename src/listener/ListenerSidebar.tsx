@@ -6,6 +6,7 @@ import {
   resolveArtistPhotoUrl,
 } from './artistDisplay';
 import { isLikedSongsArtist } from './likedSongs';
+import { isSunoDemoArtistId, SUNO_DEMO_FEATURE_ENABLED } from '@shared/demo/sunoDemoFeature';
 import type { ArtistRow } from '../types/app';
 
 const SIDEBAR_COLLAPSED_KEY = 'ui.listenerSidebarCollapsed';
@@ -187,7 +188,7 @@ export function ListenerSidebar({
                   type="button"
                   className="btn icon-btn"
                   onClick={onRefresh}
-                  disabled={busy || selectedArtistId === null || isLikedSongsArtist(selectedArtistId)}
+                  disabled={busy || selectedArtistId === null || isLikedSongsArtist(selectedArtistId) || isSunoDemoArtistId(selectedArtistId)}
                   aria-label="Refresh artist catalog"
                   title="Refresh catalog"
                 >
@@ -211,7 +212,7 @@ export function ListenerSidebar({
                 type="button"
                 className="btn icon-btn listener-rail-icon-btn"
                 onClick={onRefresh}
-                disabled={busy || selectedArtistId === null || isLikedSongsArtist(selectedArtistId)}
+                disabled={busy || selectedArtistId === null || isLikedSongsArtist(selectedArtistId) || isSunoDemoArtistId(selectedArtistId)}
                 aria-label="Refresh artist catalog"
                 title="Refresh catalog"
               >
@@ -223,7 +224,8 @@ export function ListenerSidebar({
           <ul className={`artist-list${collapsed ? ' artist-list-collapsed' : ''}`}>
             {artists.map((artist) => {
               const isLikedEntry = isLikedSongsArtist(artist.id);
-              const photoUrl = isLikedEntry ? null : resolveArtistPhotoUrl(artist);
+              const isSunoEntry = SUNO_DEMO_FEATURE_ENABLED && isSunoDemoArtistId(artist.id);
+              const photoUrl = isLikedEntry || isSunoEntry ? null : resolveArtistPhotoUrl(artist);
               const isActive = selectedArtistId === artist.id;
               const label = `${artist.artist_name} · ${formatArtistSongCount(artist.song_count)}`;
 
@@ -234,7 +236,7 @@ export function ListenerSidebar({
                       type="button"
                       className={`artist-item artist-item-compact${isActive ? ' active' : ''}${
                         isLikedEntry ? ' artist-item-liked' : ''
-                      }`}
+                      }${isSunoEntry ? ' artist-item-suno-only' : ''}`}
                       onClick={() => onSelectArtist(artist.id)}
                       aria-label={label}
                       title={label}
@@ -242,6 +244,10 @@ export function ListenerSidebar({
                       {isLikedEntry ? (
                         <span className="artist-item-avatar artist-item-liked-icon" aria-hidden="true">
                           ♥
+                        </span>
+                      ) : isSunoEntry ? (
+                        <span className="artist-item-avatar artist-item-avatar-fallback" aria-hidden="true">
+                          ☀
                         </span>
                       ) : photoUrl ? (
                         <img className="artist-item-avatar" src={photoUrl} alt="" />
@@ -259,7 +265,7 @@ export function ListenerSidebar({
                 <li key={artist.id}>
                   <button
                     type="button"
-                    className={`artist-item${isActive ? ' active' : ''}${isLikedEntry ? ' artist-item-liked' : ''}`}
+                    className={`artist-item${isActive ? ' active' : ''}${isLikedEntry ? ' artist-item-liked' : ''}${isSunoEntry ? ' artist-item-suno-only' : ''}`}
                     onClick={() => onSelectArtist(artist.id)}
                   >
                     <span className="artist-name">{artist.artist_name}</span>

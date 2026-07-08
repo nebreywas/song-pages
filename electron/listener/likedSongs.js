@@ -136,6 +136,19 @@ function setLikedSongAvailability(songId, unavailable) {
   return db.prepare('UPDATE liked_songs SET unavailable = ? WHERE song_id = ?').run(value, songId).changes > 0;
 }
 
+/** Remove a row from the Liked Songs personal playlist. */
+function removeLikedSong({ songId, likedId }) {
+  const db = getDatabase();
+  if (songId > 0) {
+    db.prepare('DELETE FROM liked_songs WHERE song_id = ?').run(songId);
+  } else if (likedId != null) {
+    db.prepare('DELETE FROM liked_songs WHERE id = ?').run(likedId);
+  } else {
+    throw new Error('Cannot remove liked song without a library or liked row id.');
+  }
+  return { count: countLikedSongs() };
+}
+
 module.exports = {
   initLikedSongsSchema,
   countLikedSongs,
@@ -144,4 +157,5 @@ module.exports = {
   toggleLikeSong,
   listLikedSongs,
   setLikedSongAvailability,
+  removeLikedSong,
 };

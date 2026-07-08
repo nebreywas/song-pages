@@ -14,7 +14,7 @@ export {
   KUDOS_TEXT_MAX_GRAPHEMES,
 } from './constants';
 export { nextKudoCycleIndex, kudoPresetAtCycleIndex } from './cycle';
-export { createStarterKudoPresets, defaultEmojiParticleConfig, defaultParticleConfig, defaultTextEmojiKudoConfig, defaultTextKudoConfig } from './defaults';
+export { createStarterKudoPresets, defaultEmojiParticleConfig, defaultHybridParticleConfig, defaultParticleConfig, defaultTextEmojiKudoConfig, defaultTextKudoConfig } from './defaults';
 export { densityToParticleCountLegacy, resolveParticleCount } from './particleCount';
 export { isEmojiGrapheme, phraseIncludesEmoji, segmentPhrase, type PhraseSegment } from './phraseSegments';
 export { estimatePhraseWidthEm, kudoTextFontSizePx, peakTextEffectScale } from './textSizing';
@@ -27,6 +27,8 @@ export {
   KUDO_TEXT_EFFECT_IDS,
   isParticleEffectImplemented,
   isTextEffectImplemented,
+  listShippedParticleEffects,
+  listShippedTextEffects,
   type KudoParticleEffectId,
   type KudoTextEffectId,
 } from './effects';
@@ -38,6 +40,7 @@ export {
   sanitizeKudoColorList,
   sanitizeKudoColorMode,
 } from './particleColors';
+export { KUDO_CONTENT_TYPE_OPTIONS, kudoContentTypeLabel } from './contentTypes';
 export { migrateKudosState, sanitizeKudosStateForSave } from './migrate';
 export type {
   KudoAssetVariantMode,

@@ -1,5 +1,6 @@
 import Hls from 'hls.js';
 import type { SongRow } from '../types/app';
+import { shouldUseDirectAudioPlayback } from './directAudioPlayback';
 
 /**
  * Load HLS metadata in a throwaway audio element to learn track length
@@ -41,7 +42,9 @@ export function probeSongDurationSeconds(playbackUrl: string): Promise<number | 
 
     window.setTimeout(fail, 15000);
 
-    if (Hls.isSupported()) {
+    if (shouldUseDirectAudioPlayback(playbackUrl)) {
+      audio.src = playbackUrl;
+    } else if (Hls.isSupported()) {
       hls = new Hls({ enableWorker: true });
       hls.loadSource(playbackUrl);
       hls.attachMedia(audio);

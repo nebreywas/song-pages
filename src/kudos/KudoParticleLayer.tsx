@@ -11,10 +11,15 @@ export function KudoParticleLayer({ instances }: KudoParticleLayerProps) {
     <div className="vc-kudo-layer" aria-hidden="true">
       {instances.map((instance) => (
         <div key={instance.instanceId} className="vc-kudo-instance">
-          {instance.particles.map((particle) => (
+          {instance.particles.map((particle) => {
+            const scale = particle.displayScale ?? 1;
+            const scaleX = particle.displayScaleX ?? 1;
+            const isComet = instance.config.effectId === 'comet';
+
+            return (
             <div
               key={particle.id}
-              className={`vc-kudo-particle${particle.contentKind === 'emoji' ? ' is-emoji' : ' is-image'}`}
+              className={`vc-kudo-particle${particle.contentKind === 'emoji' ? ' is-emoji' : ' is-image'}${isComet ? ' is-comet' : ''}`}
               style={{
                 left: particle.x,
                 top: particle.y,
@@ -22,7 +27,7 @@ export function KudoParticleLayer({ instances }: KudoParticleLayerProps) {
                 height: particle.size,
                 opacity: particle.opacity,
                 fontSize: particle.contentKind === 'emoji' ? particle.size : undefined,
-                transform: `translate(-50%, -50%) rotate(${particle.rotation}deg)`,
+                transform: `translate(-50%, -50%) rotate(${particle.rotation}deg) scale(${scale * scaleX}, ${scale})`,
               }}
             >
               {particle.contentKind === 'image' ? (
@@ -39,7 +44,8 @@ export function KudoParticleLayer({ instances }: KudoParticleLayerProps) {
                 <span>{particle.content}</span>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       ))}
     </div>

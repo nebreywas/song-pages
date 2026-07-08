@@ -28,6 +28,7 @@ export default defineConfig({
         main: path.resolve(__dirname, 'src/index.html'),
         visualizer: path.resolve(__dirname, 'src/visualizer-window/visualizer.html'),
         vc: path.resolve(__dirname, 'src/vc-window/vc.html'),
+        controller: path.resolve(__dirname, 'src/controller-window/controller.html'),
       },
     },
   },

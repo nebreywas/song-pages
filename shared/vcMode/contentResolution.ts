@@ -422,7 +422,7 @@ function resolveSongPrimary(content: VcCellContent, ctx: VcResolutionContext): R
   }
 
   if (content === 'artist-name') {
-    const name = (ctx.artistName ?? song.artist).trim();
+    const name = (song.artist.trim() || ctx.artistName?.trim() || '').trim();
     if (name) return defaultTextStyle(name, gridTypography(ctx));
   }
 
@@ -432,7 +432,7 @@ function resolveSongPrimary(content: VcCellContent, ctx: VcResolutionContext): R
   }
 
   if (content === 'artist-bio-name') {
-    const name = (ctx.artistName ?? song.artist).trim();
+    const name = (song.artist.trim() || ctx.artistName?.trim() || '').trim();
     const bio = (ctx.artistBio ?? '').trim();
     if (name || bio) {
       const typography = gridTypography(ctx);

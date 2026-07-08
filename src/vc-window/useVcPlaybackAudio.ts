@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 
 import type { VcStatePayload } from '@shared/vcModeTypes';
+import { shouldUseDirectAudioPlayback, loadDirectAudioPlayback } from '../listener/directAudioPlayback';
 
 import { getApp } from '../lib/bridge';
 
 const SEEK_DRIFT_SECONDS = 0.4;
 
-function isMirrorReady(audio: HTMLAudioElement, hls: Hls | null): boolean {
-  return hls != null || audio.readyState >= HTMLMediaElement.HAVE_METADATA;
+function isMirrorReady(audio: HTMLAudioElement, hls: Hls | null, directAudio: boolean): boolean {
+  return directAudio ? audio.readyState >= HTMLMediaElement.HAVE_METADATA : hls != null || audio.readyState >= HTMLMediaElement.HAVE_METADATA;
 }
 
 /**
@@ -76,7 +77,7 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
       return;
     }
 
-    if (loadedSongIdRef.current === mirror.songId && isMirrorReady(audio, hlsRef.current)) {
+    if (loadedSongIdRef.current === mirror.songId && isMirrorReady(audio, hlsRef.current, shouldUseDirectAudioPlayback(mirror.playbackUrl))) {
       tryPlay(audio);
       return;
     }
@@ -100,6 +101,14 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
       }
       tryPlay(audio);
     };
+
+    if (shouldUseDirectAudioPlayback(playbackUrl)) {
+      const cleanup = loadDirectAudioPlayback(audio, playbackUrl, {
+        onReady: startPlayback,
+        onError: () => reportPlaybackStatus(audio),
+      });
+      return cleanup;
+    }
 
     if (Hls.isSupported()) {
       const hls = new Hls({

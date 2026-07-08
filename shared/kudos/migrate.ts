@@ -58,7 +58,14 @@ function sanitizeParticleConfig(
   const elements = Array.isArray(row.elements)
     ? row.elements.map(sanitizeParticleElement).filter((el): el is ParticleElement => el != null)
     : [];
-  const requiredType = contentType === 'emoji' ? 'emoji' : 'builtin-asset';
+  const requiredType =
+    contentType === 'emoji'
+      ? 'emoji'
+      : contentType === 'hybrid'
+        ? elements.some((el) => el.type === 'emoji') && !elements.some((el) => el.type === 'builtin-asset')
+          ? 'emoji'
+          : 'builtin-asset'
+        : 'builtin-asset';
   const typedElements = elements.filter((el) => el.type === requiredType);
   if (typedElements.length < KUDOS_PARTICLE_ELEMENT_MIN) return undefined;
 
@@ -76,8 +83,14 @@ function sanitizeParticleConfig(
   const assetVariantMode =
     variant === 'flat' || variant === 'shaded' || variant === 'mixed' ? variant : 'mixed';
 
-  const iconColorMode = contentType === 'emoji' ? undefined : sanitizeKudoColorMode(row.iconColorMode);
-  let iconColors = contentType === 'emoji' ? [] : sanitizeKudoColorList(row.iconColors, 4);
+  const iconColorMode =
+    contentType === 'emoji' || (contentType === 'hybrid' && requiredType === 'emoji')
+      ? undefined
+      : sanitizeKudoColorMode(row.iconColorMode);
+  let iconColors =
+    contentType === 'emoji' || (contentType === 'hybrid' && requiredType === 'emoji')
+      ? []
+      : sanitizeKudoColorList(row.iconColors, 4);
   if (iconColorMode === 'single' && iconColors.length === 0) {
     iconColors = ['#ff6b8a'];
   }
@@ -137,14 +150,13 @@ function sanitizePreset(raw: unknown): KudoPreset | null {
 
   const particle = sanitizeParticleConfig(row.particle, contentType);
   const text =
-    contentType === 'text' || contentType === 'text-emoji'
+    contentType === 'text' || contentType === 'text-emoji' || contentType === 'hybrid'
       ? sanitizeTextKudoConfig(row.text)
       : undefined;
 
   if ((contentType === 'text' || contentType === 'text-emoji') && !text) return null;
-  if ((contentType === 'builtin-assets' || contentType === 'emoji' || contentType === 'hybrid') && !particle) {
-    if (contentType !== 'hybrid') return null;
-  }
+  if (contentType === 'hybrid' && (!text || !particle)) return null;
+  if ((contentType === 'builtin-assets' || contentType === 'emoji') && !particle) return null;
 
   return {
     id: row.id.trim(),

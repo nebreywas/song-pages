@@ -22,7 +22,7 @@ export function VcWindowApp() {
     frame,
     canvasFrame,
     activeOverlay,
-    kudoTriggerToken,
+    kudoTrigger,
     debugOutlines,
     layoutMode,
     onChangeSurface,
@@ -156,7 +156,8 @@ export function VcWindowApp() {
               <>
                 <KudoLayer
                   presets={displayState.kudoPresets ?? []}
-                  triggerToken={kudoTriggerToken}
+                  triggerToken={kudoTrigger.token}
+                  triggerPresetId={kudoTrigger.presetId}
                 />
                 <VcOverlays state={displayState} activeOverlay={activeOverlay} />
               </>

@@ -6,7 +6,8 @@ const { BrowserWindow, screen } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const logger = require('./logger');
-const vcHotkeys = require('./vcHotkeys');
+const commandService = require('./commands/commandService');
+const controllerWindow = require('./controllerWindow');
 
 /** @type {import('electron').BrowserWindow | null} */
 let vcWindow = null;
@@ -37,11 +38,12 @@ function sendVcFrame(payload) {
   sendToVc('vc:frame', payload);
 }
 
-function sendVcHotkey(action) {
-  sendToVc('vc:hotkey', { action });
-  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-    mainWindowRef.webContents.send('vc:hotkey', { action });
-  }
+function syncCommandWindowRefs() {
+  commandService.setWindowRefs({
+    mainWindow: mainWindowRef,
+    vcWindow: vcWindow && !vcWindow.isDestroyed() ? vcWindow : null,
+    controllerWindow: controllerWindow.getControllerWindow(),
+  });
 }
 
 /** VC window reports mirrored playback state so main can defer speaker muting. */
@@ -134,7 +136,9 @@ function openVcWindow(mainWindow, options = {}) {
 
   vcWindow.on('closed', () => {
     vcWindow = null;
-    vcHotkeys.unregisterVcHotkeys();
+    commandService.setVcModeActive(false);
+    controllerWindow.closeControllerWindow();
+    syncCommandWindowRefs();
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
       mainWindowRef.webContents.send('vc:closed');
     }
@@ -143,7 +147,10 @@ function openVcWindow(mainWindow, options = {}) {
   vcWindow.once('ready-to-show', () => {
     vcWindow.show();
     if (options.fullscreen) vcWindow.setFullScreen(true);
-    vcHotkeys.registerVcHotkeys(sendVcHotkey);
+    commandService.setVcModeActive(true);
+    syncCommandWindowRefs();
+    commandService.registerActiveShortcuts();
+    controllerWindow.openControllerWindow(mainWindowRef);
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
       mainWindowRef.webContents.send('vc:opened');
     }
@@ -188,12 +195,18 @@ function isVcFullScreen() {
   return vcWindow.isFullScreen();
 }
 
+function getVcWindow() {
+  return vcWindow && !vcWindow.isDestroyed() ? vcWindow : null;
+}
+
 module.exports = {
   openVcWindow,
   closeVcWindow,
   setVcFullScreen,
   isVcWindowOpen,
   isVcFullScreen,
+  getVcWindow,
+  syncCommandWindowRefs,
   sendVcState,
   sendVcFrame,
   hostGraphicUrlFromPath,

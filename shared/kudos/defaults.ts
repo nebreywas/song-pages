@@ -112,7 +112,40 @@ export function createStarterKudoPresets(now = Date.now()): KudoPreset[] {
         placement: 'center',
       },
     },
+    {
+      id: 'starter-awesome-burst',
+      name: 'Awesome Burst',
+      contentType: 'hybrid',
+      createdAt: now,
+      updatedAt: now,
+      text: {
+        value: 'AWESOME!',
+        effectId: 'slam',
+        fontId: 'impact',
+        durationMs: 2600,
+        textColor: '#ffffff',
+        outline: 'heavy',
+        shadow: 'soft',
+        placement: 'center',
+      },
+      particle: defaultHybridParticleConfig(),
+    },
   ];
+}
+
+export function defaultHybridParticleConfig(): ParticleKudoConfig {
+  return particleDefaults({
+    elements: [
+      { type: 'builtin-asset', assetId: 'star' },
+      { type: 'builtin-asset', assetId: 'sparkles' },
+    ],
+    effectId: 'burst',
+    origin: 'center',
+    particleCount: 40,
+    iconColorMode: 'multi',
+    iconColors: ['#ffd166', '#fff4c2', '#f15bb5'],
+    assetVariantMode: 'shaded',
+  });
 }
 
 export function defaultTextEmojiKudoConfig(): TextKudoConfig {

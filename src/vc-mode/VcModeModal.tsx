@@ -1,7 +1,6 @@
 /**
  * VC Mode — single-screen Surface/View Designer.
- * Template bar → visualizer bar → canvas → Save / Start.
- * Right-click areas/floats to assign content.
+ * Template bar → canvas → footer. Right-click areas/floats to assign content.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -28,8 +27,6 @@ import {
   type VcModeConfig,
   type VcStatePayload,
   type VcTemplateId,
-  VC_VISUALIZER_CHANGE_RULE_OPTIONS,
-  VC_VISUALIZER_SEQUENCE_OPTIONS,
 } from '@shared/vcModeTypes';
 import type { KudoPreset } from '@shared/kudos';
 import {
@@ -48,6 +45,7 @@ import { DesignerCanvas, type DesignerSelection } from './designer/DesignerCanva
 import { GridDesignSettingsPanel } from './designer/GridDesignSettingsPanel';
 import { RegionContentPopover, type RegionTarget } from './designer/RegionContentPopover';
 import { HostContentManager } from './host-content/HostContentManager';
+import { KeyBindingsPanel } from '../commands/KeyBindingsPanel';
 import { KudosManager } from './kudos/KudosManager';
 import { createDefaultVcConfig, migrateVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
 import { useAutoSaveVcConfig, vcConfigSaveStatusLabel } from './useAutoSaveVcConfig';
@@ -62,7 +60,7 @@ type VcModeModalProps = {
     addPreset: (preset: KudoPreset) => Promise<unknown>;
     updatePreset: (id: string, patch: Partial<KudoPreset>) => Promise<unknown>;
     deletePreset: (id: string) => Promise<unknown>;
-    movePreset: (id: string, direction: -1 | 1) => Promise<unknown>;
+    reorderPresets: (fromIndex: number, toIndex: number) => Promise<unknown>;
   };
 };
 
@@ -448,7 +446,7 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
             >
               <div className="vc-surface-toolbar">
                 <label className="vc-toolbar-field">
-                  <span>Division template</span>
+                  <span>Grid area template</span>
                   <select
                     value={config.surface.templateId}
                     onChange={(e) => selectTemplate(e.target.value as VcTemplateId)}
@@ -483,73 +481,6 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                   Grid Design Settings
                 </button>
               </div>
-
-              {visualizerAssigned ? (
-                <div className="vc-visualizer-bar">
-                  <label className="vc-field vc-visualizer-bar-plugin">
-                    <span>Visualizer plugin</span>
-                    <select
-                      value={config.visualizerId}
-                      onChange={(e) => {
-                        setConfig((prev) => ({ ...prev, visualizerId: e.target.value }));
-                      }}
-                    >
-                      {windowVisualizers.map((plugin) => (
-                        <option key={plugin.id} value={plugin.id}>
-                          {plugin.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="vc-field vc-visualizer-bar-rule">
-                    <span>Change Rule</span>
-                    <select
-                      value={config.visualizerChangeRule}
-                      onChange={(e) =>
-                        setConfig((prev) =>
-                          normalizeVcConfig({
-                            ...prev,
-                            visualizerChangeRule:
-                              e.target.value as VcModeConfig['visualizerChangeRule'],
-                          }),
-                        )
-                      }
-                    >
-                      {VC_VISUALIZER_CHANGE_RULE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="vc-field vc-visualizer-bar-sequence">
-                    <span>Sequence</span>
-                    <select
-                      value={config.visualizerSequence}
-                      onChange={(e) =>
-                        setConfig((prev) =>
-                          normalizeVcConfig({
-                            ...prev,
-                            visualizerSequence:
-                              e.target.value as VcModeConfig['visualizerSequence'],
-                          }),
-                        )
-                      }
-                    >
-                      {VC_VISUALIZER_SEQUENCE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              ) : null}
-
-              <p className="vc-content-hint vc-canvas-hint">
-                Right-click an area or float to assign content. Left-click floats to drag; use the corner
-                handle to resize.
-              </p>
 
               <DesignerCanvas
                 config={config}
@@ -590,7 +521,7 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                   onAddPreset={kudos.addPreset}
                   onUpdatePreset={kudos.updatePreset}
                   onDeletePreset={kudos.deletePreset}
-                  onMovePreset={kudos.movePreset}
+                  onReorderPresets={kudos.reorderPresets}
                 />
               ) : (
                 <p className="vc-tab-placeholder-lead">Loading Kudos…</p>
@@ -622,6 +553,8 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                   When enabled, missing song fields resolve through Host Content fallbacks, then system
                   defaults. When disabled, unavailable song content renders blank.
                 </p>
+
+                <KeyBindingsPanel />
               </div>
             </div>
           ) : null}
@@ -707,6 +640,15 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                   : undefined
               }
               onClose={closeRegionPopover}
+              visualizerConfig={{
+                visualizerId: config.visualizerId,
+                visualizerChangeRule: config.visualizerChangeRule,
+                visualizerSequence: config.visualizerSequence,
+              }}
+              windowVisualizers={windowVisualizers}
+              onVisualizerConfigChange={(patch) =>
+                setConfig((prev) => normalizeVcConfig({ ...prev, ...patch }))
+              }
             />
           ) : null}
 
@@ -723,13 +665,19 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
         {designerTab === 'surface' && error ? <p className="error vc-modal-error">{error}</p> : null}
 
         {designerTab === 'surface' ? (
-          <div className="vc-modal-actions">
-            <button type="button" className="btn" onClick={onClose}>
-              Close
-            </button>
-            <button type="button" className="btn vc-start-btn" onClick={() => void handleStart()}>
-              Start VC Mode
-            </button>
+          <div className="vc-modal-footer">
+            <p className="vc-content-hint vc-designer-footer-hint">
+              Right-click an area or float to assign content. Left-click floats to drag; use the corner
+              handle to resize.
+            </p>
+            <div className="vc-modal-actions">
+              <button type="button" className="btn" onClick={onClose}>
+                Close
+              </button>
+              <button type="button" className="btn vc-start-btn" onClick={() => void handleStart()}>
+                Start VC Mode
+              </button>
+            </div>
           </div>
         ) : null}
       </div>

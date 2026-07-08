@@ -36,9 +36,29 @@ export type KudoTextEffectId = (typeof KUDO_TEXT_EFFECTS)[number]['id'];
 export const KUDO_TEXT_EFFECT_IDS = KUDO_TEXT_EFFECTS.map((row) => row.id);
 
 export function isParticleEffectImplemented(effectId: string): boolean {
-  return ['rise', 'rain', 'burst', 'drift'].includes(effectId);
+  return KUDO_PARTICLE_EFFECT_IDS.includes(effectId as KudoParticleEffectId);
 }
 
 export function isTextEffectImplemented(effectId: string): boolean {
-  return ['slam', 'balloon', 'echo', 'type'].includes(effectId);
+  return [
+    'slam',
+    'balloon',
+    'echo',
+    'type',
+    'stamp',
+    'flash',
+    'bounce',
+    'drop',
+    'zoom',
+    'wave',
+  ].includes(effectId);
+}
+
+/** Designer + runtime — all implemented particle effects. */
+export function listShippedParticleEffects() {
+  return KUDO_PARTICLE_EFFECTS.filter((row) => isParticleEffectImplemented(row.id));
+}
+
+export function listShippedTextEffects() {
+  return KUDO_TEXT_EFFECTS.filter((row) => row.phase === 'A' || row.phase === 'B');
 }

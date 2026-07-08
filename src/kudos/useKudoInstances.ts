@@ -28,7 +28,9 @@ let instanceCounter = 0;
 
 function canRenderParticlePreset(preset: KudoPreset): preset is KudoPreset & { particle: ParticleKudoConfig } {
   if (!preset.particle) return false;
-  if (preset.contentType !== 'builtin-assets' && preset.contentType !== 'emoji') return false;
+  if (preset.contentType !== 'builtin-assets' && preset.contentType !== 'emoji' && preset.contentType !== 'hybrid') {
+    return false;
+  }
   return isParticleEffectImplemented(preset.particle.effectId);
 }
 
@@ -115,13 +117,16 @@ export function useKudoInstances(containerRef: React.RefObject<HTMLElement | nul
             if (age > instance.durationMs) return null;
 
             const alive = instance.particles.filter((p) => now >= p.bornAt);
-            const stepped = stepParticles(alive, dt, instance.config.effectId);
+            const stepped = stepParticles(alive, dt, instance.config.effectId, now);
             const lifeT = Math.min(1, age / instance.durationMs);
             const fade = lifeT > 0.75 ? 1 - (lifeT - 0.75) / 0.25 : 1;
 
             return {
               ...instance,
-              particles: stepped.map((p) => ({ ...p, opacity: fade })),
+              particles: stepped.map((p) => ({
+                ...p,
+                opacity: fade * (p.localOpacity ?? 1),
+              })),
             };
           })
           .filter((row): row is ActiveKudoInstance => row != null);

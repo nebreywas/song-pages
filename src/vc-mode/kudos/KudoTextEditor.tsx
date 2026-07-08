@@ -1,7 +1,7 @@
 import {
   countGraphemes,
-  KUDO_TEXT_EFFECTS,
   KUDOS_TEXT_MAX_GRAPHEMES,
+  listShippedTextEffects,
   truncateToMaxGraphemes,
   type KudoTextOutline,
   type KudoTextPlacement,
@@ -19,12 +19,13 @@ type KudoTextEditorProps = {
   variant?: 'text' | 'text-emoji';
 };
 
-const PHASE_A_TEXT_EFFECTS = KUDO_TEXT_EFFECTS.filter((row) => row.phase === 'A');
+const SHIPPED_TEXT_EFFECTS = listShippedTextEffects();
 
 /** Text / words+emoji Kudo authoring (spec §8, §10). */
 export function KudoTextEditor({ text, onChange, variant = 'text' }: KudoTextEditorProps) {
   const graphemeCount = countGraphemes(text.value);
   const isMixed = variant === 'text-emoji';
+  const fieldLabel = isMixed ? 'Phrase' : 'Text';
 
   const setValue = (raw: string) => {
     onChange({ value: truncateToMaxGraphemes(raw, KUDOS_TEXT_MAX_GRAPHEMES) });
@@ -33,8 +34,11 @@ export function KudoTextEditor({ text, onChange, variant = 'text' }: KudoTextEdi
   return (
     <div className="vc-kudos-text-editor">
       <label className="vc-field">
-        <span>
-          {isMixed ? 'Phrase' : 'Text'} ({graphemeCount}/{KUDOS_TEXT_MAX_GRAPHEMES})
+        <span className="vc-kudos-field-label-row">
+          <span>{fieldLabel}</span>
+          <span className="vc-kudos-field-counter">
+            ({graphemeCount}/{KUDOS_TEXT_MAX_GRAPHEMES})
+          </span>
         </span>
         <input
           type="text"
@@ -66,7 +70,7 @@ export function KudoTextEditor({ text, onChange, variant = 'text' }: KudoTextEdi
       <label className="vc-field">
         <span>Effect</span>
         <select value={text.effectId} onChange={(e) => onChange({ effectId: e.target.value })}>
-          {PHASE_A_TEXT_EFFECTS.map((effect) => (
+          {SHIPPED_TEXT_EFFECTS.map((effect) => (
             <option key={effect.id} value={effect.id}>
               {effect.label}
             </option>

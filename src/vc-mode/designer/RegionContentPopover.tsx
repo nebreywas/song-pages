@@ -25,6 +25,7 @@ import {
   type VcCellContent,
   type VcCycleTime,
   type VcHostSlotBinding,
+  type VcModeConfig,
   type VcSongSlotSettings,
   type VcTransitionStyle,
 } from '@shared/vcModeTypes';
@@ -33,6 +34,10 @@ import { DesignerOverlayLayer } from './DesignerOverlayLayer';
 import { AssignmentSettingsIntro } from './AssignmentSettingsIntro';
 import { HostAssignmentSettings } from './HostAssignmentSettings';
 import { SongAssignmentSettings } from './SongAssignmentSettings';
+import {
+  VisualizerAssignmentSettings,
+  type VisualizerPluginOption,
+} from './VisualizerAssignmentSettings';
 
 export type RegionTarget =
   | { kind: 'area'; areaNumber: number }
@@ -54,6 +59,11 @@ type RegionContentPopoverProps = {
   onUpdateFloatField?: (field: 'x' | 'y' | 'width' | 'height', pct: number) => void;
   onUpdateFloat?: (patch: Partial<VcFloatGeometry>) => void;
   onClose: () => void;
+  visualizerConfig: Pick<VcModeConfig, 'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence'>;
+  windowVisualizers: VisualizerPluginOption[];
+  onVisualizerConfigChange: (
+    patch: Partial<Pick<VcModeConfig, 'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence'>>,
+  ) => void;
 };
 
 function ContentSelect({
@@ -178,7 +188,7 @@ function regionTitle(target: RegionTarget): string {
 }
 
 function slotHasDetailTab(content: VcCellContent): boolean {
-  return isHostContentKind(content) || isSongConfigurableContent(content);
+  return content === 'visualizer' || isHostContentKind(content) || isSongConfigurableContent(content);
 }
 
 function availableDetailTabs(
@@ -193,8 +203,14 @@ function availableDetailTabs(
   return tabs;
 }
 
-function defaultDetailTab(_target: RegionTarget, tabs: RegionDetailTab[]): RegionDetailTab | null {
+function defaultDetailTab(
+  _target: RegionTarget,
+  tabs: RegionDetailTab[],
+  cell: VcCellAssignment,
+): RegionDetailTab | null {
   if (tabs.length === 0) return null;
+  if (cell.slotA === 'visualizer' && tabs.includes('primary')) return 'primary';
+  if (cell.slotB === 'visualizer' && tabs.includes('secondary')) return 'secondary';
   if (tabs.includes('layout')) return 'layout';
   return tabs[0];
 }
@@ -203,10 +219,11 @@ function resolveDetailTab(
   current: RegionDetailTab | null,
   target: RegionTarget,
   tabs: RegionDetailTab[],
+  cell: VcCellAssignment,
 ): RegionDetailTab | null {
   if (tabs.length === 0) return null;
   if (current && tabs.includes(current)) return current;
-  return defaultDetailTab(target, tabs);
+  return defaultDetailTab(target, tabs, cell);
 }
 
 function detailTabLabel(tab: RegionDetailTab): string {
@@ -443,6 +460,9 @@ export function RegionContentPopover({
   onUpdateFloatField,
   onUpdateFloat,
   onClose,
+  visualizerConfig,
+  windowVisualizers,
+  onVisualizerConfigChange,
 }: RegionContentPopoverProps) {
   const isFloat = target.kind === 'float';
   const showFloatLayout = isFloat && float && onUpdateFloatField;
@@ -454,7 +474,7 @@ export function RegionContentPopover({
   const hasDetailPanel = detailTabs.length > 0;
 
   const [activeTab, setActiveTab] = useState<RegionDetailTab | null>(() =>
-    defaultDetailTab(target, availableDetailTabs(target, cell, Boolean(showFloatLayout))),
+    defaultDetailTab(target, availableDetailTabs(target, cell, Boolean(showFloatLayout)), cell),
   );
   const prevTargetKeyRef = useRef<string | null>(null);
   const targetKey = target.kind === 'float' ? `float:${target.id}` : `area:${target.areaNumber}`;
@@ -463,6 +483,8 @@ export function RegionContentPopover({
   const showHostSecondary = isHostContentKind(cell.slotB);
   const showSongPrimary = isSongConfigurableContent(cell.slotA);
   const showSongSecondary = isSongConfigurableContent(cell.slotB);
+  const showVisualizerPrimary = cell.slotA === 'visualizer';
+  const showVisualizerSecondary = cell.slotB === 'visualizer';
 
   const assignSlot = (slot: 'slotA' | 'slotB', value: VcCellContent) => {
     if (isFloatOnlyContent(value) && target.kind !== 'float') {
@@ -508,11 +530,11 @@ export function RegionContentPopover({
     const prev = prevTargetKeyRef.current;
     prevTargetKeyRef.current = targetKey;
     if (prev !== targetKey) {
-      setActiveTab(defaultDetailTab(target, detailTabs));
+      setActiveTab(defaultDetailTab(target, detailTabs, cell));
       return;
     }
-    setActiveTab((current) => resolveDetailTab(current, target, detailTabs));
-  }, [targetKey, target, detailTabs]);
+    setActiveTab((current) => resolveDetailTab(current, target, detailTabs, cell));
+  }, [targetKey, target, detailTabs, cell]);
 
   const layoutClass = [
     'vc-region-popover-layout',
@@ -605,6 +627,16 @@ export function RegionContentPopover({
                 />
               ) : null}
 
+              {resolvedTab === 'primary' && showVisualizerPrimary ? (
+                <VisualizerAssignmentSettings
+                  visualizerId={visualizerConfig.visualizerId}
+                  visualizerChangeRule={visualizerConfig.visualizerChangeRule}
+                  visualizerSequence={visualizerConfig.visualizerSequence}
+                  visualizers={windowVisualizers}
+                  onChange={onVisualizerConfigChange}
+                />
+              ) : null}
+
               {resolvedTab === 'secondary' && showHostSecondary ? (
                 <HostAssignmentDetail
                   content={cell.slotB}
@@ -621,6 +653,16 @@ export function RegionContentPopover({
                   catalog={catalog}
                   gridDesign={gridDesign}
                   onChange={(settings) => onUpdateCell({ songSlotB: settings })}
+                />
+              ) : null}
+
+              {resolvedTab === 'secondary' && showVisualizerSecondary ? (
+                <VisualizerAssignmentSettings
+                  visualizerId={visualizerConfig.visualizerId}
+                  visualizerChangeRule={visualizerConfig.visualizerChangeRule}
+                  visualizerSequence={visualizerConfig.visualizerSequence}
+                  visualizers={windowVisualizers}
+                  onChange={onVisualizerConfigChange}
                 />
               ) : null}
             </div>

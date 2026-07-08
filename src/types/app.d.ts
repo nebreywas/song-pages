@@ -66,6 +66,8 @@ export type SongRow = {
   /** Liked Songs row metadata */
   liked_id?: number;
   unavailable?: number | null;
+  /** Subscribed catalog row — user skipped (still listed, not auto-played). */
+  skipped?: number | null;
 };
 
 export type SubscribeResult = {
@@ -118,6 +120,39 @@ declare global {
           data?: { pageUrl: string; playbackUrl: string; fromCache: boolean };
           error?: string;
         }>;
+        countSunoDemoSongs: () => Promise<number>;
+        addSunoDemoSong: (
+          input: string,
+        ) => Promise<{
+          ok: boolean;
+          data?: { song: SongRow; duplicate: boolean; count: number };
+          error?: string;
+        }>;
+        getPlaylistOrderState: (
+          playlistKey: string,
+          currentSongIds: number[],
+        ) => Promise<{
+          ok: boolean;
+          data?: { hasCustomOrder: boolean; songIds: number[] };
+          error?: string;
+        }>;
+        savePlaylistCustomOrder: (
+          playlistKey: string,
+          orderedSongIds: number[],
+        ) => Promise<{ ok: boolean; error?: string }>;
+        clearPlaylistCustomOrder: (playlistKey: string) => Promise<{ ok: boolean; error?: string }>;
+        setCatalogSongSkipped: (
+          artistId: number,
+          externalId: string,
+          skipped: boolean,
+        ) => Promise<{ ok: boolean; error?: string }>;
+        removeLikedSong: (payload: {
+          songId: number;
+          likedId?: number | null;
+        }) => Promise<{ ok: boolean; data?: { count: number }; error?: string }>;
+        removeSunoDemoSong: (
+          songId: number,
+        ) => Promise<{ ok: boolean; data?: { count: number }; error?: string }>;
         cacheStats: () => Promise<{
           ok: boolean;
           data?: { entryCount: number; totalBytes: number; maxEntries: number };
@@ -214,6 +249,66 @@ declare global {
         >;
         resolveMediaUrl: (relativePath: string) => Promise<string | null>;
         deleteMedia: (relativePath: string) => Promise<boolean>;
+      };
+      commands: {
+        getState: () => Promise<{ ok: boolean; data?: import('@shared/commands').CommandMappingState; error?: string }>;
+        saveState: (
+          state: import('@shared/commands').CommandMappingState,
+        ) => Promise<{ ok: boolean; data?: import('@shared/commands').CommandMappingState; error?: string }>;
+        dispatch: (invocation: import('@shared/commands').CommandInvocation) => Promise<{
+          ok: boolean;
+          result?: string;
+          error?: string;
+        }>;
+        sendGatedKey: (
+          input:
+            | string
+            | {
+                type?: string;
+                key: string;
+                alt?: boolean;
+                meta?: boolean;
+                control?: boolean;
+                shift?: boolean;
+              },
+        ) => Promise<{ ok: boolean; reason?: string }>;
+        onMappingState: (
+          callback: (state: import('@shared/commands').CommandMappingState) => void,
+        ) => () => void;
+        onGateState: (callback: (state: { open: boolean; timeoutMs: number; openedAt?: number | null }) => void) => () => void;
+        onGateEvent: (
+          callback: (event: { type: string; key?: string; reason?: string }) => void,
+        ) => () => void;
+        onInvoke: (
+          callback: (payload: {
+            commandId: string;
+            kudoPresetId?: string;
+            source?: string;
+            binding?: string;
+            result?: string;
+            timestamp?: number;
+          }) => void,
+        ) => () => void;
+        setRuntimeContext: (context: import('@shared/commands').CommandRuntimeContext) => void;
+        getRuntimeContext: () => Promise<{
+          ok: boolean;
+          data?: import('@shared/commands').CommandRuntimeContext;
+          error?: string;
+        }>;
+        onRuntimeContext: (
+          callback: (context: import('@shared/commands').CommandRuntimeContext) => void,
+        ) => () => void;
+        onRegistrationStatus: (
+          callback: (payload: {
+            failures: Array<{ accelerator?: string; commandId?: string; reason: string }>;
+            registered: number;
+          }) => void,
+        ) => () => void;
+      };
+      controller: {
+        open: () => Promise<{ ok: boolean; error?: string }>;
+        close: () => Promise<{ ok: boolean; error?: string }>;
+        status: () => Promise<{ ok: boolean; data?: { open: boolean }; error?: string }>;
       };
     };
   }

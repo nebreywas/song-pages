@@ -106,7 +106,7 @@ Main process forwards renderer messages to the VC window.
 | `vc:sendPlaybackStatus` → `vc:playback-status` | VC → main | Mirror audio playing — main defers speaker mute |
 | `vc:request-sync` | VC → main | VC window loaded; main pushes fresh state |
 | `vc:opened` / `vc:closed` | main → renderer | VC window lifecycle events |
-| `vc:hotkey` | both | Global hotkeys registered in main (`electron/vcHotkeys.js`) |
+| `vc:hotkey` | both | Legacy overlay actions dispatched via `electron/commands/commandService.js` |
 
 Preload exposes these under `window.app.vc`.
 

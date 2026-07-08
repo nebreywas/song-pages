@@ -83,6 +83,15 @@ function initListenerSchema() {
   const { initLikedSongsSchema } = require('./likedSongs');
   initLikedSongsSchema(db);
 
+  const { initSunoDemoSchema } = require('./sunoDemo/sunoDemoSongs');
+  initSunoDemoSchema(db);
+
+  const { initPlaylistOrderSchema } = require('./playlistOrder');
+  initPlaylistOrderSchema(db);
+
+  const { initSongSkipsSchema } = require('./songSkips');
+  initSongSkipsSchema(db);
+
   const { initSongCacheSchema } = require('./cache/schema');
   initSongCacheSchema(db);
 }
@@ -120,20 +129,23 @@ function getArtistById(id) {
 }
 
 function listSongsForArtist(artistId) {
-  return getDatabase()
+  const { attachSkipFlags } = require('./songSkips');
+  const rows = getDatabase()
     .prepare(
       `SELECT id, artist_id, external_id, slug, title, album, year, caption,
               cover_url, page_url, playback_url, song_manifest_url,
               playback_scope, playback_quality, duration_seconds, sort_order
        FROM songs
        WHERE artist_id = ?
-       ORDER BY sort_order ASC, title COLLATE NOCASE ASC`
+       ORDER BY sort_order ASC, title COLLATE NOCASE ASC`,
     )
     .all(artistId);
+  return attachSkipFlags(rows);
 }
 
 function listAllSongs() {
-  return getDatabase()
+  const { attachSkipFlagsForAllArtists } = require('./songSkips');
+  const rows = getDatabase()
     .prepare(
       `SELECT s.id, s.artist_id, s.external_id, s.slug, s.title, s.album, s.year,
               s.caption, s.cover_url, s.page_url, s.playback_url, s.song_manifest_url,
@@ -141,9 +153,10 @@ function listAllSongs() {
               a.artist_name, a.site_root_normalized
        FROM songs s
        JOIN artists a ON a.id = s.artist_id
-       ORDER BY a.artist_name COLLATE NOCASE ASC, s.sort_order ASC`
+       ORDER BY a.artist_name COLLATE NOCASE ASC, s.sort_order ASC`,
     )
     .all();
+  return attachSkipFlagsForAllArtists(rows);
 }
 
 function getSongById(id) {
