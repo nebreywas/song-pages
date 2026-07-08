@@ -5,7 +5,7 @@ type SunoDemoAddDialogProps = {
   open: boolean;
   busy: boolean;
   onClose: () => void;
-  onAdded: (songId: number) => void;
+  onAdded: () => void;
 };
 
 /** Secret demo dialog — paste a Suno share URL or clip UUID to import a track. */
@@ -45,7 +45,7 @@ export function SunoDemoAddDialog({ open, busy, onClose, onAdded }: SunoDemoAddD
       return;
     }
 
-    onAdded(result.data.song.id);
+    onAdded();
     onClose();
   };
 

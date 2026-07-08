@@ -918,19 +918,10 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const handleSunoDemoAdded = useCallback(
-    async (songId: number) => {
-      await loadLibrary();
-      setSelectedArtistId(SUNO_DEMO_ARTIST_ID);
-      const app = getApp();
-      if (!app) return;
-      const rows = await app.listener.listSongs(SUNO_DEMO_ARTIST_ID);
-      setSongs(rows);
-      const song = rows.find((row) => row.id === songId);
-      if (song) void playSong(song);
-    },
-    [loadLibrary, playSong],
-  );
+  const handleSunoDemoAdded = useCallback(async () => {
+    // Refresh sidebar count and the Suno playlist if it is already open — do not interrupt playback.
+    await loadLibrary();
+  }, [loadLibrary]);
 
   const selectArtist = (artistId: number) => {
     setSelectedArtistId(artistId);
@@ -1503,7 +1494,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           open={sunoDemoAddOpen}
           busy={busy}
           onClose={() => setSunoDemoAddOpen(false)}
-          onAdded={(songId) => void handleSunoDemoAdded(songId)}
+          onAdded={() => void handleSunoDemoAdded()}
         />
       ) : null}
 
