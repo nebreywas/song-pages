@@ -40,6 +40,26 @@ function hostContentRoot() {
   return path.join(app.getPath('userData'), 'host-content');
 }
 
+/** Reject path traversal — resolved path must stay under host-content root. */
+function isPathUnderRoot(absolutePath, rootDir) {
+  const root = path.resolve(rootDir);
+  const resolved = path.resolve(absolutePath);
+  return resolved === root || resolved.startsWith(`${root}${path.sep}`);
+}
+
+function resolveMediaPath(relativePath) {
+  if (!relativePath || typeof relativePath !== 'string') return null;
+
+  const trimmed = relativePath.trim();
+  if (!trimmed || path.isAbsolute(trimmed) || trimmed.includes('\0')) return null;
+
+  const root = path.resolve(hostContentRoot());
+  const absolute = path.resolve(root, trimmed.replace(/^\//, ''));
+  if (!isPathUnderRoot(absolute, root)) return null;
+  if (!fs.existsSync(absolute)) return null;
+  return absolute;
+}
+
 function hostMediaDir() {
   return path.join(hostContentRoot(), 'media');
 }
@@ -78,13 +98,6 @@ async function pickMediaFile(kind) {
 
   if (result.canceled || !result.filePaths[0]) return null;
   return result.filePaths[0];
-}
-
-function resolveMediaPath(relativePath) {
-  if (!relativePath || typeof relativePath !== 'string') return null;
-  const absolute = path.join(hostContentRoot(), relativePath.replace(/^\//, ''));
-  if (!fs.existsSync(absolute)) return null;
-  return absolute;
 }
 
 function registerHostContentIpc(ipcMain) {
