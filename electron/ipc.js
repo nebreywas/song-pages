@@ -229,8 +229,8 @@ function registerIpcHandlers() {
     }
   });
 
-  ipcMain.handle('listener:bindSongPageGuest', (_event, guestWebContentsId, allowedPageUrl) => {
-    return bindSongPageGuestById(guestWebContentsId, allowedPageUrl);
+  ipcMain.handle('listener:bindSongPageGuest', (event, guestWebContentsId, allowedPageUrl) => {
+    return bindSongPageGuestById(guestWebContentsId, allowedPageUrl, event.sender);
   });
 
   ipcMain.handle('listener:updateSongDuration', (_event, songId, durationSeconds) => {

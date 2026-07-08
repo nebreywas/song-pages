@@ -25,4 +25,4 @@ function configureSongPageGuestSession() {
   return guestSession;
 }
 
-module.exports = { configureSongPageGuestSession };
+module.exports = { configureSongPageGuestSession, GUEST_PARTITION };

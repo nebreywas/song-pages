@@ -4,9 +4,10 @@
  * Treats remote pages as untrusted: block escape from current page, open external
  * targets in the system browser, deny popups and privileged APIs.
  */
-const { shell, webContents } = require('electron');
+const { shell, webContents, session } = require('electron');
 const logger = require('../logger');
 const { isSameCacheEntry } = require('./cache/urls');
+const { GUEST_PARTITION } = require('./guestSession');
 
 /** @type {Map<number, string>} webContentsId → normalized allowed page URL */
 const allowedPageByGuestId = new Map();
@@ -39,8 +40,33 @@ function isAllowedGuestNavigation(allowedPageUrl, targetUrl) {
 }
 
 function openExternally(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      logger.debug('Blocked external URL scheme from Song Page guest', { url });
+      return;
+    }
+  } catch {
+    logger.debug('Blocked invalid external URL from Song Page guest', { url });
+    return;
+  }
   logger.debug('Opening external URL from Song Page guest', { url });
   void shell.openExternal(url);
+}
+
+/** True when webContents is a Song Pages guest webview owned by the invoking host window. */
+function isSongPageGuestWebContents(guestContents, hostWebContents) {
+  if (!guestContents || guestContents.isDestroyed()) return false;
+  if (guestContents.getType() !== 'webview') return false;
+
+  const guestSession = session.fromPartition(GUEST_PARTITION);
+  if (guestContents.session !== guestSession) return false;
+
+  if (!hostWebContents || hostWebContents.isDestroyed()) return false;
+  const host = guestContents.hostWebContents;
+  if (!host || host.isDestroyed() || host.id !== hostWebContents.id) return false;
+
+  return true;
 }
 
 /**
@@ -96,10 +122,17 @@ function bindSongPageGuest(guestContents, allowedPageUrl) {
   return { ok: true };
 }
 
-function bindSongPageGuestById(guestWebContentsId, allowedPageUrl) {
+function bindSongPageGuestById(guestWebContentsId, allowedPageUrl, hostWebContents) {
   const guest = webContents.fromId(guestWebContentsId);
   if (!guest) {
     return { ok: false, error: 'Guest web contents not found.' };
+  }
+  if (!isSongPageGuestWebContents(guest, hostWebContents)) {
+    logger.warn('Rejected bindSongPageGuest — guest identity check failed', {
+      guestId: guestWebContentsId,
+      guestType: guest.getType(),
+    });
+    return { ok: false, error: 'Invalid guest web contents.' };
   }
   return bindSongPageGuest(guest, allowedPageUrl);
 }

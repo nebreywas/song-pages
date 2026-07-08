@@ -402,7 +402,8 @@ export function useVcModeManager({
       const timing = timingRef.current;
       app.vc!.sendFrame({
         type: 'frame',
-        frequency: Array.from(scratch),
+        // Copy — scratch buffer is reused each tick; typed array IPC matches visualizer path.
+        frequency: new Uint8Array(scratch),
         currentTime: timing.currentTime,
         duration: timing.duration,
         isPlaying: timing.isPlaying,

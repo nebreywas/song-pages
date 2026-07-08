@@ -121,7 +121,8 @@ export function useAnalyserPlaybackMirror({
         }
       });
       return () => {
-        if (generation !== loadGenerationRef.current) return;
+        hls.destroy();
+        if (hlsRef.current === hls) hlsRef.current = null;
       };
     }
 

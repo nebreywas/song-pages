@@ -28,6 +28,7 @@ Beyond the core loop, the desktop app also includes VC Mode (surface designer + 
 | [song-pages-vc-mode-surface-view-designer-spec.md](documentation/song-pages-vc-mode-surface-view-designer-spec.md) | VC surface designer product spec |
 | [Host-content-design.md](documentation/Host-content-design.md) | Host content catalog design |
 | [shared-utilities.md](documentation/shared-utilities.md) | Reusable `shared/` helpers (lyrics, time, markdown) |
+| [ffmpeg-compile-prerequisites.md](documentation/ffmpeg-compile-prerequisites.md) | FFmpeg/FFprobe for Artist Mode compile (not bundled) |
 | [ALARE.md](documentation/ALARE.md) | Approximate lyric allocation & rendering (VC lyric tracking) |
 
 ## Technology Stack
@@ -47,7 +48,7 @@ Beyond the core loop, the desktop app also includes VC Mode (surface designer + 
 ### Prerequisites
 
 - Node.js 20+
-- ffmpeg on PATH (Artist Mode compile)
+- **ffmpeg and ffprobe on PATH** — required for **Artist Mode compile only** (not bundled in packaged app). See [ffmpeg-compile-prerequisites.md](documentation/ffmpeg-compile-prerequisites.md).
 - macOS, Windows, or Linux
 
 ### Install & run
@@ -66,6 +67,8 @@ npm run build              # compiler bundle + butterchurn catalog + vite
 npm run package:mac        # macOS distributable
 npm run generate:butterchurn-catalog   # regenerate approved preset catalog
 ```
+
+Packaged builds include the app and compiler bundle; **FFmpeg must still be installed on the host** for Artist Mode compile. See [ffmpeg-compile-prerequisites.md](documentation/ffmpeg-compile-prerequisites.md).
 
 ### Remote test target
 
