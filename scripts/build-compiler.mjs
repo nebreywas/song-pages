@@ -16,7 +16,7 @@ fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
 await esbuild.build({
-  entryPoints: [path.join(root, 'compiler', 'artistPageCompileService.ts')],
+  entryPoints: [path.join(root, 'compiler', 'electronCompileExports.ts')],
   bundle: true,
   platform: 'node',
   format: 'cjs',

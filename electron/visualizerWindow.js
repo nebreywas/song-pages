@@ -5,6 +5,11 @@
 const { BrowserWindow, screen } = require('electron');
 const path = require('path');
 const logger = require('./logger');
+const { devServerUrl } = require('./devServer');
+const {
+  installTrustedNavigationPolicy,
+  resolveAllowedDocumentUrl,
+} = require('./trustedWindowNavigation');
 
 /** @type {import('electron').BrowserWindow | null} */
 let visualizerWindow = null;
@@ -12,11 +17,9 @@ let visualizerWindow = null;
 /** @type {import('electron').BrowserWindow | null} */
 let mainWindowRef = null;
 
-const DEV_SERVER_URL = 'http://localhost:5173';
-
 function visualizerLoadUrl() {
   if (!require('electron').app.isPackaged) {
-    return `${DEV_SERVER_URL}/visualizer-window/visualizer.html`;
+    return devServerUrl('/visualizer-window/visualizer.html');
   }
   return path.join(__dirname, '..', 'dist', 'visualizer-window', 'visualizer.html');
 }
@@ -57,6 +60,9 @@ function openVisualizerWindow(mainWindow, options = {}) {
 
   const { x, y, width, height } = targetDisplay.bounds;
 
+  const isPackaged = require('electron').app.isPackaged;
+  const loadTarget = visualizerLoadUrl();
+
   visualizerWindow = new BrowserWindow({
     x,
     y,
@@ -76,6 +82,12 @@ function openVisualizerWindow(mainWindow, options = {}) {
       webSecurity: false,
       backgroundThrottling: false,
     },
+  });
+
+  installTrustedNavigationPolicy(visualizerWindow, {
+    role: 'visualizer',
+    allowedDocumentUrl: resolveAllowedDocumentUrl(loadTarget, isPackaged),
+    isPackaged,
   });
 
   visualizerWindow.on('closed', () => {
@@ -113,10 +125,10 @@ function openVisualizerWindow(mainWindow, options = {}) {
     }
   });
 
-  if (!require('electron').app.isPackaged) {
-    visualizerWindow.loadURL(visualizerLoadUrl());
+  if (!isPackaged) {
+    visualizerWindow.loadURL(loadTarget);
   } else {
-    visualizerWindow.loadFile(visualizerLoadUrl());
+    visualizerWindow.loadFile(loadTarget);
   }
 
   logger.info('Visualizer window opened');

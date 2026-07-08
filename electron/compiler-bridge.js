@@ -5,56 +5,68 @@ const path = require('path');
 const { app } = require('electron');
 const { slugifySiteText } = require('./compiler-slugify');
 
-function buildFileMapFromManifest(manifest) {
-  const files = new Map();
-
-  if (manifest.hasArtistPhoto && manifest.artistPhotoLocalPath?.trim()) {
-    files.set('artist-photo', manifest.artistPhotoLocalPath.trim());
+class CompileSecurityError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'CompileSecurityError';
+    this.code = 'COMPILE_SECURITY_REJECT';
   }
+}
 
-  for (const song of manifest.songs || []) {
-    if (song.hasAudio && song.audioLocalPath?.trim()) {
-      files.set(`audio-${song.id}`, song.audioLocalPath.trim());
-    }
-    if (song.hasCover && song.coverLocalPath?.trim()) {
-      files.set(`cover-${song.id}`, song.coverLocalPath.trim());
-    }
-    if (song.hasExtraImage && song.extraImageLocalPath?.trim()) {
-      files.set(`extra-${song.id}`, song.extraImageLocalPath.trim());
-    }
+function loadCompileModules() {
+  if (app.isPackaged) {
+    return require('./compiler-dist/bundle.cjs');
   }
+  require('tsx/cjs/api').register();
+  return {
+    compileArtistPage: require('../compiler/artistPageCompileService.ts').compileArtistPage,
+    buildStrictCompileFileMapFromManifest:
+      require('../compiler/compileFileMapBuilder.ts').buildStrictCompileFileMapFromManifest,
+    buildElectronReadRoots: require('../compiler/trustedReadRoots.ts').buildElectronReadRoots,
+    CompileSecurityError: require('../compiler/compileFileMapBuilder.ts').CompileSecurityError,
+  };
+}
 
-  return files;
+function rejectUntrustedPayload(field) {
+  throw new CompileSecurityError(
+    `Compile IPC rejects renderer-supplied ${field}. Paths and output are resolved in the main process.`,
+  );
 }
 
 async function runCompile(payload) {
-  let compileArtistPage;
+  const {
+    compileArtistPage,
+    buildStrictCompileFileMapFromManifest,
+    buildElectronReadRoots,
+  } = loadCompileModules();
 
-  if (app.isPackaged) {
-    // Single CJS bundle — marked v18 is ESM-only and cannot be require()'d from tsc output.
-    ({ compileArtistPage } = require('./compiler-dist/bundle.cjs'));
-  } else {
-    require('tsx/cjs/api').register();
-    ({ compileArtistPage } = require('../compiler/artistPageCompileService.ts'));
+  if (payload?.fileMap != null) {
+    rejectUntrustedPayload('fileMap');
+  }
+  if (payload?.outputRoot != null && String(payload.outputRoot).trim()) {
+    rejectUntrustedPayload('outputRoot');
+  }
+
+  const manifest = payload?.manifest;
+  if (!manifest || typeof manifest !== 'object') {
+    throw new CompileSecurityError('Compile requires a manifest object.');
   }
 
   const projectRoot = path.join(__dirname, '..');
-  const manifest = payload.manifest;
-  const files = payload.fileMap
-    ? new Map(payload.fileMap)
-    : buildFileMapFromManifest(manifest);
+  const userData = app.getPath('userData');
+  const readRoots = buildElectronReadRoots(projectRoot, userData);
+  const files = await buildStrictCompileFileMapFromManifest(manifest, projectRoot, readRoots);
 
   const slug = slugifySiteText(manifest.artistSlug);
-  const outputRootOverride =
-    payload.outputRoot || path.join(app.getPath('userData'), 'artistpages', slug);
+  const outputRootOverride = path.join(userData, 'artistpages', slug);
 
   return compileArtistPage({
     projectRoot,
     manifest,
     files,
-    uploadsDir: path.join(app.getPath('userData'), 'compile-uploads'),
+    uploadsDir: path.join(userData, 'compile-uploads'),
     outputRootOverride,
   });
 }
 
-module.exports = { runCompile };
+module.exports = { runCompile, CompileSecurityError };

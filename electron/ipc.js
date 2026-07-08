@@ -9,6 +9,9 @@ const logger = require('./logger');
 const listenerLibrary = require('./listener/library');
 const listenerSubscribe = require('./listener/subscribe');
 const { bindSongPageGuestById } = require('./listener/guestSecurity');
+const { resolveManifestFetchProvenance } = require('./listener/urlProvenance');
+const { fetchWithUrlPolicy } = require('./net/fetchWithPolicy');
+const { isAllowedExternalHttpUrl } = require('./net/externalUrl');
 const visualizerWindow = require('./visualizerWindow');
 const vcWindow = require('./vcWindow');
 const { registerHostContentIpc } = require('./hostContent');
@@ -18,7 +21,7 @@ function registerIpcHandlers() {
   ipcMain.handle('app:getVersion', () => app.getVersion());
 
   ipcMain.handle('app:openExternal', (_event, url) => {
-    if (typeof url !== 'string' || !/^https?:\/\//i.test(url.trim())) {
+    if (typeof url !== 'string' || !isAllowedExternalHttpUrl(url)) {
       return { ok: false, error: 'Invalid URL.' };
     }
     void shell.openExternal(url.trim());
@@ -210,22 +213,20 @@ function registerIpcHandlers() {
       return { ok: true, data: manifest };
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const provenance = resolveManifestFetchProvenance(url);
     try {
-      const response = await fetch(url, {
-        signal: controller.signal,
+      const data = await fetchWithUrlPolicy(url, {
+        purpose: 'fetch-song-manifest',
+        provenance,
+        maxRedirects: 5,
+        timeoutMs: 30000,
+        maxBytes: 1024 * 1024,
         headers: { Accept: 'application/json' },
       });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      return { ok: true, data: await response.json() };
+      return { ok: true, data };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message };
-    } finally {
-      clearTimeout(timer);
     }
   });
 

@@ -10,6 +10,11 @@ const { installAppMenu } = require('./menu');
 const listenerSubscribe = require('./listener/subscribe');
 const { configureSongPageGuestSession } = require('./listener/guestSession');
 const { registerCacheScheme, registerCacheProtocol } = require('./listener/cache/protocol');
+const { devServerOrigin, devServerUrl } = require('./devServer');
+const {
+  installTrustedNavigationPolicy,
+  resolveAllowedDocumentUrl,
+} = require('./trustedWindowNavigation');
 
 registerCacheScheme();
 
@@ -35,20 +40,24 @@ app.setPath('userData', path.join(app.getPath('appData'), 'song-pages'));
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 
-const DEV_SERVER_URL = 'http://localhost:5173';
+const DEV_SERVER_URL = devServerOrigin();
 
 /** Load Vite dev server — bust Electron's aggressive localhost HTTP cache. */
 async function loadDevServer(mainWindow) {
   const ses = mainWindow.webContents.session;
   await ses.clearCache();
   await ses.clearStorageData({ storages: ['cachestorage'] });
-  const url = `${DEV_SERVER_URL}/?dev=${Date.now()}`;
+  const url = `${devServerUrl('/')}?dev=${Date.now()}`;
   await mainWindow.loadURL(url);
   mainWindow.setTitle('Song Pages (Dev)');
   logger.debug('Loading Vite dev server', { url: DEV_SERVER_URL, isPackaged: app.isPackaged });
 }
 
 function createMainWindow() {
+  const isPackaged = app.isPackaged;
+  const productionIndexPath = path.join(__dirname, '..', 'dist', 'index.html');
+  const mainLoadTarget = isPackaged ? productionIndexPath : devServerUrl('/');
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -70,6 +79,12 @@ function createMainWindow() {
     },
   });
 
+  installTrustedNavigationPolicy(mainWindow, {
+    role: 'main',
+    allowedDocumentUrl: resolveAllowedDocumentUrl(mainLoadTarget, isPackaged),
+    isPackaged,
+  });
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     require('./commands/commandService').setWindowRefs({
@@ -85,12 +100,11 @@ function createMainWindow() {
 
   installAppMenu(mainWindow, !app.isPackaged);
 
-  if (!app.isPackaged) {
+  if (!isPackaged) {
     void loadDevServer(mainWindow);
   } else {
-    const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
-    mainWindow.loadFile(indexPath);
-    logger.info('Loading production build', { path: indexPath });
+    mainWindow.loadFile(productionIndexPath);
+    logger.info('Loading production build', { path: productionIndexPath });
   }
 }
 

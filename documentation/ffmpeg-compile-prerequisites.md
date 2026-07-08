@@ -75,3 +75,13 @@ Upload that folder to static hosting manually (PoC workflow).
 ## Future note
 
 Bundling FFmpeg inside the app would improve release UX but increases package size and platform-specific packaging work. Current design intentionally uses PATH + direct `execFile` (no `fluent-ffmpeg`).
+
+## Trusted local compile paths
+
+Compile input paths are resolved in the **main process**, not from renderer-supplied `fileMap`. Trusted **read** roots:
+
+- Project tree
+- User home (`os.homedir()`)
+- Application `userData` and managed subfolders (`compile-uploads`, `artistpages`, `host-content`)
+
+**External volumes, NAS mounts, and studio shares are not automatically trusted.** Legitimate workflows on mounted media will need a future explicit authorization mechanism (native picker, remembered project root, or persisted approved media root). Renderer-supplied `fileMap` and `outputRoot` are hard-rejected at the compile IPC boundary.

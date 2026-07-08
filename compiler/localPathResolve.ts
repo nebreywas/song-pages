@@ -1,23 +1,26 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
-/** Dev-only: validate a client-supplied local path before ffmpeg reads it. */
+import { buildDevReadRoots, isPathUnderAnyRoot, normalizeReadRoots } from "./trustedReadRoots";
+
+/** Resolve trusted read roots for path validation (project + home + optional extras). */
+export function resolveReadRoots(projectRoot: string, extraReadRoots: string[] = []): string[] {
+  return normalizeReadRoots([...buildDevReadRoots(projectRoot), ...extraReadRoots]);
+}
+
+/** Validate a client-supplied local path before ffmpeg reads it. */
 export async function resolveTrustedLocalPath(
   projectRoot: string,
   rawPath: string,
+  extraReadRoots: string[] = [],
 ): Promise<string | null> {
   const trimmed = rawPath.trim();
   if (!trimmed || !path.isAbsolute(trimmed)) return null;
 
   const resolved = path.resolve(trimmed);
-  const normalizedRoot = path.resolve(projectRoot);
-
-  // Allow project tree and user home (typical Music/Downloads masters live outside repo).
-  const home = process.env.HOME ? path.resolve(process.env.HOME) : null;
-  const inProject = resolved === normalizedRoot || resolved.startsWith(`${normalizedRoot}${path.sep}`);
-  const inHome = home !== null && (resolved === home || resolved.startsWith(`${home}${path.sep}`));
-
-  if (!inProject && !inHome) return null;
+  const readRoots = resolveReadRoots(projectRoot, extraReadRoots);
+  if (!isPathUnderAnyRoot(resolved, readRoots)) return null;
 
   try {
     const stat = await fs.stat(resolved);
@@ -52,4 +55,9 @@ export function linkedFilePath(linkedRoot: string, key: string, originalName: st
   const ext = path.extname(originalName) || ".bin";
   const safeKey = key.replace(/[^a-zA-Z0-9:_-]/g, "_");
   return path.join(linkedRoot, `${safeKey}${ext}`);
+}
+
+/** @deprecated Prefer os.homedir() via trustedReadRoots — kept for tests referencing home resolution. */
+export function userHomeDirectory(): string {
+  return os.homedir();
 }

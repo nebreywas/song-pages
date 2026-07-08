@@ -5,6 +5,11 @@ const { BrowserWindow } = require('electron');
 const path = require('path');
 const logger = require('./logger');
 const commandService = require('./commands/commandService');
+const { devServerUrl } = require('./devServer');
+const {
+  installTrustedNavigationPolicy,
+  resolveAllowedDocumentUrl,
+} = require('./trustedWindowNavigation');
 
 /** @type {import('electron').BrowserWindow | null} */
 let controllerWindow = null;
@@ -12,11 +17,9 @@ let controllerWindow = null;
 /** @type {import('electron').BrowserWindow | null} */
 let mainWindowRef = null;
 
-const DEV_SERVER_URL = 'http://localhost:5173';
-
 function controllerLoadTarget() {
   if (!require('electron').app.isPackaged) {
-    return `${DEV_SERVER_URL}/controller-window/controller.html`;
+    return devServerUrl('/controller-window/controller.html');
   }
   return path.join(__dirname, '..', 'dist', 'controller-window', 'controller.html');
 }
@@ -40,6 +43,9 @@ function openControllerWindow(mainWindow) {
     return { ok: true };
   }
 
+  const isPackaged = require('electron').app.isPackaged;
+  const loadTarget = controllerLoadTarget();
+
   controllerWindow = new BrowserWindow({
     width: 420,
     height: 640,
@@ -58,6 +64,12 @@ function openControllerWindow(mainWindow) {
     },
   });
 
+  installTrustedNavigationPolicy(controllerWindow, {
+    role: 'controller',
+    allowedDocumentUrl: resolveAllowedDocumentUrl(loadTarget, isPackaged),
+    isPackaged,
+  });
+
   controllerWindow.on('closed', () => {
     controllerWindow = null;
     commandService.closeGate('controller-closed');
@@ -71,10 +83,10 @@ function openControllerWindow(mainWindow) {
     commandService.broadcastGateState();
   });
 
-  if (!require('electron').app.isPackaged) {
-    controllerWindow.loadURL(controllerLoadTarget());
+  if (!isPackaged) {
+    controllerWindow.loadURL(loadTarget);
   } else {
-    controllerWindow.loadFile(controllerLoadTarget());
+    controllerWindow.loadFile(loadTarget);
   }
 
   syncWindowRefs();

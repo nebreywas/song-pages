@@ -8,6 +8,11 @@ const { pathToFileURL } = require('url');
 const logger = require('./logger');
 const commandService = require('./commands/commandService');
 const controllerWindow = require('./controllerWindow');
+const { devServerUrl } = require('./devServer');
+const {
+  installTrustedNavigationPolicy,
+  resolveAllowedDocumentUrl,
+} = require('./trustedWindowNavigation');
 
 /** @type {import('electron').BrowserWindow | null} */
 let vcWindow = null;
@@ -15,11 +20,11 @@ let vcWindow = null;
 /** @type {import('electron').BrowserWindow | null} */
 let mainWindowRef = null;
 
-const DEV_SERVER_URL = 'http://localhost:5173';
+const DEV_SERVER_URL = require('./devServer').devServerOrigin();
 
 function vcLoadTarget() {
   if (!require('electron').app.isPackaged) {
-    return `${DEV_SERVER_URL}/vc-window/vc.html`;
+    return devServerUrl('/vc-window/vc.html');
   }
   return path.join(__dirname, '..', 'dist', 'vc-window', 'vc.html');
 }
@@ -111,6 +116,9 @@ function openVcWindow(mainWindow, options = {}) {
   const display = screen.getPrimaryDisplay();
   const { x, y, width, height } = display.bounds;
 
+  const isPackaged = require('electron').app.isPackaged;
+  const loadTarget = vcLoadTarget();
+
   vcWindow = new BrowserWindow({
     x,
     y,
@@ -132,6 +140,12 @@ function openVcWindow(mainWindow, options = {}) {
       // Mirrored playback must start without a click in this window (Discord/Twitch capture).
       autoplayPolicy: 'no-user-gesture-required',
     },
+  });
+
+  installTrustedNavigationPolicy(vcWindow, {
+    role: 'vc',
+    allowedDocumentUrl: resolveAllowedDocumentUrl(loadTarget, isPackaged),
+    isPackaged,
   });
 
   vcWindow.on('closed', () => {
@@ -162,10 +176,10 @@ function openVcWindow(mainWindow, options = {}) {
     }
   });
 
-  if (!require('electron').app.isPackaged) {
-    vcWindow.loadURL(vcLoadTarget());
+  if (!isPackaged) {
+    vcWindow.loadURL(loadTarget);
   } else {
-    vcWindow.loadFile(vcLoadTarget());
+    vcWindow.loadFile(loadTarget);
   }
 
   logger.info('VC Mode window opened');

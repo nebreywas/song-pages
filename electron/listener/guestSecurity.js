@@ -8,6 +8,7 @@ const { shell, webContents, session } = require('electron');
 const logger = require('../logger');
 const { isSameCacheEntry } = require('./cache/urls');
 const { GUEST_PARTITION } = require('./guestSession');
+const { isAllowedExternalHttpUrl } = require('../net/externalUrl');
 
 /** @type {Map<number, string>} webContentsId → normalized allowed page URL */
 const allowedPageByGuestId = new Map();
@@ -40,14 +41,8 @@ function isAllowedGuestNavigation(allowedPageUrl, targetUrl) {
 }
 
 function openExternally(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      logger.debug('Blocked external URL scheme from Song Page guest', { url });
-      return;
-    }
-  } catch {
-    logger.debug('Blocked invalid external URL from Song Page guest', { url });
+  if (!isAllowedExternalHttpUrl(url)) {
+    logger.debug('Blocked external URL scheme from Song Page guest', { url });
     return;
   }
   logger.debug('Opening external URL from Song Page guest', { url });

@@ -3,6 +3,7 @@
  */
 const logger = require('../logger');
 const library = require('./library');
+const { fetchWithUrlPolicy } = require('../net/fetchWithPolicy');
 
 const CATALOG_FILENAME = 'songpages-catalog.json';
 const ARTIST_FILENAME = 'songpages-artist.json';
@@ -42,24 +43,15 @@ function withBuildVersion(url, buildVersion) {
   return `${url}${separator}v=${encodeURIComponent(buildVersion)}`;
 }
 
-async function fetchJson(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} fetching ${url}`);
-    }
-
-    return response.json();
-  } finally {
-    clearTimeout(timer);
-  }
+async function fetchJson(url, purpose) {
+  const provenance = purpose === 'refresh-catalog' ? 'catalog-context' : 'user-initiated';
+  return fetchWithUrlPolicy(url, {
+    purpose,
+    provenance,
+    maxRedirects: 5,
+    timeoutMs: FETCH_TIMEOUT_MS,
+    headers: { Accept: 'application/json' },
+  });
 }
 
 function validateCatalogManifest(data) {
@@ -107,12 +99,12 @@ function mapCatalogSongs(catalog, siteBase) {
 }
 
 async function fetchArtistManifest(siteRootNormalized, buildVersion, options = {}) {
-  const { bustCache = false } = options;
+  const { bustCache = false, purpose = 'refresh-catalog' } = options;
   const cacheKey = bustCache ? `${buildVersion || '0'}-${Date.now()}` : buildVersion;
   const artistUrl = withBuildVersion(`${siteRootNormalized}/${ARTIST_FILENAME}`, cacheKey);
 
   try {
-    const data = await fetchJson(artistUrl);
+    const data = await fetchJson(artistUrl, purpose);
     if (data?.schemaVersion === 1) {
       return data;
     }
@@ -125,7 +117,7 @@ async function fetchArtistManifest(siteRootNormalized, buildVersion, options = {
 }
 
 async function subscribeArtist(siteUrlInput, options = {}) {
-  const { bustArtistManifestCache = false } = options;
+  const { bustArtistManifestCache = false, purpose = 'subscribe-catalog' } = options;
   const siteRootNormalized = normalizeSiteUrl(siteUrlInput);
   const catalogUrl = `${siteRootNormalized}/${CATALOG_FILENAME}`;
 
@@ -133,7 +125,7 @@ async function subscribeArtist(siteUrlInput, options = {}) {
 
   let catalog;
   try {
-    catalog = validateCatalogManifest(await fetchJson(catalogUrl));
+    catalog = validateCatalogManifest(await fetchJson(catalogUrl, purpose));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Could not fetch catalog manifest: ${message}`);
@@ -142,7 +134,7 @@ async function subscribeArtist(siteUrlInput, options = {}) {
   const artistManifest = await fetchArtistManifest(
     siteRootNormalized,
     catalog.buildVersion,
-    { bustCache: bustArtistManifestCache },
+    { bustCache: bustArtistManifestCache, purpose },
   );
 
   if (catalog.siteRoot && catalog.siteRoot !== siteRootNormalized) {
@@ -183,7 +175,7 @@ async function refreshArtist(artistId) {
   if (!artist) {
     throw new Error('Artist not found.');
   }
-  return subscribeArtist(artist.site_url, { bustArtistManifestCache: true });
+  return subscribeArtist(artist.site_url, { bustArtistManifestCache: true, purpose: 'refresh-catalog' });
 }
 
 async function refreshAllArtists() {

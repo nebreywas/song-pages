@@ -1,33 +1,42 @@
 /**
  * Lazy reachability checks — only invoked when the user opens or plays a song.
  */
+const { fetchWithUrlPolicy } = require('../net/fetchWithPolicy');
+const { resolveProbeProvenance } = require('./urlProvenance');
 
-async function probeUrl(url, method = 'GET') {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
+const PROBE_TIMEOUT_MS = 8000;
 
+async function probeUrl(url, provenance, method = 'GET') {
   try {
-    const response = await fetch(url, {
+    await fetchWithUrlPolicy(url, {
+      purpose: 'probe-song-availability',
+      provenance,
       method,
-      signal: controller.signal,
+      maxRedirects: 3,
+      timeoutMs: PROBE_TIMEOUT_MS,
+      maxBytes: 4096,
+      expectJson: false,
       headers: { Accept: '*/*' },
     });
-    return response.ok;
+    return true;
   } catch {
     return false;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
 /** Page HTML must load; playback manifest must respond for play. */
 async function probeSongAvailability(pageUrl, playbackUrl) {
-  const pageOk = await probeUrl(pageUrl, 'GET');
+  const provenance = resolveProbeProvenance(pageUrl, playbackUrl);
+  if (provenance === 'none') {
+    return { ok: false, pageAvailable: false, playbackAvailable: false, error: 'Probe URLs lack catalog context.' };
+  }
+
+  const pageOk = await probeUrl(pageUrl, provenance, 'GET');
   if (!pageOk) {
     return { ok: false, pageAvailable: false, playbackAvailable: false };
   }
 
-  const playbackOk = await probeUrl(playbackUrl, 'GET');
+  const playbackOk = await probeUrl(playbackUrl, provenance, 'GET');
   return {
     ok: pageOk && playbackOk,
     pageAvailable: pageOk,
