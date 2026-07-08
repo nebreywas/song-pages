@@ -45,8 +45,22 @@ contextBridge.exposeInMainWorld('app', {
       ipcRenderer.invoke('listener:probeSongAvailability', pageUrl, playbackUrl),
     resolveSongAccess: (songId, source) =>
       ipcRenderer.invoke('listener:resolveSongAccess', songId, source),
-    countSunoDemoSongs: () => ipcRenderer.invoke('listener:countSunoDemoSongs'),
-    addSunoDemoSong: (input) => ipcRenderer.invoke('listener:addSunoDemoSong', input),
+    countSunoDemoSongs: (playlistId) => ipcRenderer.invoke('listener:countSunoDemoSongs', playlistId),
+    listSunoDemoPlaylists: () => ipcRenderer.invoke('listener:listSunoDemoPlaylists'),
+    createSunoDemoPlaylist: () => ipcRenderer.invoke('listener:createSunoDemoPlaylist'),
+    removeSunoDemoPlaylist: (playlistId) => ipcRenderer.invoke('listener:removeSunoDemoPlaylist', playlistId),
+    renameSunoDemoPlaylist: (playlistId, name) =>
+      ipcRenderer.invoke('listener:renameSunoDemoPlaylist', playlistId, name),
+    listUserPlaylists: () => ipcRenderer.invoke('listener:listUserPlaylists'),
+    createUserPlaylist: (name) => ipcRenderer.invoke('listener:createUserPlaylist', name),
+    renameUserPlaylist: (playlistId, name) =>
+      ipcRenderer.invoke('listener:renameUserPlaylist', playlistId, name),
+    removeUserPlaylist: (playlistId) => ipcRenderer.invoke('listener:removeUserPlaylist', playlistId),
+    addSongToUserPlaylist: (playlistId, song) =>
+      ipcRenderer.invoke('listener:addSongToUserPlaylist', playlistId, song),
+    moveSongToUserPlaylist: (payload) => ipcRenderer.invoke('listener:moveSongToUserPlaylist', payload),
+    removeUserPlaylistSong: (songId) => ipcRenderer.invoke('listener:removeUserPlaylistSong', songId),
+    addSunoDemoSong: (input, playlistId) => ipcRenderer.invoke('listener:addSunoDemoSong', input, playlistId),
     getPlaylistOrderState: (playlistKey, currentSongIds) =>
       ipcRenderer.invoke('listener:getPlaylistOrderState', playlistKey, currentSongIds),
     savePlaylistCustomOrder: (playlistKey, orderedSongIds) =>

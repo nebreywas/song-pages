@@ -109,6 +109,92 @@
   font-size: 0.85em;
 }
 
-.artist-item-suno-only .artist-item-avatar-fallback {
-  font-size: 1.1rem;
+.library-row-suno .library-row-avatar-fallback {
+  font-size: 1rem;
+}
+
+.custom-playlist-panel {
+  padding: 1.5rem 2rem;
+}
+
+.custom-playlist-panel-copy {
+  max-width: 36rem;
+  line-height: 1.5;
+  color: var(--text-muted, #aaa);
+}
+
+.custom-playlist-panel-count {
+  font-weight: 600;
+  margin: 1rem 0;
+}
+
+.library-playlist-rename-dialog {
+  width: min(28rem, 92vw);
+}
+
+.song-to-playlist-modal {
+  width: min(32rem, 92vw);
+}
+
+.song-to-playlist-lead {
+  margin: 0 0 1rem;
+  line-height: 1.45;
+  color: var(--text-muted, #aaa);
+}
+
+.song-to-playlist-filter-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted, #aaa);
+}
+
+.song-to-playlist-filter {
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.song-to-playlist-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  max-height: min(16rem, 40vh);
+  overflow-y: auto;
+  border: 1px solid var(--panel-border, #444);
+  border-radius: 0.35rem;
+}
+
+.song-to-playlist-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.song-to-playlist-option:hover,
+.song-to-playlist-option.active {
+  background: var(--panel-hover, rgba(255, 255, 255, 0.06));
+}
+
+.song-to-playlist-option-count {
+  color: var(--text-muted, #888);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.song-to-playlist-empty {
+  padding: 0.75rem;
+  color: var(--text-muted, #888);
+  font-style: italic;
+}
+
+.song-to-playlist-actions {
+  justify-content: flex-end;
 }

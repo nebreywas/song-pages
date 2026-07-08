@@ -68,6 +68,9 @@ export type SongRow = {
   unavailable?: number | null;
   /** Subscribed catalog row — user skipped (still listed, not auto-played). */
   skipped?: number | null;
+  /** Custom playlist junction row id (main process only). */
+  user_playlist_entry_id?: number;
+  library_song_id?: number | null;
 };
 
 export type SubscribeResult = {
@@ -120,9 +123,78 @@ declare global {
           data?: { pageUrl: string; playbackUrl: string; fromCache: boolean };
           error?: string;
         }>;
-        countSunoDemoSongs: () => Promise<number>;
+        countSunoDemoSongs: (playlistId?: number) => Promise<number>;
+        listSunoDemoPlaylists: () => Promise<
+          Array<{ id: number; name: string; created_at: string; song_count: number }>
+        >;
+        createSunoDemoPlaylist: () => Promise<{
+          ok: boolean;
+          data?: { id: number; name: string; created_at: string; song_count: number; artist_id: number };
+          error?: string;
+        }>;
+        removeSunoDemoPlaylist: (
+          playlistId: number,
+        ) => Promise<{
+          ok: boolean;
+          data?: { artist_id: number; name: string; song_count: number };
+          error?: string;
+        }>;
+        renameSunoDemoPlaylist: (
+          playlistId: number,
+          name: string,
+        ) => Promise<{
+          ok: boolean;
+          data?: { id: number; name: string; created_at: string; song_count: number; artist_id: number };
+          error?: string;
+        }>;
+        listUserPlaylists: () => Promise<
+          Array<{ id: number; name: string; created_at: string; song_count: number }>
+        >;
+        createUserPlaylist: (
+          name?: string,
+        ) => Promise<{
+          ok: boolean;
+          data?: { id: number; name: string; created_at: string; song_count: number; artist_id: number };
+          error?: string;
+        }>;
+        renameUserPlaylist: (
+          playlistId: number,
+          name: string,
+        ) => Promise<{
+          ok: boolean;
+          data?: { id: number; name: string; created_at: string; song_count: number; artist_id: number };
+          error?: string;
+        }>;
+        removeUserPlaylist: (
+          playlistId: number,
+        ) => Promise<{
+          ok: boolean;
+          data?: { artist_id: number; name: string; song_count: number };
+          error?: string;
+        }>;
+        addSongToUserPlaylist: (
+          playlistId: number,
+          song: SongRow,
+        ) => Promise<{
+          ok: boolean;
+          data?: { duplicate: boolean; song: SongRow; count: number };
+          error?: string;
+        }>;
+        moveSongToUserPlaylist: (payload: {
+          sourceArtistId: number;
+          destPlaylistId: number;
+          song: SongRow;
+        }) => Promise<{
+          ok: boolean;
+          data?: { duplicate: boolean; song: SongRow; count: number };
+          error?: string;
+        }>;
+        removeUserPlaylistSong: (
+          songId: number,
+        ) => Promise<{ ok: boolean; data?: { count: number; playlist_id?: number }; error?: string }>;
         addSunoDemoSong: (
           input: string,
+          playlistId?: number,
         ) => Promise<{
           ok: boolean;
           data?: { song: SongRow; duplicate: boolean; count: number };

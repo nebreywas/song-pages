@@ -1,14 +1,16 @@
-import { isSunoDemoSong, SUNO_DEMO_ARTIST_ID } from '../demo/sunoDemoFeature';
+import { isSunoDemoSong, isSunoDemoArtistId } from '../demo/sunoDemoFeature';
+import { isUserPlaylistArtistId } from './userPlaylists';
 
 /** How remove/skip behaves for each listener playlist type. */
-export type PlaylistKind = 'catalog' | 'personal' | 'suno';
+export type PlaylistKind = 'catalog' | 'personal' | 'suno' | 'custom';
 
 export const LIKED_SONGS_ARTIST_ID = 0;
 
 export function playlistKindForArtistId(artistId: number | null | undefined): PlaylistKind | null {
   if (artistId == null) return null;
   if (artistId === LIKED_SONGS_ARTIST_ID) return 'personal';
-  if (artistId === SUNO_DEMO_ARTIST_ID) return 'suno';
+  if (isUserPlaylistArtistId(artistId)) return 'custom';
+  if (isSunoDemoArtistId(artistId)) return 'suno';
   if (artistId > 0) return 'catalog';
   return null;
 }
@@ -21,6 +23,10 @@ export function isPersonalPlaylist(artistId: number | null | undefined): boolean
   return playlistKindForArtistId(artistId) === 'personal';
 }
 
+export function isCustomPlaylist(artistId: number | null | undefined): boolean {
+  return playlistKindForArtistId(artistId) === 'custom';
+}
+
 export function isSunoPlaylist(artistId: number | null | undefined): boolean {
   return playlistKindForArtistId(artistId) === 'suno';
 }
@@ -28,7 +34,7 @@ export function isSunoPlaylist(artistId: number | null | undefined): boolean {
 /** Liked Songs and Suno Only use virtual sidebar artists — not real artist profiles. */
 export function isVirtualPlaylistArtistId(artistId: number | null | undefined): boolean {
   const kind = playlistKindForArtistId(artistId);
-  return kind === 'personal' || kind === 'suno';
+  return kind === 'personal' || kind === 'suno' || kind === 'custom';
 }
 
 type VcArtistNameSource = {

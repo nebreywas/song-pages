@@ -10,7 +10,15 @@ import { ToastStack } from './ToastStack';
 import { useToasts } from './useToasts';
 import { PlayerBar, type RepeatMode } from './PlayerBar';
 import { VerticalResizeHandle } from './VerticalResizeHandle';
-import { ListenerSidebar, SIDEBAR_COLLAPSED_KEY } from './ListenerSidebar';
+import { HorizontalResizeHandle } from './HorizontalResizeHandle';
+import {
+  ListenerSidebar,
+  SIDEBAR_COLLAPSED_KEY,
+  SIDEBAR_WIDTH_KEY,
+  DEFAULT_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+} from './ListenerSidebar';
 import { SubscribeArtistModal } from './SubscribeArtistModal';
 import { formatTime } from './formatTime';
 import { probeSongDurationSeconds, songNeedsDurationProbe } from './probeSongDuration';
@@ -41,6 +49,12 @@ import { SunoDemoAddDialog } from './SunoDemoAddDialog';
 import { shouldUseDirectAudioPlayback, loadDirectAudioPlayback } from './directAudioPlayback';
 import { LikedSongIndicator } from './LikedSongIndicator';
 import { PlaylistRowContextMenu } from './PlaylistRowContextMenu';
+import { LibrarySidebarContextMenu } from './LibrarySidebarContextMenu';
+import { LibraryPlaylistRemoveConfirm } from './LibraryPlaylistRemoveConfirm';
+import { LibraryPlaylistRenameDialog } from './LibraryPlaylistRenameDialog';
+import { SongToPlaylistModal } from './SongToPlaylistModal';
+import { CustomPlaylistPanel } from './CustomPlaylistPanel';
+import { sidebarEntryType, isRenamableSidebarPlaylist, isSidebarPlaylistContextTarget } from './sidebarEntry';
 import { SkippedSongMarker } from './SkippedSongMarker';
 import { shareableSongPageUrl } from './shareableSongPageUrl';
 import { resolveSongAccess } from './resolveSongAccess';
@@ -50,11 +64,18 @@ import {
   LIKED_SONGS_ARTIST_ID,
 } from './likedSongs';
 import {
-  buildSunoDemoArtistRow,
+  buildUserPlaylistArtistRow,
+  isUserPlaylistArtistId,
+  userPlaylistIdFromArtistId,
+  userPlaylistArtistId,
+  type PlaylistPickerRow,
+} from '@shared/listener/userPlaylists';
+import {
+  buildSunoPlaylistArtistRow,
   isSunoDemoArtistId,
   isSunoDemoSong,
   isSunoDemoSongId,
-  SUNO_DEMO_ARTIST_ID,
+  sunoPlaylistIdFromArtistId,
   SUNO_DEMO_FEATURE_ENABLED,
 } from '@shared/demo/sunoDemoFeature';
 import type { ArtistRow, SongRow } from '../types/app';
@@ -122,6 +143,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [sunoDemoAddOpen, setSunoDemoAddOpen] = useState(false);
   const [vcCloseConfirmOpen, setVcCloseConfirmOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [sidebarResizing, setSidebarResizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toasts, addToast, dismissToast } = useToasts();
   const [busy, setBusy] = useState(false);
@@ -149,7 +172,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [sortDurationsSnapshot, setSortDurationsSnapshot] = useState<Record<number, number>>({});
   const [customOrderIds, setCustomOrderIds] = useState<number[] | null>(null);
   const [likedSongCount, setLikedSongCount] = useState(0);
-  const [sunoDemoSongCount, setSunoDemoSongCount] = useState(0);
   const [likedSongIds, setLikedSongIds] = useState<Set<number>>(() => new Set());
   const [currentSongLiked, setCurrentSongLiked] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
@@ -158,6 +180,21 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     song: SongRow;
     x: number;
     y: number;
+  } | null>(null);
+  const [librarySidebarContextMenu, setLibrarySidebarContextMenu] = useState<{
+    artist: ArtistRow;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [libraryPlaylistRemoveTarget, setLibraryPlaylistRemoveTarget] = useState<ArtistRow | null>(
+    null,
+  );
+  const [libraryPlaylistRenameTarget, setLibraryPlaylistRenameTarget] = useState<ArtistRow | null>(
+    null,
+  );
+  const [songToPlaylistModal, setSongToPlaylistModal] = useState<{
+    song: SongRow;
+    sourceArtistId: number;
   } | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -180,12 +217,29 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   });
 
   const selectedArtist = artists.find((artist) => artist.id === selectedArtistId) ?? null;
+  const customPlaylistPickerRows = useMemo((): PlaylistPickerRow[] => {
+    return artists
+      .map((artist) => {
+        if (!isUserPlaylistArtistId(artist.id)) return null;
+        const id = userPlaylistIdFromArtistId(artist.id);
+        if (id == null) return null;
+        return {
+          id,
+          artist_id: artist.id,
+          name: artist.artist_name,
+          song_count: artist.song_count ?? 0,
+          kind: 'custom' as const,
+        };
+      })
+      .filter((row): row is PlaylistPickerRow => row != null);
+  }, [artists]);
   const playingSong = songs.find((song) => song.id === playingSongId) ?? null;
   const previewSong = songs.find((song) => song.id === previewSongId) ?? playingSong;
   const isLikedPlaylist = isLikedSongsArtist(selectedArtistId);
   const isSunoPlaylist = isSunoDemoArtistId(selectedArtistId);
+  const isCustomPlaylistSelected = isUserPlaylistArtistId(selectedArtistId);
   const playlistKind = playlistKindForArtistId(selectedArtistId);
-  const showArtistColumn = isLikedPlaylist || isSunoPlaylist;
+  const showArtistColumn = isLikedPlaylist || isSunoPlaylist || isCustomPlaylistSelected;
   const activeSongPage = previewSong ?? playingSong;
   const showingSunoDemoPage = Boolean(activeSongPage && isSunoDemoSong(activeSongPage));
   const canToggleLike = previewSong != null && previewSong.id > 0;
@@ -309,31 +363,41 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     const app = getApp();
     if (!app) return;
 
-    const [artistRows, likedCount, likedIds, sunoCount] = await Promise.all([
+    const [artistRows, likedCount, likedIds, sunoPlaylists, userPlaylists] = await Promise.all([
       app.listener.listArtists(),
       app.listener.countLikedSongs(),
       app.listener.listLikedSongIds(),
-      SUNO_DEMO_FEATURE_ENABLED && app.listener.countSunoDemoSongs
-        ? app.listener.countSunoDemoSongs()
-        : Promise.resolve(0),
+      SUNO_DEMO_FEATURE_ENABLED && app.listener.listSunoDemoPlaylists
+        ? app.listener.listSunoDemoPlaylists().catch(() => [])
+        : Promise.resolve([]),
+      app.listener.listUserPlaylists ? app.listener.listUserPlaylists().catch(() => []) : Promise.resolve([]),
     ]);
 
     setLikedSongCount(likedCount);
-    setSunoDemoSongCount(sunoCount);
     setLikedSongIds(new Set(likedIds));
 
     let displayArtists = artistRows;
-    if (SUNO_DEMO_FEATURE_ENABLED) {
-      displayArtists = [buildSunoDemoArtistRow(sunoCount), ...displayArtists];
+    if (SUNO_DEMO_FEATURE_ENABLED && sunoPlaylists.length > 0) {
+      const sunoRows = sunoPlaylists.map((playlist) => buildSunoPlaylistArtistRow(playlist));
+      displayArtists = [...sunoRows, ...displayArtists];
+    }
+    if (userPlaylists.length > 0) {
+      const customRows = userPlaylists.map((playlist) => buildUserPlaylistArtistRow(playlist));
+      displayArtists = [...customRows, ...displayArtists];
     }
     if (likedCount > 0) {
       displayArtists = [buildLikedSongsArtistRow(likedCount), ...displayArtists];
     }
     setArtists(displayArtists);
 
-    if (selectedArtistId === SUNO_DEMO_ARTIST_ID) {
+    if (isUserPlaylistArtistId(selectedArtistId)) {
+      setSongs(await app.listener.listSongs(selectedArtistId!));
+      return;
+    }
+
+    if (isSunoDemoArtistId(selectedArtistId)) {
       if (SUNO_DEMO_FEATURE_ENABLED) {
-        setSongs(await app.listener.listSongs(SUNO_DEMO_ARTIST_ID));
+        setSongs(await app.listener.listSongs(selectedArtistId));
       } else {
         setSongs([]);
         setSelectedArtistId(displayArtists[0]?.id ?? null);
@@ -376,7 +440,33 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     void app.getSettings(SIDEBAR_COLLAPSED_KEY).then((value) => {
       if (typeof value === 'boolean') setSidebarCollapsed(value);
     });
+    void app.getSettings(SIDEBAR_WIDTH_KEY).then((value) => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        setSidebarWidth(Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value)));
+      }
+    });
   }, []);
+
+  const clampSidebarWidth = useCallback(
+    (width: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width)),
+    [],
+  );
+
+  const handleSidebarResizeDelta = useCallback(
+    (deltaX: number) => {
+      setSidebarWidth((current) => clampSidebarWidth(current + deltaX));
+    },
+    [clampSidebarWidth],
+  );
+
+  const handleSidebarResizeEnd = useCallback(() => {
+    setSidebarResizing(false);
+    setSidebarWidth((current) => {
+      const clamped = clampSidebarWidth(current);
+      void getApp()?.saveSettings(SIDEBAR_WIDTH_KEY, clamped);
+      return clamped;
+    });
+  }, [clampSidebarWidth]);
 
   const toggleSidebarCollapsed = useCallback(() => {
     setSidebarCollapsed((prev) => {
@@ -392,7 +482,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     if (!app) return;
 
     if (isSunoDemoArtistId(selectedArtistId)) {
-      void app.listener.listSongs(SUNO_DEMO_ARTIST_ID).then(setSongs);
+      void app.listener.listSongs(selectedArtistId).then(setSongs);
     } else if (isLikedSongsArtist(selectedArtistId)) {
       void app.listener.listSongs(LIKED_SONGS_ARTIST_ID).then(setSongs);
     } else {
@@ -860,7 +950,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     if (
       selectedArtistId === null ||
       isLikedSongsArtist(selectedArtistId) ||
-      isSunoDemoArtistId(selectedArtistId)
+      isSunoDemoArtistId(selectedArtistId) ||
+      isUserPlaylistArtistId(selectedArtistId)
     ) {
       return;
     }
@@ -922,6 +1013,207 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     // Refresh sidebar count and the Suno playlist if it is already open — do not interrupt playback.
     await loadLibrary();
   }, [loadLibrary]);
+
+  const handleCreateSunoPlaylist = useCallback(async () => {
+    const app = getApp();
+    if (!app?.listener.createSunoDemoPlaylist) return;
+
+    setBusy(true);
+    setError(null);
+    const result = await app.listener.createSunoDemoPlaylist();
+    setBusy(false);
+
+    if (!result.ok || !result.data) {
+      setError(result.error ?? 'Could not create Suno playlist.');
+      return;
+    }
+
+    await loadLibrary();
+    setSelectedArtistId(result.data.artist_id);
+    setMainContentView('artist');
+  }, [loadLibrary]);
+
+  const handleCreateCustomPlaylist = useCallback(async () => {
+    const app = getApp();
+    if (!app?.listener.createUserPlaylist) {
+      setError('Restart the app to enable custom playlists.');
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    const result = await app.listener.createUserPlaylist();
+    setBusy(false);
+
+    if (!result.ok || !result.data) {
+      setError(result.error ?? 'Could not create custom playlist.');
+      return;
+    }
+
+    await loadLibrary();
+    setSelectedArtistId(result.data.artist_id);
+    setMainContentView('artist');
+  }, [loadLibrary]);
+
+  const handleLibrarySidebarContextMenu = useCallback((artist: ArtistRow, event: React.MouseEvent) => {
+    const type = sidebarEntryType(artist);
+    if (!isSidebarPlaylistContextTarget(type)) return;
+    event.preventDefault();
+    setLibrarySidebarContextMenu({
+      artist,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }, []);
+
+  const handleRequestRenameLibraryPlaylist = useCallback(() => {
+    if (!librarySidebarContextMenu) return;
+    const type = sidebarEntryType(librarySidebarContextMenu.artist);
+    if (!isRenamableSidebarPlaylist(type)) return;
+    setLibraryPlaylistRenameTarget(librarySidebarContextMenu.artist);
+    setLibrarySidebarContextMenu(null);
+  }, [librarySidebarContextMenu]);
+
+  const handleConfirmRenameLibraryPlaylist = useCallback(
+    async (name: string) => {
+      const target = libraryPlaylistRenameTarget;
+      if (!target) return;
+
+      const entryType = sidebarEntryType(target);
+      const app = getApp();
+      if (!app) return;
+
+      setBusy(true);
+      setError(null);
+      try {
+        let result;
+        if (entryType === 'suno') {
+          const playlistId = sunoPlaylistIdFromArtistId(target.id);
+          if (!playlistId || !app.listener.renameSunoDemoPlaylist) {
+            setError('Restart the app to enable playlist renaming.');
+            return;
+          }
+          result = await app.listener.renameSunoDemoPlaylist(playlistId, name);
+        } else if (entryType === 'custom') {
+          const playlistId = userPlaylistIdFromArtistId(target.id);
+          if (!playlistId || !app.listener.renameUserPlaylist) {
+            setError('Restart the app to enable playlist renaming.');
+            return;
+          }
+          result = await app.listener.renameUserPlaylist(playlistId, name);
+        } else {
+          return;
+        }
+
+        if (!result.ok || !result.data) {
+          setError(result.error ?? 'Could not rename that playlist.');
+          return;
+        }
+
+        setLibraryPlaylistRenameTarget(null);
+        setArtists((prev) =>
+          prev.map((row) =>
+            row.id === target.id ? { ...row, artist_name: result.data!.name, song_count: result.data!.song_count } : row,
+          ),
+        );
+        addToast(`Renamed to ${result.data.name}.`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setError(message || 'Could not rename that playlist.');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [addToast, libraryPlaylistRenameTarget],
+  );
+
+  const clearPlaybackForRemovedPlaylist = useCallback(
+    (removedArtistId: number) => {
+      const playingFromRemoved =
+        playingSong?.artist_id === removedArtistId || previewSong?.artist_id === removedArtistId;
+
+      if (playingFromRemoved) {
+        destroyHls();
+        audioRef.current?.pause();
+        setIsPlaying(false);
+        setActivePlaybackUrl(null);
+        setCurrentTime(0);
+        setDuration(0);
+        setPlayingSongId(null);
+        setPreviewSongId(null);
+        setPageUrl(null);
+      }
+
+      if (selectedArtistId === removedArtistId) {
+        setSelectedArtistId(null);
+        setMainContentView('welcome');
+        setSongs([]);
+      }
+    },
+    [playingSong?.artist_id, previewSong?.artist_id, selectedArtistId],
+  );
+
+  const handleRequestRemoveLibraryPlaylist = useCallback(() => {
+    if (!librarySidebarContextMenu) return;
+    setLibraryPlaylistRemoveTarget(librarySidebarContextMenu.artist);
+    setLibrarySidebarContextMenu(null);
+  }, [librarySidebarContextMenu]);
+
+  const handleConfirmRemoveLibraryPlaylist = useCallback(async () => {
+    const target = libraryPlaylistRemoveTarget;
+    if (!target) return;
+
+    const entryType = sidebarEntryType(target);
+    if (entryType !== 'suno' && entryType !== 'custom') return;
+
+    const app = getApp();
+    if (!app) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      let result: { ok: boolean; data?: { name: string }; error?: string };
+      if (entryType === 'suno') {
+        const playlistId = sunoPlaylistIdFromArtistId(target.id);
+        if (!playlistId || !app.listener.removeSunoDemoPlaylist) {
+          setError('Restart the app to enable playlist removal.');
+          return;
+        }
+        result = await app.listener.removeSunoDemoPlaylist(playlistId);
+      } else {
+        const playlistId = userPlaylistIdFromArtistId(target.id);
+        if (!playlistId || !app.listener.removeUserPlaylist) {
+          setError('Restart the app to enable playlist removal.');
+          return;
+        }
+        result = await app.listener.removeUserPlaylist(playlistId);
+      }
+
+      if (!result.ok || !result.data) {
+        setError(result.error ?? 'Could not remove that playlist.');
+        return;
+      }
+
+      setLibraryPlaylistRemoveTarget(null);
+      clearPlaybackForRemovedPlaylist(target.id);
+      await loadLibrary();
+      addToast(`Removed ${result.data.name}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setError(message || 'Could not remove that playlist.');
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    addToast,
+    clearPlaybackForRemovedPlaylist,
+    libraryPlaylistRemoveTarget,
+    loadLibrary,
+  ]);
+
+  const selectedSunoPlaylistId = isSunoDemoArtistId(selectedArtistId)
+    ? sunoPlaylistIdFromArtistId(selectedArtistId) ?? undefined
+    : undefined;
 
   const selectArtist = (artistId: number) => {
     setSelectedArtistId(artistId);
@@ -1031,12 +1323,140 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           setError(result.error ?? 'Could not remove that Suno track.');
           return;
         }
-        setSunoDemoSongCount(result.data.count);
         setSongs((prev) => prev.filter((row) => row.id !== song.id));
         clearPlaybackForRemovedSong(song.id);
+        await loadLibrary();
+        return;
+      }
+
+      if (kind === 'custom') {
+        if (!app.listener.removeUserPlaylistSong) {
+          setError('Restart the app to remove songs from custom playlists.');
+          return;
+        }
+        const result = await app.listener.removeUserPlaylistSong(song.id);
+        if (!result.ok) {
+          setError(result.error ?? 'Could not remove that song.');
+          return;
+        }
+        setSongs((prev) => prev.filter((row) => row.id !== song.id));
+        clearPlaybackForRemovedSong(song.id);
+        await loadLibrary();
       }
     },
     [clearPlaybackForRemovedSong, loadLibrary, selectedArtistId],
+  );
+
+  const handleOpenAddToPlaylist = useCallback(
+    (song: SongRow) => {
+      if (selectedArtistId == null) return;
+      setPlaylistContextMenu(null);
+      setSongToPlaylistModal({ song, sourceArtistId: selectedArtistId });
+    },
+    [selectedArtistId],
+  );
+
+  const handleSongToPlaylistAdd = useCallback(
+    async (destPlaylistId: number) => {
+      const modal = songToPlaylistModal;
+      if (!modal) return;
+
+      const app = getApp();
+      if (!app?.listener.addSongToUserPlaylist) {
+        setError('Restart the app to add songs to custom playlists.');
+        return;
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        const result = await app.listener.addSongToUserPlaylist(destPlaylistId, modal.song);
+        if (!result.ok) {
+          setError(result.error ?? 'Could not add song to playlist.');
+          return;
+        }
+
+        setSongToPlaylistModal(null);
+        if (result.data?.duplicate) {
+          addToast('Song is already on that playlist.');
+        } else {
+          addToast('Added to playlist.');
+        }
+
+        const destArtistId = userPlaylistArtistId(destPlaylistId);
+        if (selectedArtistId === destArtistId) {
+          setSongs(await app.listener.listSongs(destArtistId));
+        }
+        await loadLibrary();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setError(message || 'Could not add song to playlist.');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [addToast, loadLibrary, selectedArtistId, songToPlaylistModal],
+  );
+
+  const handleSongToPlaylistMove = useCallback(
+    async (destPlaylistId: number) => {
+      const modal = songToPlaylistModal;
+      if (!modal) return;
+
+      const app = getApp();
+      if (!app?.listener.moveSongToUserPlaylist) {
+        setError('Restart the app to move songs between playlists.');
+        return;
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        const result = await app.listener.moveSongToUserPlaylist({
+          sourceArtistId: modal.sourceArtistId,
+          destPlaylistId,
+          song: modal.song,
+        });
+        if (!result.ok) {
+          setError(result.error ?? 'Could not move song.');
+          return;
+        }
+
+        setSongToPlaylistModal(null);
+        if (result.data?.duplicate) {
+          addToast('Song is already on that playlist.');
+        } else {
+          addToast('Moved to playlist.');
+        }
+
+        const sourceArtistId = modal.sourceArtistId;
+        const destArtistId = userPlaylistArtistId(destPlaylistId);
+
+        if (isLikedSongsArtist(sourceArtistId)) {
+          const [likedCount, likedIds] = await Promise.all([
+            app.listener.countLikedSongs(),
+            app.listener.listLikedSongIds(),
+          ]);
+          setLikedSongCount(likedCount);
+          setLikedSongIds(new Set(likedIds));
+        }
+
+        if (selectedArtistId === sourceArtistId) {
+          setSongs((prev) => prev.filter((row) => row.id !== modal.song.id));
+          clearPlaybackForRemovedSong(modal.song.id);
+        } else if (selectedArtistId === destArtistId) {
+          setSongs(await app.listener.listSongs(destArtistId));
+        }
+
+        await loadLibrary();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setError(message || 'Could not move song.');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [addToast, clearPlaybackForRemovedSong, loadLibrary, selectedArtistId, songToPlaylistModal],
   );
 
   const handlePlaylistSongRestore = useCallback(
@@ -1232,8 +1652,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       if (isSunoDemoArtistId(selectedArtist.id)) {
         return (
           <SunoOnlyPanel
-            songCount={sunoDemoSongCount}
+            playlistName={selectedArtist.artist_name}
+            songCount={selectedArtist.song_count ?? songs.length}
             onAddSong={() => setSunoDemoAddOpen(true)}
+          />
+        );
+      }
+
+      if (isUserPlaylistArtistId(selectedArtist.id)) {
+        return (
+          <CustomPlaylistPanel
+            playlistName={selectedArtist.artist_name}
+            songCount={selectedArtist.song_count ?? songs.length}
           />
         );
       }
@@ -1253,7 +1683,14 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   };
 
   return (
-    <div className={`listener-layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+    <div
+      className={`listener-layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}${sidebarResizing ? ' sidebar-resizing' : ''}`}
+      style={
+        sidebarCollapsed
+          ? undefined
+          : ({ '--listener-sidebar-width': `${sidebarWidth}px` } as React.CSSProperties)
+      }
+    >
       <ListenerSidebar
         artists={artists}
         selectedArtistId={selectedArtistId}
@@ -1262,9 +1699,19 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         onToggleCollapsed={toggleSidebarCollapsed}
         onOpenSettings={onOpenSettings}
         onSubscribe={() => setSubscribeModalOpen(true)}
+        onAddSunoPlaylist={() => void handleCreateSunoPlaylist()}
+        onAddCustomPlaylist={() => void handleCreateCustomPlaylist()}
         onRefresh={() => void handleRefresh()}
         onSelectArtist={selectArtist}
+        onRowContextMenu={handleLibrarySidebarContextMenu}
       />
+      {!sidebarCollapsed ? (
+        <HorizontalResizeHandle
+          onResizeDelta={handleSidebarResizeDelta}
+          onResizeStart={() => setSidebarResizing(true)}
+          onResizeEnd={handleSidebarResizeEnd}
+        />
+      ) : null}
 
       <div className="listener-content">
         <section className="listener-controls panel">
@@ -1329,7 +1776,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
           <VerticalResizeHandle onResizeDelta={handleContentResize} />
 
-          <section className={`playlist-panel panel${isLikedPlaylist ? ' liked-playlist' : ''}${isSunoPlaylist ? ' suno-playlist' : ''}`}>
+          <section className={`playlist-panel panel${isLikedPlaylist ? ' liked-playlist' : ''}${isSunoPlaylist ? ' suno-playlist' : ''}${isCustomPlaylistSelected ? ' custom-playlist' : ''}`}>
             <table className={`song-table${playlistDrag.isDragging ? ' is-dragging-playlist' : ''}`}>
             <thead>
               <tr>
@@ -1493,6 +1940,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         <SunoDemoAddDialog
           open={sunoDemoAddOpen}
           busy={busy}
+          playlistId={selectedSunoPlaylistId}
+          playlistName={selectedArtist?.artist_name}
           onClose={() => setSunoDemoAddOpen(false)}
           onAdded={() => void handleSunoDemoAdded()}
         />
@@ -1502,14 +1951,55 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         <PlaylistRowContextMenu
           song={playlistContextMenu.song}
           playlistKind={playlistKind}
+          playlistName={selectedArtist?.artist_name}
           x={playlistContextMenu.x}
           y={playlistContextMenu.y}
+          onAddToPlaylist={handleOpenAddToPlaylist}
           onCopyLink={(song) => void handleCopySongPageLink(song)}
           onRemove={(song) => void handlePlaylistSongRemove(song)}
           onRestore={(song) => void handlePlaylistSongRestore(song)}
           onClose={() => setPlaylistContextMenu(null)}
         />
       ) : null}
+
+      {librarySidebarContextMenu ? (
+        <LibrarySidebarContextMenu
+          playlistName={librarySidebarContextMenu.artist.artist_name}
+          x={librarySidebarContextMenu.x}
+          y={librarySidebarContextMenu.y}
+          onRename={handleRequestRenameLibraryPlaylist}
+          onRemove={handleRequestRemoveLibraryPlaylist}
+          onClose={() => setLibrarySidebarContextMenu(null)}
+        />
+      ) : null}
+
+      <LibraryPlaylistRenameDialog
+        open={libraryPlaylistRenameTarget != null}
+        playlistName={libraryPlaylistRenameTarget?.artist_name ?? ''}
+        busy={busy}
+        onConfirm={(name) => void handleConfirmRenameLibraryPlaylist(name)}
+        onCancel={() => setLibraryPlaylistRenameTarget(null)}
+      />
+
+      <SongToPlaylistModal
+        open={songToPlaylistModal != null}
+        busy={busy}
+        song={songToPlaylistModal?.song ?? null}
+        sourceArtistId={songToPlaylistModal?.sourceArtistId ?? null}
+        playlists={customPlaylistPickerRows}
+        onAdd={(destPlaylistId) => void handleSongToPlaylistAdd(destPlaylistId)}
+        onMove={(destPlaylistId) => void handleSongToPlaylistMove(destPlaylistId)}
+        onCancel={() => setSongToPlaylistModal(null)}
+      />
+
+      <LibraryPlaylistRemoveConfirm
+        open={libraryPlaylistRemoveTarget != null}
+        playlistName={libraryPlaylistRemoveTarget?.artist_name ?? ''}
+        songCount={libraryPlaylistRemoveTarget?.song_count ?? 0}
+        busy={busy}
+        onConfirm={() => void handleConfirmRemoveLibraryPlaylist()}
+        onCancel={() => setLibraryPlaylistRemoveTarget(null)}
+      />
 
       <VcCloseConfirmModal
         open={vcCloseConfirmOpen}

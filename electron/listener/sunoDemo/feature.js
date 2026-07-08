@@ -17,6 +17,19 @@ function isFeatureEnabled() {
   return SUNO_DEMO_FEATURE_ENABLED;
 }
 
+function isSunoDemoArtistId(artistId) {
+  return typeof artistId === 'number' && artistId < 0 && artistId > -10001;
+}
+
+function sunoPlaylistArtistId(playlistId) {
+  return -playlistId;
+}
+
+function sunoPlaylistIdFromArtistId(artistId) {
+  if (!isSunoDemoArtistId(artistId)) return null;
+  return -artistId;
+}
+
 function isSunoDemoSongId(songId) {
   return typeof songId === 'number' && songId <= SUNO_DEMO_SONG_ID_BASE;
 }
@@ -145,6 +158,9 @@ module.exports = {
   SUNO_DEMO_PLAYBACK_SCOPE,
   SUNO_DEMO_MANIFEST_PREFIX,
   isFeatureEnabled,
+  isSunoDemoArtistId,
+  sunoPlaylistArtistId,
+  sunoPlaylistIdFromArtistId,
   isSunoDemoSongId,
   rowIdFromSongId,
   songIdFromRowId,

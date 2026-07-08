@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { sanitizeTextKudoConfig } from './textConfig';
+import { sanitizeKudoTextValue, sanitizeTextKudoConfig } from './textConfig';
 
 test('sanitizeTextKudoConfig enforces grapheme limit and defaults', () => {
   const config = sanitizeTextKudoConfig({
@@ -18,4 +18,9 @@ test('sanitizeTextKudoConfig enforces grapheme limit and defaults', () => {
   assert.equal(config!.fontId, 'impact');
   assert.ok(config!.value.length <= 18);
   assert.equal(config!.textColor, '#ffffff');
+  assert.equal(config!.value, 'WAY TOO LONG FOR K');
+});
+
+test('sanitizeKudoTextValue preserves spaces between words', () => {
+  assert.equal(sanitizeKudoTextValue('  NICE JOB  '), 'NICE JOB');
 });

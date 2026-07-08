@@ -1,14 +1,14 @@
 /**
- * SQLite storage for the demo Suno Only playlist.
+ * SQLite storage for demo Suno playlist tracks.
  */
 const { getDatabase } = require('../../database');
 const {
   isFeatureEnabled,
-  SUNO_DEMO_ARTIST_ID,
   SUNO_DEMO_SONG_ID_BASE,
   SUNO_DEMO_PLAYBACK_SCOPE,
   songIdFromRowId,
   sunoDemoManifestUrl,
+  sunoPlaylistArtistId,
   resolveInputToSongId,
   fetchStudioClip,
   lyricsFromClip,
@@ -16,6 +16,12 @@ const {
   coverFromClip,
   playbackFromClip,
 } = require('./feature');
+const {
+  initSunoDemoPlaylistsSchema,
+  ensureSunoDemoLibraryReady,
+  ensureDefaultSunoDemoPlaylistId,
+  getSunoDemoPlaylistById,
+} = require('./sunoDemoPlaylists');
 
 function initSunoDemoSchema(db) {
   if (!isFeatureEnabled()) return;
@@ -36,10 +42,17 @@ function initSunoDemoSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_suno_demo_songs_added_at ON suno_demo_songs(added_at DESC);
   `);
+
+  initSunoDemoPlaylistsSchema(db);
 }
 
-function countSunoDemoSongs() {
+function countSunoDemoSongs(playlistId) {
   if (!isFeatureEnabled()) return 0;
+  if (playlistId) {
+    return getDatabase()
+      .prepare('SELECT COUNT(*) AS count FROM suno_demo_songs WHERE playlist_id = ?')
+      .get(playlistId).count;
+  }
   return getDatabase().prepare('SELECT COUNT(*) AS count FROM suno_demo_songs').get().count;
 }
 
@@ -51,9 +64,10 @@ function getRowBySongId(songId) {
 
 function rowToSongRow(row) {
   const songId = songIdFromRowId(row.id);
+  const playlistId = row.playlist_id ?? ensureDefaultSunoDemoPlaylistId();
   return {
     id: songId,
-    artist_id: SUNO_DEMO_ARTIST_ID,
+    artist_id: sunoPlaylistArtistId(playlistId),
     external_id: row.clip_uuid,
     slug: row.clip_uuid,
     title: row.title,
@@ -73,11 +87,14 @@ function rowToSongRow(row) {
   };
 }
 
-function listSunoDemoSongs() {
+function listSunoDemoSongs(playlistId) {
   if (!isFeatureEnabled()) return [];
+  ensureSunoDemoLibraryReady();
+  if (!playlistId) return [];
+
   const rows = getDatabase()
-    .prepare('SELECT * FROM suno_demo_songs ORDER BY added_at DESC')
-    .all();
+    .prepare('SELECT * FROM suno_demo_songs WHERE playlist_id = ? ORDER BY added_at DESC')
+    .all(playlistId);
   return rows.map(rowToSongRow);
 }
 
@@ -88,7 +105,7 @@ function buildManifestForSongId(songId) {
   return {
     schemaVersion: 1,
     siteRoot: '',
-    artistSlug: 'suno-only',
+    artistSlug: 'suno-playlist',
     artistName: row.artist_name,
     id: row.clip_uuid,
     slug: row.clip_uuid,
@@ -110,7 +127,7 @@ function buildManifestForSongId(songId) {
   };
 }
 
-async function addSunoDemoSongByUrl(input) {
+async function addSunoDemoSongByUrl(input, playlistId) {
   if (!isFeatureEnabled()) {
     return { ok: false, error: 'Suno demo feature is disabled.' };
   }
@@ -118,6 +135,11 @@ async function addSunoDemoSongByUrl(input) {
   const trimmed = String(input ?? '').trim();
   if (!trimmed) {
     return { ok: false, error: 'Paste a Suno share URL or clip UUID.' };
+  }
+
+  const resolvedPlaylistId = playlistId ?? ensureDefaultSunoDemoPlaylistId();
+  if (!resolvedPlaylistId || !getSunoDemoPlaylistById(resolvedPlaylistId)) {
+    return { ok: false, error: 'Suno playlist not found.' };
   }
 
   const clipUuid = await resolveInputToSongId(trimmed);
@@ -129,7 +151,14 @@ async function addSunoDemoSongByUrl(input) {
   const existing = db.prepare('SELECT id FROM suno_demo_songs WHERE clip_uuid = ?').get(clipUuid);
   if (existing) {
     const song = rowToSongRow(db.prepare('SELECT * FROM suno_demo_songs WHERE id = ?').get(existing.id));
-    return { ok: true, data: { song, duplicate: true, count: countSunoDemoSongs() } };
+    return {
+      ok: true,
+      data: {
+        song,
+        duplicate: true,
+        count: countSunoDemoSongs(resolvedPlaylistId),
+      },
+    };
   }
 
   let clip;
@@ -153,15 +182,28 @@ async function addSunoDemoSongByUrl(input) {
   const insert = db
     .prepare(
       `INSERT INTO suno_demo_songs (
-         clip_uuid, title, artist_name, cover_url, playback_url, lyrics, source_url, duration_seconds
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         clip_uuid, title, artist_name, cover_url, playback_url, lyrics, source_url, duration_seconds, playlist_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(clipUuid, title, artistName, coverUrl, playbackUrl, lyrics, trimmed, durationSeconds);
+    .run(
+      clipUuid,
+      title,
+      artistName,
+      coverUrl,
+      playbackUrl,
+      lyrics,
+      trimmed,
+      durationSeconds,
+      resolvedPlaylistId,
+    );
 
   const row = db.prepare('SELECT * FROM suno_demo_songs WHERE id = ?').get(insert.lastInsertRowid);
   const song = rowToSongRow(row);
 
-  return { ok: true, data: { song, duplicate: false, count: countSunoDemoSongs() } };
+  return {
+    ok: true,
+    data: { song, duplicate: false, count: countSunoDemoSongs(resolvedPlaylistId) },
+  };
 }
 
 function updateSunoDemoSongDuration(songId, durationSeconds) {
@@ -181,8 +223,9 @@ function removeSunoDemoSong(songId) {
   if (!isFeatureEnabled()) return { count: 0 };
   const row = getRowBySongId(songId);
   if (!row) return { count: countSunoDemoSongs() };
+  const playlistId = row.playlist_id;
   getDatabase().prepare('DELETE FROM suno_demo_songs WHERE id = ?').run(row.id);
-  return { count: countSunoDemoSongs() };
+  return { count: countSunoDemoSongs(playlistId) };
 }
 
 module.exports = {

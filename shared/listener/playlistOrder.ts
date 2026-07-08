@@ -1,3 +1,5 @@
+import { userPlaylistIdFromArtistId } from './userPlaylists.ts';
+
 /** Minimal song shape for custom-order sorting. */
 export type PlaylistOrderSong = {
   id: number;
@@ -9,7 +11,9 @@ export const SUNO_PLAYLIST_KEY = 'suno';
 
 export function playlistKeyForArtistId(artistId: number): string {
   if (artistId === 0) return LIKED_PLAYLIST_KEY;
-  if (artistId === -1) return SUNO_PLAYLIST_KEY;
+  const userPlaylistId = userPlaylistIdFromArtistId(artistId);
+  if (userPlaylistId != null) return `user:${userPlaylistId}`;
+  if (artistId < 0) return `suno:${-artistId}`;
   return `artist:${artistId}`;
 }
 

@@ -1,25 +1,25 @@
 /** Grapheme-safe emoji handling for Kudo particle elements (spec §3.2). */
 
+/** Split a string into user-perceived graphemes without trimming (preserves spaces while typing). */
 export function segmentGraphemes(value: string): string[] {
-  const trimmed = value.trim();
-  if (!trimmed) return [];
+  if (!value) return [];
 
   if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
     const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-    return [...segmenter.segment(trimmed)].map((part) => part.segment);
+    return [...segmenter.segment(value)].map((part) => part.segment);
   }
 
-  return Array.from(trimmed);
+  return Array.from(value);
 }
 
 /** True when the string is exactly one visible grapheme (one emoji slot). */
 export function isSingleGrapheme(value: string): boolean {
-  return segmentGraphemes(value).length === 1;
+  return segmentGraphemes(value.trim()).length === 1;
 }
 
 /** Keep the first grapheme from user input for a single emoji slot. */
 export function firstGrapheme(value: string): string | null {
-  const graphemes = segmentGraphemes(value);
+  const graphemes = segmentGraphemes(value.trim());
   return graphemes[0] ?? null;
 }
 

@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconAdd, IconRefresh } from './PlayerIcons';
-import {
-  artistInitials,
-  formatArtistSongCount,
-  resolveArtistPhotoUrl,
-} from './artistDisplay';
+import { artistInitials, resolveArtistPhotoUrl } from './artistDisplay';
 import { isLikedSongsArtist } from './likedSongs';
 import { isSunoDemoArtistId, SUNO_DEMO_FEATURE_ENABLED } from '@shared/demo/sunoDemoFeature';
+import { sidebarEntryType, sidebarEntryTypeLabel, isSidebarPlaylistContextTarget } from './sidebarEntry';
 import type { ArtistRow } from '../types/app';
 
 const SIDEBAR_COLLAPSED_KEY = 'ui.listenerSidebarCollapsed';
+const SIDEBAR_WIDTH_KEY = 'ui.listenerSidebarWidth';
 const SIDEBAR_WIDTH_MS = 220;
 const BRAND_TITLE_MS = 340;
 const FULL_BRAND_TITLE = 'Song Pages';
 
-export { SIDEBAR_COLLAPSED_KEY };
+export const DEFAULT_SIDEBAR_WIDTH = 304;
+export const MIN_SIDEBAR_WIDTH = 220;
+export const MAX_SIDEBAR_WIDTH = 560;
+
+export { SIDEBAR_COLLAPSED_KEY, SIDEBAR_WIDTH_KEY };
 
 type ListenerSidebarProps = {
   artists: ArtistRow[];
@@ -24,8 +26,11 @@ type ListenerSidebarProps = {
   onToggleCollapsed: () => void;
   onOpenSettings: () => void;
   onSubscribe: () => void;
+  onAddSunoPlaylist?: () => void;
+  onAddCustomPlaylist?: () => void;
   onRefresh: () => void;
   onSelectArtist: (artistId: number) => void;
+  onRowContextMenu?: (artist: ArtistRow, event: React.MouseEvent) => void;
 };
 
 function prefersReducedMotion(): boolean {
@@ -64,7 +69,91 @@ function ListenerBrandLabel({ titleRevealed }: { titleRevealed: boolean }) {
   );
 }
 
-/** Collapsible artist library — full list or narrow icon rail. */
+/** Small menu opened from the + button — subscribe or create a Suno playlist. */
+function SidebarAddMenu({
+  open,
+  busy,
+  sunoEnabled,
+  onClose,
+  onSubscribe,
+  onAddSunoPlaylist,
+  onAddCustomPlaylist,
+}: {
+  open: boolean;
+  busy: boolean;
+  sunoEnabled: boolean;
+  onClose: () => void;
+  onSubscribe: () => void;
+  onAddSunoPlaylist?: () => void;
+  onAddCustomPlaylist?: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) onClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="sidebar-add-menu" ref={menuRef} role="menu">
+      <button
+        type="button"
+        className="sidebar-add-menu-item"
+        role="menuitem"
+        disabled={busy}
+        onClick={() => {
+          onClose();
+          onSubscribe();
+        }}
+      >
+        Add artist
+      </button>
+      {sunoEnabled && onAddSunoPlaylist ? (
+        <button
+          type="button"
+          className="sidebar-add-menu-item"
+          role="menuitem"
+          disabled={busy}
+          onClick={() => {
+            onClose();
+            onAddSunoPlaylist();
+          }}
+        >
+          Add Suno playlist
+        </button>
+      ) : null}
+      {onAddCustomPlaylist ? (
+        <button
+          type="button"
+          className="sidebar-add-menu-item"
+          role="menuitem"
+          disabled={busy}
+          onClick={() => {
+            onClose();
+            onAddCustomPlaylist();
+          }}
+        >
+          Add custom playlist
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Collapsible artist library — table rows when expanded, icon rail when collapsed. */
 export function ListenerSidebar({
   artists,
   selectedArtistId,
@@ -73,12 +162,16 @@ export function ListenerSidebar({
   onToggleCollapsed,
   onOpenSettings,
   onSubscribe,
+  onAddSunoPlaylist,
+  onAddCustomPlaylist,
   onRefresh,
   onSelectArtist,
+  onRowContextMenu,
 }: ListenerSidebarProps) {
   const brandClickTimerRef = useRef<number | null>(null);
   const brandAnimatingRef = useRef(false);
   const [titleRevealed, setTitleRevealed] = useState(!collapsed);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
 
   useEffect(
     () => () => {
@@ -89,10 +182,13 @@ export function ListenerSidebar({
     [],
   );
 
-  // Keep label in sync when collapsed is restored from settings (not mid-animation).
   useEffect(() => {
     if (brandAnimatingRef.current) return;
     setTitleRevealed(!collapsed);
+  }, [collapsed]);
+
+  useEffect(() => {
+    if (collapsed) setAddMenuOpen(false);
   }, [collapsed]);
 
   const clearBrandTimer = () => {
@@ -112,7 +208,6 @@ export function ListenerSidebar({
     brandAnimatingRef.current = true;
 
     if (collapsed) {
-      // Expand width first while SP stays visible, then spell out Song Pages.
       onToggleCollapsed();
       clearBrandTimer();
       brandClickTimerRef.current = window.setTimeout(() => {
@@ -123,7 +218,6 @@ export function ListenerSidebar({
       return;
     }
 
-    // Hide full title back to SP, then collapse width.
     setTitleRevealed(false);
     clearBrandTimer();
     brandClickTimerRef.current = window.setTimeout(() => {
@@ -151,6 +245,12 @@ export function ListenerSidebar({
     ? 'Click to expand · double-click for settings'
     : 'Click to collapse · double-click for settings';
 
+  const refreshDisabled =
+    busy ||
+    selectedArtistId === null ||
+    isLikedSongsArtist(selectedArtistId) ||
+    isSunoDemoArtistId(selectedArtistId);
+
   return (
     <aside className={`listener-sidebar${collapsed ? ' collapsed' : ''}`}>
       <button
@@ -171,24 +271,37 @@ export function ListenerSidebar({
       <div className="listener-sidebar-body">
         <section className="panel artists-panel">
           {!collapsed ? (
-            <div className="panel-header">
-              <h2>Artists</h2>
-              <div className="panel-actions panel-actions-end">
-                <button
-                  type="button"
-                  className="btn icon-btn"
-                  onClick={onSubscribe}
-                  disabled={busy}
-                  aria-label="Subscribe to artist"
-                  title="Subscribe to artist"
-                >
-                  <IconAdd />
-                </button>
+            <div className="panel-header library-panel-header">
+              <h2>Artists &amp; Playlists</h2>
+              <div className="panel-actions panel-actions-end library-panel-actions">
+                <div className="sidebar-add-anchor">
+                  <button
+                    type="button"
+                    className="btn icon-btn"
+                    onClick={() => setAddMenuOpen((open) => !open)}
+                    disabled={busy}
+                    aria-label="Add artist or playlist"
+                    aria-expanded={addMenuOpen}
+                    aria-haspopup="menu"
+                    title="Add artist or playlist"
+                  >
+                    <IconAdd />
+                  </button>
+                  <SidebarAddMenu
+                    open={addMenuOpen}
+                    busy={busy}
+                    sunoEnabled={SUNO_DEMO_FEATURE_ENABLED}
+                    onClose={() => setAddMenuOpen(false)}
+                    onSubscribe={onSubscribe}
+                    onAddSunoPlaylist={onAddSunoPlaylist}
+                    onAddCustomPlaylist={onAddCustomPlaylist}
+                  />
+                </div>
                 <button
                   type="button"
                   className="btn icon-btn"
                   onClick={onRefresh}
-                  disabled={busy || selectedArtistId === null || isLikedSongsArtist(selectedArtistId) || isSunoDemoArtistId(selectedArtistId)}
+                  disabled={refreshDisabled}
                   aria-label="Refresh artist catalog"
                   title="Refresh catalog"
                 >
@@ -212,7 +325,7 @@ export function ListenerSidebar({
                 type="button"
                 className="btn icon-btn listener-rail-icon-btn"
                 onClick={onRefresh}
-                disabled={busy || selectedArtistId === null || isLikedSongsArtist(selectedArtistId) || isSunoDemoArtistId(selectedArtistId)}
+                disabled={refreshDisabled}
                 aria-label="Refresh artist catalog"
                 title="Refresh catalog"
               >
@@ -221,38 +334,59 @@ export function ListenerSidebar({
             </div>
           )}
 
-          <ul className={`artist-list${collapsed ? ' artist-list-collapsed' : ''}`}>
+          {!collapsed ? (
+            <div className="library-table-header" aria-hidden="true">
+              <span className="library-col-name">Name</span>
+              <span className="library-col-type">Type</span>
+              <span className="library-col-songs">Songs</span>
+            </div>
+          ) : null}
+
+          <ul className={`library-list${collapsed ? ' library-list-collapsed' : ''}`}>
             {artists.map((artist) => {
               const isLikedEntry = isLikedSongsArtist(artist.id);
               const isSunoEntry = SUNO_DEMO_FEATURE_ENABLED && isSunoDemoArtistId(artist.id);
               const photoUrl = isLikedEntry || isSunoEntry ? null : resolveArtistPhotoUrl(artist);
               const isActive = selectedArtistId === artist.id;
-              const label = `${artist.artist_name} · ${formatArtistSongCount(artist.song_count)}`;
+              const entryType = sidebarEntryType(artist);
+              const typeLabel = sidebarEntryTypeLabel(entryType);
+              const songCount =
+                typeof artist.song_count === 'number' && Number.isFinite(artist.song_count)
+                  ? Math.max(0, artist.song_count)
+                  : 0;
+              const label = `${artist.artist_name} · ${typeLabel} · ${songCount}`;
+              const removable = isSidebarPlaylistContextTarget(entryType);
+
+              const handleContextMenu = (event: React.MouseEvent) => {
+                if (!removable || !onRowContextMenu) return;
+                event.preventDefault();
+                onRowContextMenu(artist, event);
+              };
 
               if (collapsed) {
                 return (
                   <li key={artist.id}>
                     <button
                       type="button"
-                      className={`artist-item artist-item-compact${isActive ? ' active' : ''}${
-                        isLikedEntry ? ' artist-item-liked' : ''
-                      }${isSunoEntry ? ' artist-item-suno-only' : ''}`}
+                      className={`library-row library-row-compact${isActive ? ' active' : ''}${
+                        isLikedEntry ? ' library-row-liked' : ''
+                      }${isSunoEntry ? ' library-row-suno' : ''}`}
                       onClick={() => onSelectArtist(artist.id)}
                       aria-label={label}
                       title={label}
                     >
                       {isLikedEntry ? (
-                        <span className="artist-item-avatar artist-item-liked-icon" aria-hidden="true">
+                        <span className="library-row-avatar library-row-liked-icon" aria-hidden="true">
                           ♥
                         </span>
                       ) : isSunoEntry ? (
-                        <span className="artist-item-avatar artist-item-avatar-fallback" aria-hidden="true">
+                        <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
                           ☀
                         </span>
                       ) : photoUrl ? (
-                        <img className="artist-item-avatar" src={photoUrl} alt="" />
+                        <img className="library-row-avatar" src={photoUrl} alt="" />
                       ) : (
-                        <span className="artist-item-avatar artist-item-avatar-fallback" aria-hidden="true">
+                        <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
                           {artistInitials(artist.artist_name)}
                         </span>
                       )}
@@ -265,17 +399,20 @@ export function ListenerSidebar({
                 <li key={artist.id}>
                   <button
                     type="button"
-                    className={`artist-item${isActive ? ' active' : ''}${isLikedEntry ? ' artist-item-liked' : ''}${isSunoEntry ? ' artist-item-suno-only' : ''}`}
+                    className={`library-row${isActive ? ' active' : ''}${isLikedEntry ? ' library-row-liked' : ''}${isSunoEntry ? ' library-row-suno' : ''}`}
                     onClick={() => onSelectArtist(artist.id)}
+                    onContextMenu={handleContextMenu}
+                    title={label}
                   >
-                    <span className="artist-name">{artist.artist_name}</span>
-                    <span className="artist-song-count">{formatArtistSongCount(artist.song_count)}</span>
+                    <span className="library-col-name">{artist.artist_name}</span>
+                    <span className="library-col-type">{typeLabel}</span>
+                    <span className="library-col-songs">{songCount}</span>
                   </button>
                 </li>
               );
             })}
             {!artists.length ? (
-              <li className="empty">{collapsed ? '—' : 'No artists yet.'}</li>
+              <li className="empty">{collapsed ? '—' : 'No artists or playlists yet.'}</li>
             ) : null}
           </ul>
         </section>

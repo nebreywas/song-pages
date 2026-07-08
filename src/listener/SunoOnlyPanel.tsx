@@ -1,13 +1,14 @@
 type SunoOnlyPanelProps = {
+  playlistName: string;
   songCount: number;
   onAddSong: () => void;
 };
 
-/** Artist panel for the demo Suno Only virtual playlist. */
-export function SunoOnlyPanel({ songCount, onAddSong }: SunoOnlyPanelProps) {
+/** Artist panel for a demo Suno playlist. */
+export function SunoOnlyPanel({ playlistName, songCount, onAddSong }: SunoOnlyPanelProps) {
   return (
     <div className="suno-only-panel">
-      <h2>Suno Only</h2>
+      <h2>{playlistName}</h2>
       <p className="suno-only-panel-copy">
         Demo playlist — import public Suno clips by URL. Tracks play from Suno&apos;s CDN and show cover, artist, and
         lyrics in the page pane above.

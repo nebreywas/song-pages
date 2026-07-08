@@ -58,10 +58,16 @@ function registerIpcHandlers() {
 
   ipcMain.handle('listener:listSongs', (_event, artistId) => {
     const likedSongs = require('./listener/likedSongs');
-    const { SUNO_DEMO_ARTIST_ID } = require('./listener/sunoDemo/feature');
+    const userPlaylists = require('./listener/userPlaylists');
+    const { isSunoDemoArtistId, sunoPlaylistIdFromArtistId } = require('./listener/sunoDemo/feature');
     const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
-    if (artistId === SUNO_DEMO_ARTIST_ID) {
-      return sunoDemoSongs.listSunoDemoSongs();
+    if (userPlaylists.isUserPlaylistArtistId(artistId)) {
+      const playlistId = userPlaylists.userPlaylistIdFromArtistId(artistId);
+      return userPlaylists.listUserPlaylistSongs(playlistId);
+    }
+    if (isSunoDemoArtistId(artistId)) {
+      const playlistId = sunoPlaylistIdFromArtistId(artistId);
+      return sunoDemoSongs.listSunoDemoSongs(playlistId);
     }
     if (artistId === 0) {
       return likedSongs.listLikedSongs();
@@ -236,15 +242,127 @@ function registerIpcHandlers() {
     return listenerLibrary.updateSongDurationSeconds(songId, durationSeconds);
   });
 
-  ipcMain.handle('listener:countSunoDemoSongs', () => {
+  ipcMain.handle('listener:countSunoDemoSongs', (_event, playlistId) => {
     const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
-    return sunoDemoSongs.countSunoDemoSongs();
+    return sunoDemoSongs.countSunoDemoSongs(playlistId);
   });
 
-  ipcMain.handle('listener:addSunoDemoSong', async (_event, input) => {
+  ipcMain.handle('listener:listSunoDemoPlaylists', () => {
+    const sunoDemoPlaylists = require('./listener/sunoDemo/sunoDemoPlaylists');
+    return sunoDemoPlaylists.listSunoDemoPlaylists();
+  });
+
+  ipcMain.handle('listener:createSunoDemoPlaylist', () => {
+    const sunoDemoPlaylists = require('./listener/sunoDemo/sunoDemoPlaylists');
+    try {
+      return sunoDemoPlaylists.createSunoDemoPlaylist();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:removeSunoDemoPlaylist', (_event, playlistId) => {
+    const sunoDemoPlaylists = require('./listener/sunoDemo/sunoDemoPlaylists');
+    try {
+      if (typeof playlistId !== 'number') {
+        return { ok: false, error: 'Invalid Suno playlist id.' };
+      }
+      return sunoDemoPlaylists.removeSunoDemoPlaylist(playlistId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:renameSunoDemoPlaylist', (_event, playlistId, name) => {
+    const sunoDemoPlaylists = require('./listener/sunoDemo/sunoDemoPlaylists');
+    try {
+      if (typeof playlistId !== 'number') return { ok: false, error: 'Invalid Suno playlist id.' };
+      return sunoDemoPlaylists.renameSunoDemoPlaylist(playlistId, name);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:listUserPlaylists', () => {
+    const userPlaylists = require('./listener/userPlaylists');
+    return userPlaylists.listUserPlaylists();
+  });
+
+  ipcMain.handle('listener:createUserPlaylist', (_event, name) => {
+    const userPlaylists = require('./listener/userPlaylists');
+    try {
+      return userPlaylists.createUserPlaylist(name);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:renameUserPlaylist', (_event, playlistId, name) => {
+    const userPlaylists = require('./listener/userPlaylists');
+    try {
+      if (typeof playlistId !== 'number') return { ok: false, error: 'Invalid playlist id.' };
+      return userPlaylists.renameUserPlaylist(playlistId, name);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:removeUserPlaylist', (_event, playlistId) => {
+    const userPlaylists = require('./listener/userPlaylists');
+    try {
+      if (typeof playlistId !== 'number') return { ok: false, error: 'Invalid playlist id.' };
+      return userPlaylists.removeUserPlaylist(playlistId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:addSongToUserPlaylist', (_event, playlistId, song) => {
+    const userPlaylists = require('./listener/userPlaylists');
+    try {
+      if (typeof playlistId !== 'number' || !song) return { ok: false, error: 'Invalid add request.' };
+      return userPlaylists.addSongToUserPlaylist(playlistId, song);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:moveSongToUserPlaylist', (_event, payload) => {
+    const userPlaylists = require('./listener/userPlaylists');
+    try {
+      if (!payload || typeof payload.destPlaylistId !== 'number' || !payload.song) {
+        return { ok: false, error: 'Invalid move request.' };
+      }
+      return userPlaylists.moveSongToUserPlaylist(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:removeUserPlaylistSong', (_event, songId) => {
+    const userPlaylists = require('./listener/userPlaylists');
+    try {
+      if (typeof songId !== 'number') return { ok: false, error: 'Invalid song id.' };
+      const data = userPlaylists.removeUserPlaylistSong(songId);
+      return { ok: true, data };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:addSunoDemoSong', async (_event, input, playlistId) => {
     const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
     try {
-      return await sunoDemoSongs.addSunoDemoSongByUrl(input);
+      return await sunoDemoSongs.addSunoDemoSongByUrl(input, playlistId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message };

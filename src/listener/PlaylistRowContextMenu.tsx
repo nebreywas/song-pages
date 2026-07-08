@@ -5,8 +5,10 @@ import { isSongSkipped } from '@shared/listener/playlistKinds';
 type PlaylistRowContextMenuProps = {
   song: SongRow;
   playlistKind: PlaylistKind | null;
+  playlistName?: string | null;
   x: number;
   y: number;
+  onAddToPlaylist: (song: SongRow) => void;
   onCopyLink: (song: SongRow) => void;
   onRemove: (song: SongRow) => void;
   onRestore: (song: SongRow) => void;
@@ -17,8 +19,10 @@ type PlaylistRowContextMenuProps = {
 export function PlaylistRowContextMenu({
   song,
   playlistKind,
+  playlistName,
   x,
   y,
+  onAddToPlaylist,
   onCopyLink,
   onRemove,
   onRestore,
@@ -31,8 +35,10 @@ export function PlaylistRowContextMenu({
       : playlistKind === 'personal'
         ? 'Remove from Liked Songs'
         : playlistKind === 'suno'
-          ? 'Remove from Suno Only'
-          : 'Remove song';
+          ? `Remove from ${playlistName?.trim() || 'Suno playlist'}`
+          : playlistKind === 'custom'
+            ? `Remove from ${playlistName?.trim() || 'playlist'}`
+            : 'Remove song';
 
   return (
     <>
@@ -43,6 +49,9 @@ export function PlaylistRowContextMenu({
         role="menu"
         onContextMenu={(event) => event.preventDefault()}
       >
+        <button type="button" className="playlist-context-item" role="menuitem" onClick={() => onAddToPlaylist(song)}>
+          Add to playlist…
+        </button>
         {skipped ? (
           <button type="button" className="playlist-context-item" role="menuitem" onClick={() => onRestore(song)}>
             Restore song

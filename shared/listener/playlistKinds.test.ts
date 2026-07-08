@@ -8,7 +8,7 @@ test('vcArtistDisplayName uses track artist on virtual playlists', () => {
   assert.equal(
     vcArtistDisplayName(
       { id: -2_000_001, artist_id: SUNO_DEMO_ARTIST_ID, artist_name: 'Rocky Hop' },
-      { id: SUNO_DEMO_ARTIST_ID, artist_name: 'Suno Only' },
+      { id: SUNO_DEMO_ARTIST_ID, artist_name: 'Suno 1' },
     ),
     'Rocky Hop',
   );
@@ -35,7 +35,7 @@ test('vcArtistDisplayName uses manifest fallback on Suno tracks', () => {
   assert.equal(
     vcArtistDisplayName(
       { id: -2_000_001, artist_id: SUNO_DEMO_ARTIST_ID, artist_name: '' },
-      { id: SUNO_DEMO_ARTIST_ID, artist_name: 'Suno Only' },
+      { id: SUNO_DEMO_ARTIST_ID, artist_name: 'Suno 1' },
       'Rocky Hop',
     ),
     'Rocky Hop',
@@ -43,5 +43,5 @@ test('vcArtistDisplayName uses manifest fallback on Suno tracks', () => {
 });
 
 test('vcArtistDisplayName ignores virtual sidebar artist profile when song is absent', () => {
-  assert.equal(vcArtistDisplayName(null, { id: SUNO_DEMO_ARTIST_ID, artist_name: 'Suno Only' }), null);
+  assert.equal(vcArtistDisplayName(null, { id: SUNO_DEMO_ARTIST_ID, artist_name: 'Suno 1' }), null);
 });

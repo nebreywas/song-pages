@@ -86,6 +86,9 @@ function initListenerSchema() {
   const { initSunoDemoSchema } = require('./sunoDemo/sunoDemoSongs');
   initSunoDemoSchema(db);
 
+  const { initUserPlaylistsSchema } = require('./userPlaylists');
+  initUserPlaylistsSchema(db);
+
   const { initPlaylistOrderSchema } = require('./playlistOrder');
   initPlaylistOrderSchema(db);
 

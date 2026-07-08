@@ -4,16 +4,26 @@ import { getApp } from '../lib/bridge';
 type SunoDemoAddDialogProps = {
   open: boolean;
   busy: boolean;
+  playlistId?: number;
+  playlistName?: string;
   onClose: () => void;
   onAdded: () => void;
 };
 
 /** Secret demo dialog — paste a Suno share URL or clip UUID to import a track. */
-export function SunoDemoAddDialog({ open, busy, onClose, onAdded }: SunoDemoAddDialogProps) {
+export function SunoDemoAddDialog({
+  open,
+  busy,
+  playlistId,
+  playlistName,
+  onClose,
+  onAdded,
+}: SunoDemoAddDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const targetLabel = playlistName?.trim() || 'Suno playlist';
 
   useEffect(() => {
     if (!open) return;
@@ -37,7 +47,7 @@ export function SunoDemoAddDialog({ open, busy, onClose, onAdded }: SunoDemoAddD
 
     setSubmitting(true);
     setError(null);
-    const result = await app.listener.addSunoDemoSong(trimmed);
+    const result = await app.listener.addSunoDemoSong(trimmed, playlistId);
     setSubmitting(false);
 
     if (!result.ok || !result.data) {
@@ -59,7 +69,8 @@ export function SunoDemoAddDialog({ open, busy, onClose, onAdded }: SunoDemoAddD
       >
         <h2 id="suno-demo-add-title">Add Suno track</h2>
         <p className="suno-demo-add-hint">
-          Paste a <code>suno.com</code> share link or clip UUID. The track is stored locally for demo playback only.
+          Paste a <code>suno.com</code> share link or clip UUID. The track is stored locally in{' '}
+          <strong>{targetLabel}</strong> for demo playback only.
         </p>
         <form onSubmit={(event) => void handleSubmit(event)}>
           <label className="sr-only" htmlFor="suno-demo-url">
@@ -83,7 +94,7 @@ export function SunoDemoAddDialog({ open, busy, onClose, onAdded }: SunoDemoAddD
               Cancel
             </button>
             <button type="submit" className="btn primary" disabled={submitting || busy || !url.trim()}>
-              {submitting ? 'Importing…' : 'Add to Suno Only'}
+              {submitting ? 'Importing…' : `Add to ${targetLabel}`}
             </button>
           </div>
         </form>
