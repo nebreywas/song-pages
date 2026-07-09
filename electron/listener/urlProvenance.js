@@ -11,6 +11,13 @@ function normalizeComparableUrl(raw) {
   return parsed.href;
 }
 
+/** Origin + pathname identity — ignores cache-bust query params when matching library URLs. */
+function urlResourceIdentity(raw) {
+  const parsed = parseHttpUrl(raw);
+  if (!parsed) return null;
+  return `${parsed.origin}${parsed.pathname}`.toLowerCase();
+}
+
 function urlUnderSiteRoot(targetUrl, siteRoot) {
   const target = parseHttpUrl(targetUrl);
   const base = parseHttpUrl(siteRoot);
@@ -46,14 +53,14 @@ function isUrlUnderSubscribedSite(url) {
 }
 
 function findSongMatchingUrl(url) {
-  const normalized = normalizeComparableUrl(url);
-  if (!normalized) return null;
+  const identity = urlResourceIdentity(url);
+  if (!identity) return null;
 
   const songs = listenerLibrary.listAllSongs();
   for (const song of songs) {
     const candidates = [song.page_url, song.playback_url, song.song_manifest_url].filter(Boolean);
     for (const candidate of candidates) {
-      if (normalizeComparableUrl(candidate) === normalized) {
+      if (urlResourceIdentity(candidate) === identity) {
         return song;
       }
     }
@@ -79,6 +86,17 @@ function resolveProbeProvenance(pageUrl, playbackUrl) {
 
   if (pageSong && playbackSong && pageSong.id === playbackSong.id) {
     return 'song-context';
+  }
+
+  if (pageSong) {
+    const row = listenerLibrary.getSongById(pageSong.id);
+    if (
+      row &&
+      urlResourceIdentity(row.page_url) === urlResourceIdentity(pageUrl) &&
+      urlResourceIdentity(row.playback_url) === urlResourceIdentity(playbackUrl)
+    ) {
+      return 'song-context';
+    }
   }
 
   const pageUnderSite = isUrlUnderSubscribedSite(pageUrl);

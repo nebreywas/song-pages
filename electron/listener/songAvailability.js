@@ -6,21 +6,28 @@ const { resolveProbeProvenance } = require('./urlProvenance');
 
 const PROBE_TIMEOUT_MS = 8000;
 
-async function probeUrl(url, provenance, method = 'GET') {
+const probeRequestBase = (url, provenance) => ({
+  purpose: 'probe-song-availability',
+  provenance,
+  maxRedirects: 3,
+  timeoutMs: PROBE_TIMEOUT_MS,
+  expectJson: false,
+  headers: { Accept: '*/*' },
+});
+
+/** HEAD first (minimal); fall back to status-only GET when CDN/host omits HEAD. */
+async function probeUrl(url, provenance) {
+  const base = probeRequestBase(url, provenance);
   try {
-    await fetchWithUrlPolicy(url, {
-      purpose: 'probe-song-availability',
-      provenance,
-      method,
-      maxRedirects: 3,
-      timeoutMs: PROBE_TIMEOUT_MS,
-      maxBytes: 4096,
-      expectJson: false,
-      headers: { Accept: '*/*' },
-    });
+    await fetchWithUrlPolicy(url, { ...base, method: 'HEAD', skipBody: true });
     return true;
   } catch {
-    return false;
+    try {
+      await fetchWithUrlPolicy(url, { ...base, method: 'GET', skipBody: true });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -31,12 +38,12 @@ async function probeSongAvailability(pageUrl, playbackUrl) {
     return { ok: false, pageAvailable: false, playbackAvailable: false, error: 'Probe URLs lack catalog context.' };
   }
 
-  const pageOk = await probeUrl(pageUrl, provenance, 'GET');
+  const pageOk = await probeUrl(pageUrl, provenance);
   if (!pageOk) {
     return { ok: false, pageAvailable: false, playbackAvailable: false };
   }
 
-  const playbackOk = await probeUrl(playbackUrl, provenance, 'GET');
+  const playbackOk = await probeUrl(playbackUrl, provenance);
   return {
     ok: pageOk && playbackOk,
     pageAvailable: pageOk,

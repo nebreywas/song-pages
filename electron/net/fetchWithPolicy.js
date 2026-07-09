@@ -17,6 +17,7 @@ const DEFAULT_MAX_BYTES = 1024 * 1024;
  *   method?: string;
  *   headers?: Record<string, string>;
  *   expectJson?: boolean;
+ *   skipBody?: boolean;
  * }} options
  */
 async function fetchWithUrlPolicy(initialUrl, options) {
@@ -25,6 +26,7 @@ async function fetchWithUrlPolicy(initialUrl, options) {
   const timeoutMs = options.timeoutMs ?? 30000;
   const method = options.method ?? 'GET';
   const expectJson = options.expectJson !== false;
+  const skipBody = options.skipBody === true;
 
   let currentUrl = initialUrl;
 
@@ -65,8 +67,19 @@ async function fetchWithUrlPolicy(initialUrl, options) {
       throw new Error(`HTTP ${response.status} fetching ${currentUrl}`);
     }
 
-    if (method === 'HEAD') {
-      return { ok: true, status: response.status };
+    // Availability probes only need status — do not buffer HTML/HLS bodies.
+    if (method === 'HEAD' || skipBody) {
+      if (response.body) {
+        try {
+          await response.body.cancel();
+        } catch {
+          // Body may already be consumed — probe result stands on response.ok.
+        }
+      }
+      if (method === 'HEAD') {
+        return { ok: true, status: response.status };
+      }
+      return expectJson ? null : '';
     }
 
     const body = response.body;
