@@ -16,20 +16,25 @@ Beyond the core loop, the desktop app also includes VC Mode (surface designer + 
 
 ## Documentation
 
+**Full index:** [documentation/README.md](documentation/README.md) · **Deferred work:** [documentation/OPEN-QUESTIONS.md](documentation/OPEN-QUESTIONS.md)
+
 | Document | Topic |
 |----------|--------|
 | [design-and-vision.md](documentation/design-and-vision.md) | Product vision |
+| [persistence-philosophy.md](documentation/persistence-philosophy.md) | Snapshot-First persistence (canonical) |
+| [settings-and-persistence.md](documentation/settings-and-persistence.md) | Settings keys and disk paths |
 | [manifest-schemas.md](documentation/manifest-schemas.md) | PoC manifest contracts |
 | [guest-rendering-security.md](documentation/guest-rendering-security.md) | Guest webview trust model |
 | [security-model-and-completed-actions.md](documentation/security-model-and-completed-actions.md) | Security checklist |
-| [vc-mode-architecture.md](documentation/vc-mode-architecture.md) | VC Mode runtime, IPC, audio mirror, Discord testing |
-| [visualizer-architecture.md](documentation/visualizer-architecture.md) | Web Audio graph, experiences, projection |
-| [settings-and-persistence.md](documentation/settings-and-persistence.md) | Settings keys and disk paths |
-| [song-pages-vc-mode-surface-view-designer-spec.md](documentation/song-pages-vc-mode-surface-view-designer-spec.md) | VC surface designer product spec |
-| [Host-content-design.md](documentation/Host-content-design.md) | Host content catalog design |
-| [shared-utilities.md](documentation/shared-utilities.md) | Reusable `shared/` helpers (lyrics, time, markdown) |
-| [ffmpeg-compile-prerequisites.md](documentation/ffmpeg-compile-prerequisites.md) | FFmpeg/FFprobe for Artist Mode compile (not bundled) |
-| [ALARE.md](documentation/ALARE.md) | Approximate lyric allocation & rendering (VC lyric tracking) |
+| [audio-pipeline.md](documentation/audio-pipeline.md) | Audio pipeline (canonical) |
+| [audio-systems-baseline.md](documentation/audio-systems-baseline.md) | Audio effects vocabulary |
+| [vc-mode-architecture.md](documentation/vc-mode-architecture.md) | VC Mode runtime |
+| [visualizer-architecture.md](documentation/visualizer-architecture.md) | Visualizers |
+| [shared-utilities.md](documentation/shared-utilities.md) | Shared helpers |
+| [ALARE.md](documentation/ALARE.md) | Lyric tracking (VC) |
+| [ffmpeg-compile-prerequisites.md](documentation/ffmpeg-compile-prerequisites.md) | FFmpeg for Artist compile |
+
+Archived specs, audits, and sprints: [documentation/archive/](documentation/archive/)
 
 ## Technology Stack
 
@@ -80,7 +85,7 @@ After recompiling with manifest emission, upload to static host and subscribe in
 
 ```
 song-pages/
-├── documentation/          # Architecture, security, product specs
+├── documentation/          # Architecture & guidelines — see documentation/README.md
 ├── electron/               # Main process, IPC, SQLite, windows, host content media
 ├── compiler/               # Static site + manifest generator (+ Node tests)
 ├── shared/                 # Cross-process types + reusable helpers (see shared-utilities.md)

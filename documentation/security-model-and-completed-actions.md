@@ -1,5 +1,7 @@
 # Security Model and Currently Completed Actions
 
+**Status:** Canonical · **Index:** [README.md](./README.md)
+
 This document summarizes the Song Pages desktop application security architecture and what has been implemented in the proof-of-concept codebase as of this writing.
 
 For full detail on guest webview behavior, see [guest-rendering-security.md](./guest-rendering-security.md). For manifest contracts, see [manifest-schemas.md](./manifest-schemas.md).
@@ -98,7 +100,7 @@ These windows do **not** load artist song page guests. They render app-controlle
 
 Host graphics and videos are imported via IPC (`hostContent:pickAndImportMedia`) into `{userData}/host-content/media/`. Validation (format, size, dimensions for graphics) runs in main process (`electron/hostContent.js`). Catalog metadata persists in SQLite key `vc.hostContent`. This is trusted local user content, not remote artist HTML.
 
-See [Host-content-design.md](./Host-content-design.md) and [settings-and-persistence.md](./settings-and-persistence.md).
+See [archive/specs/Host-content-design.md](./archive/specs/Host-content-design.md) and [settings-and-persistence.md](./settings-and-persistence.md).
 
 ---
 

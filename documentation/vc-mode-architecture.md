@@ -1,8 +1,10 @@
 # VC Mode Architecture
 
+**Status:** Canonical runtime reference · **Index:** [README.md](./README.md)
+
 This document describes how **VC Mode** works in the Song Pages desktop app: the Surface/View Designer, the live VC projection window, IPC between main and VC windows, content resolution, and **audio mirroring for Discord/Twitch screen capture**.
 
-For surface geometry and designer UX rules, see [song-pages-vc-mode-surface-view-designer-spec.md](./song-pages-vc-mode-surface-view-designer-spec.md). For host content catalog design, see [Host-content-design.md](./Host-content-design.md). For persistence keys, see [settings-and-persistence.md](./settings-and-persistence.md).
+For surface geometry and designer UX rules, see [archive/specs/song-pages-vc-mode-surface-view-designer-spec.md](./archive/specs/song-pages-vc-mode-surface-view-designer-spec.md). For host content catalog design, see [archive/specs/Host-content-design.md](./archive/specs/Host-content-design.md). For persistence keys, see [settings-and-persistence.md](./settings-and-persistence.md).
 
 **Canonical audio reference (main/mirror split, Discord incident, debug tooling):** [audio-pipeline.md](./audio-pipeline.md).
 
@@ -252,7 +254,7 @@ Use this when verifying window-only capture (not full desktop share).
 
 ## Related reading
 
-- [song-pages-vc-mode-surface-view-designer-spec.md](./song-pages-vc-mode-surface-view-designer-spec.md) — product spec and designer rules
+- [archive/specs/song-pages-vc-mode-surface-view-designer-spec.md](./archive/specs/song-pages-vc-mode-surface-view-designer-spec.md) — product spec and designer rules
 - [audio-pipeline.md](./audio-pipeline.md) — canonical playback/mirror/Discord reference
 - [visualizer-architecture.md](./visualizer-architecture.md) — Web Audio graph and projection visualizer
 - [settings-and-persistence.md](./settings-and-persistence.md) — `vc.lastConfig`, `vc.hostContent` keys

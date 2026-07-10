@@ -1,5 +1,7 @@
 # Project Vision
 
+**Status:** Canonical · **Audience:** All contributors and agents · **Index:** [documentation/README.md](./README.md)
+
 Song Pages is an open, decentralized music publishing platform designed to help independent artists establish a richer, more permanent presence on the web while creating a desktop listening experience that naturally brings those independent websites together.
 
 Instead of uploading music into a centralized streaming platform, artists publish their own Song Pages website. Each website contains human-readable pages alongside machine-readable manifests that describe the artist and their music.
@@ -79,6 +81,8 @@ The application should remain modular so future releases can expand either exper
 - [vc-mode-architecture.md](./vc-mode-architecture.md) — VC Mode runtime and audio mirror
 - [visualizer-architecture.md](./visualizer-architecture.md) — Web Audio and projection visualizers
 - [settings-and-persistence.md](./settings-and-persistence.md) — Settings keys and disk paths
+- [persistence-philosophy.md](./persistence-philosophy.md) — Snapshot-First persistence (playlists, SQLite)
+- [OPEN-QUESTIONS.md](./OPEN-QUESTIONS.md) — Deferred decisions (not a to-do list)
 
 ---
 
@@ -93,7 +97,7 @@ The design goal is a modern desktop music player inspired by library-based appli
 Listeners build a personal collection by subscribing to Song Pages artist URLs (for example `https://sawyerhouse-music.b-cdn.net`). The app:
 
 1. Fetches `songpages-catalog.json` (and related manifests)
-2. Imports artist and song metadata into a local **SQLite** library
+2. Imports artist and song metadata into a local **SQLite** library (catalog mirror; user playlists are **snapshots** — [persistence-philosophy.md](./persistence-philosophy.md))
 3. Presents artists and songs in a familiar sidebar + song list UI
 4. Refreshes subscribed artists on launch and on manual refresh
 
@@ -183,7 +187,7 @@ This is not professional broadcast software (OBS, vMix, etc.). The intended user
 
 The **Surface/View Designer** (in the main app) configures layout and assignments. Designs auto-save locally. Live VC renders resolved content from shared resolution logic used in both designer preview and the projection window.
 
-Product spec: [song-pages-vc-mode-surface-view-designer-spec.md](./song-pages-vc-mode-surface-view-designer-spec.md)  
+Product spec (archived): [archive/specs/song-pages-vc-mode-surface-view-designer-spec.md](./archive/specs/song-pages-vc-mode-surface-view-designer-spec.md)  
 Runtime architecture: [vc-mode-architecture.md](./vc-mode-architecture.md)
 
 Design philosophy: **constrained structure first, then controlled freedom through floats.** VC Mode does not attempt arbitrary canvas editing, node graphs, or unrestricted layering.
@@ -207,7 +211,7 @@ Architecture: [visualizer-architecture.md](./visualizer-architecture.md)
 
 Host media is imported into local app storage; metadata persists in SQLite. Surface Designer owns placement; Host Content owns source material and defaults.
 
-Product design: [Host-content-design.md](./Host-content-design.md)
+Product design (archived): [archive/specs/Host-content-design.md](./archive/specs/Host-content-design.md)
 
 ---
 

@@ -3,6 +3,9 @@
  *
  * SQLite is the canonical local store for settings, caches, and metadata.
  * Large binary assets should remain on the filesystem, not in the database.
+ *
+ * @see documentation/persistence-philosophy.md — Snapshot-First, relationship classes
+ * @see documentation/settings-and-persistence.md — keys, paths, backup/test commands
  */
 const fs = require('fs');
 const path = require('path');
@@ -24,6 +27,7 @@ function initDatabase() {
 
   // WAL mode is a safe default for desktop apps with concurrent reads.
   db.pragma('journal_mode = WAL');
+  // Ownership-only FK enablement is deferred — see documentation/persistence-philosophy.md
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
@@ -78,10 +82,45 @@ function closeDatabase() {
   }
 }
 
+/** Close without logging — for electron/listener/*.test.js hooks. */
+function closeTestDatabase() {
+  if (db) {
+    db.close();
+    db = null;
+  }
+}
+
+/**
+ * Opens an isolated database file for automated tests (electron/listener/*.test.js).
+ * Not used by the packaged app.
+ */
+function openTestDatabase(dbPath) {
+  if (db) {
+    db.close();
+    db = null;
+  }
+
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  db = new Database(dbPath);
+  db.pragma('journal_mode = WAL');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+
+  const { initListenerSchema } = require('./listener/library');
+  initListenerSchema();
+  return db;
+}
+
 module.exports = {
   initDatabase,
   getDatabase,
   getSetting,
   setSetting,
   closeDatabase,
+  openTestDatabase,
+  closeTestDatabase,
 };

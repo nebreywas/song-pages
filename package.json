@@ -22,6 +22,8 @@
     "release:all": "node scripts/release.mjs --all",
     "icons:win": "node scripts/build-win-icon.mjs",
     "test": "node --import tsx --test shared/**/*.test.ts compiler/*.test.ts src/audio/**/*.test.ts",
+    "test:db": "node scripts/run-electron-db-tests.mjs",
+    "backup:db": "node scripts/backup-database.mjs",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },

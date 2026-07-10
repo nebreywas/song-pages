@@ -1,5 +1,7 @@
 # Visualizer Architecture
 
+**Status:** Canonical · **Index:** [README.md](./README.md)
+
 This document describes how **visualizers** work in Song Pages: experience registry, embedded vs projection rendering, Butterchurn mirroring, and settings persistence.
 
 For the **full playback / mirror / Discord capture pipeline**, see [audio-pipeline.md](./audio-pipeline.md) (canonical).

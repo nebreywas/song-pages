@@ -1,12 +1,14 @@
 # Audio Pipeline Architecture
 
+**Status:** Canonical · **Index:** [README.md](./README.md)
+
 Song Pages is a **desktop audio application**. Playback, visualizers, playback effects, and screen-share capture (Discord, OBS, Twitch) all depend on a deliberately split audio architecture. This document is the canonical reference for that pipeline, the macOS/Discord capture incident we debugged, bugs we hit along the way, and engineering rules for future work.
 
 **Related docs:**
 
-- [Audio-systems-baseline.md](./Audio-systems-baseline.md) — effect-first vocabulary, transport vs graph, encapsulation, testing discipline
-- [audio-effects-update.md](./audio-effects-update.md) — discovery sprint, prototype inventory, build order
-- [effects-lab/evaluation-template.md](./effects-lab/evaluation-template.md) — per-effect audition worksheet
+- [Audio-systems-baseline.md](./audio-systems-baseline.md) — effect-first vocabulary, transport vs graph, encapsulation, testing discipline
+- [archive/sprints/audio-effects-update.md](./archive/sprints/audio-effects-update.md) — discovery sprint (deferred)
+- [archive/sprints/effects-lab/evaluation-template.md](./archive/sprints/effects-lab/evaluation-template.md) — per-effect audition worksheet
 - [visualizer-architecture.md](./visualizer-architecture.md) — experience registry, IPC projection, Butterchurn
 - [vc-mode-architecture.md](./vc-mode-architecture.md) — VC window layout, VC-specific mirror, designer
 - [design-and-vision.md](./design-and-vision.md) — product context (capture-aware playback)
@@ -250,7 +252,7 @@ See [visualizer-architecture.md](./visualizer-architecture.md) for experiences a
 
 ## Playback effects
 
-See [Audio-systems-baseline.md](./Audio-systems-baseline.md) for whole-song vs performance-effect taxonomy and when to use transport vs graph.
+See [audio-systems-baseline.md](./audio-systems-baseline.md) for whole-song vs performance-effect taxonomy and when to use transport vs graph.
 
 | FX off | FX on (bass boost or lo-fi) |
 |--------|----------------------------|
@@ -419,5 +421,5 @@ Panel surfaces: main/mirror state, graph mode, FFT peak/avg, IPC send/receive ra
 
 | Date | Notes |
 |------|-------|
-| 2026-07 | Cross-link [Audio-systems-baseline.md](./Audio-systems-baseline.md); playback effects pointer |
+| 2026-07 | Cross-link [audio-systems-baseline.md](./audio-systems-baseline.md); playback effects pointer |
 | 2026-07 | Initial doc after main/mirror split, Discord debugging, audio debug panel, Chromium mute fix |

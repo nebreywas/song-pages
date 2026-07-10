@@ -1,5 +1,9 @@
 /**
  * IPC handlers — bridge between renderer and main-process capabilities.
+ *
+ * @see documentation/README.md — subsystem index
+ * @see documentation/settings-and-persistence.md — settings:get/save keys
+ * @see documentation/guest-rendering-security.md — listener guest webview handlers
  */
 const { app, dialog, ipcMain, shell, BrowserWindow } = require('electron');
 const path = require('path');

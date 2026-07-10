@@ -1,8 +1,10 @@
 # Shared utilities
 
+**Status:** Canonical · **Index:** [README.md](./README.md)
+
 Reusable **functions** in `shared/` that are safe to call from the renderer, compiler, Electron main, and VC window. Import via the `@shared/…` alias (Vite) or relative paths from `compiler/`.
 
-For **types, IPC payloads, and persisted config shapes**, see the domain docs ([vc-mode-architecture.md](./vc-mode-architecture.md), [manifest-schemas.md](./manifest-schemas.md), [Host-content-design.md](./Host-content-design.md)). This file is for **behavior** you might need in more than one place.
+For **types, IPC payloads, and persisted config shapes**, see the domain docs ([vc-mode-architecture.md](./vc-mode-architecture.md), [manifest-schemas.md](./manifest-schemas.md), [archive/specs/Host-content-design.md](./archive/specs/Host-content-design.md)). This file is for **behavior** you might need in more than one place.
 
 When you add a new cross-cutting helper under `shared/`, export it from a small module (not buried inside a feature folder) and add a row here.
 
@@ -111,6 +113,6 @@ In-app React previews often use `src/lib/markdownPreview.ts` (lighter path for d
 | Area | Location | Doc |
 |------|----------|-----|
 | VC content resolution | `shared/vcMode/contentResolution.ts` | [vc-mode-architecture.md](./vc-mode-architecture.md) |
-| Assignment overrides | `shared/vcMode/assignmentSettings.ts` | [Host-content-design.md](./Host-content-design.md) |
-| Host content helpers | `shared/hostContent/*` | [Host-content-design.md](./Host-content-design.md) |
+| Assignment overrides | `shared/vcMode/assignmentSettings.ts` | [archive/specs/Host-content-design.md](./archive/specs/Host-content-design.md) |
+| Host content helpers | `shared/hostContent/*` | [archive/specs/Host-content-design.md](./archive/specs/Host-content-design.md) |
 | CSP / app mode constants | `shared/siteCsp.ts`, `shared/appClient.ts` | [security-model-and-completed-actions.md](./security-model-and-completed-actions.md) |

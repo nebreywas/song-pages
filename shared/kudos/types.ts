@@ -1,6 +1,6 @@
 /**
  * Kudos — host-triggered live visual reactions (MVP 1.0).
- * @see documentation/kudos-system-1.md
+ * @see documentation/archive/specs/kudos-system-1.md (MVP spec; runtime: vc-mode-architecture.md)
  */
 
 export type KudoContentType =

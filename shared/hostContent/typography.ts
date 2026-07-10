@@ -1,6 +1,6 @@
 /**
  * Host Content typography — style/size ids, labels, normalization, CSS mapping.
- * Matches Host-content-design.md font tables.
+ * Matches archive/specs/Host-content-design.md font tables — see documentation/archive/specs/Host-content-design.md
  */
 
 import type { HostFontSizeId, HostFontStyleId } from './types';

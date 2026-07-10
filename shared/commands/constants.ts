@@ -1,4 +1,4 @@
-/** SQLite settings key — host command binding state. */
+/** SQLite settings key — host command binding state. @see documentation/archive/specs/song-pages-input-control-system.md */
 export const COMMAND_MAPPINGS_SETTINGS_KEY = 'commands.mappings';
 
 export const COMMAND_MAPPINGS_STATE_VERSION = 2;

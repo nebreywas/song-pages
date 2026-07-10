@@ -1,3 +1,5 @@
+> **Archived** (2026-07-10). Active docs: [../../README.md](../../README.md).
+
 # Song Pages Application Audit
 
 **Date:** 2026-07-08  
@@ -32,7 +34,7 @@ Song Pages has a **sound intentional split** between a trusted Electron shell (R
 
 ### What is already working well
 
-- **Guest webviews:** separate partition, sandbox, no preload, permission denial, download block, same-origin navigation policy ([guest-rendering-security.md](./guest-rendering-security.md)).
+- **Guest webviews:** separate partition, sandbox, no preload, permission denial, download block, same-origin navigation policy ([guest-rendering-security.md](./../../guest-rendering-security.md)).
 - **Preload pattern:** single `contextBridge.exposeInMainWorld('app', …)` with subscription cleanup — no raw `ipcRenderer` export.
 - **Audio architecture:** authoritative main `<audio>`, mirror for Web Audio only, macOS capture constraint documented and enforced (`AudioServiceOutOfProcess` disabled).
 - **Custom cache protocol:** path traversal guard under cache entry dirs; used for offline playback.
@@ -95,7 +97,7 @@ This pass is **code-path analysis + documented risk**, not full benchmarking. Sc
 
 **Classification:** **P1 architectural security debt.** Escalates to **P0** if trusted-shell navigation to remote content, shell injection, or preload-on-untrusted-content becomes possible.
 
-**Why not P0 today:** Remote song pages run in **guest webviews** (sandboxed, no preload). Shell relaxations support HLS/CDN and `<webview>` parent rendering — see [security-model-and-completed-actions.md](./security-model-and-completed-actions.md).
+**Why not P0 today:** Remote song pages run in **guest webviews** (sandboxed, no preload). Shell relaxations support HLS/CDN and `<webview>` parent rendering — see [security-model-and-completed-actions.md](./../../security-model-and-completed-actions.md).
 
 **Proposed fix (this slice):** Track mitigation backlog only — no behavior change:
 
@@ -203,7 +205,7 @@ This pass is **code-path analysis + documented risk**, not full benchmarking. Sc
 | `useVcPlaybackAudio` | VC window `<audio>` for capture; sync via IPC |
 | HLS.js | Main, mirror, VC, probe — `enableWorker: true` |
 
-See [audio-pipeline.md](./audio-pipeline.md) (mostly accurate). [visualizer-architecture.md](./visualizer-architecture.md) has **stale module paths** (`src/audio/` is canonical).
+See [audio-pipeline.md](./../../audio-pipeline.md) (mostly accurate). [visualizer-architecture.md](./../../visualizer-architecture.md) has **stale module paths** (`src/audio/` is canonical).
 
 ### Visualizer engine
 
@@ -321,7 +323,7 @@ No `worker_threads`, UtilityProcess, or job queue abstraction today.
 | `sandbox: false` | All trusted | `<webview>` guest rendering | Larger blast radius |
 | `webviewTag: true` | Main | Song page display | Guest escape if misconfigured |
 
-Reference: [security-model-and-completed-actions.md](./security-model-and-completed-actions.md)
+Reference: [security-model-and-completed-actions.md](./../../security-model-and-completed-actions.md)
 
 ---
 
@@ -627,15 +629,15 @@ ListenerMode monolith — primary concern. PlayerBar not memoized — minor.
 
 | Doc | Relationship |
 |-----|--------------|
-| [security-model-and-completed-actions.md](./security-model-and-completed-actions.md) | Accurate baseline; shell relaxations still current |
-| [guest-rendering-security.md](./guest-rendering-security.md) | Guest policy detail |
-| [audio-pipeline.md](./audio-pipeline.md) | Audio architecture — mostly accurate |
-| [visualizer-architecture.md](./visualizer-architecture.md) | **Stale paths** — update after audit review |
-| [vc-mode-architecture.md](./vc-mode-architecture.md) | VC reference |
-| [song-pages-input-control-system.md](./song-pages-input-control-system.md) | Commands / ALARE |
+| [security-model-and-completed-actions.md](../../security-model-and-completed-actions.md) | Accurate baseline; shell relaxations still current |
+| [guest-rendering-security.md](../../guest-rendering-security.md) | Guest policy detail |
+| [audio-pipeline.md](../../audio-pipeline.md) | Audio architecture — mostly accurate |
+| [visualizer-architecture.md](../../visualizer-architecture.md) | Visualizer reference |
+| [vc-mode-architecture.md](../../vc-mode-architecture.md) | VC reference |
+| [archive/specs/song-pages-input-control-system.md](../specs/song-pages-input-control-system.md) | Commands / ALARE |
 | [audit-review-comments.md](./audit-review-comments.md) | Revision 1 review + reclassification |
 | [audit-review-comments2.md](./audit-review-comments2.md) | Revision 2 freeze review + consistency corrections |
-| [kudos-system-1.md](./kudos-system-1.md) | Kudos spec |
+| [archive/specs/kudos-system-1.md](../specs/kudos-system-1.md) | Kudos spec |
 
 ---
 

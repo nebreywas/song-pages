@@ -1,6 +1,9 @@
 /**
  * Bundle the Artist compile service for packaged Electron (main process = CommonJS).
  * marked v18+ is ESM-only; tsc output cannot require() it — esbuild inlines deps into one CJS file.
+ *
+ * @see documentation/manifest-schemas.md — compile output contracts
+ * @see documentation/ffmpeg-compile-prerequisites.md — FFmpeg on PATH (not bundled)
  */
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';

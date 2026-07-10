@@ -6,8 +6,8 @@
 **Existing evidence:** Bass Boost and Lo-Fi received positive user response during live VC testing; lightweight rewind/stutter tools are also being added as simple live-performance features\
 **Related docs:**
 
-- [Audio-systems-baseline.md](./Audio-systems-baseline.md) — shared vocabulary, transport vs graph, encapsulation, routing checklist
-- [audio-pipeline.md](./audio-pipeline.md) — main / mirror / VC paths, capture, Discord/OBS constraints
+- [../../audio-systems-baseline.md](../../audio-systems-baseline.md) — shared vocabulary, transport vs graph, encapsulation, routing checklist
+- [../../audio-pipeline.md](../../audio-pipeline.md) — main / mirror / VC paths, capture, Discord/OBS constraints
 - [effects-lab/evaluation-template.md](./effects-lab/evaluation-template.md) — per-effect audition worksheet
 
 ## 1. Sprint Objective
@@ -225,7 +225,7 @@ envelope tracking, attack/body distinction, restrained transient emphasis.
 
 ## 10. Performance Effects Discovery Track
 
-**Implementation classes** (see [Audio-systems-baseline.md](./Audio-systems-baseline.md) §3):
+**Implementation classes** (see [../../audio-systems-baseline.md](../../audio-systems-baseline.md) §3):
 
 | Class | Examples in this sprint | Mechanism |
 |-------|-------------------------|-----------|

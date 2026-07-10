@@ -2,6 +2,8 @@
 /**
  * Merge all butterchurn-presets npm packs into approvedPresetCatalog.generated.ts.
  * Run: npm run generate:butterchurn-catalog
+ *
+ * @see documentation/visualizer-architecture.md — experience registry and Butterchurn
  */
 import { createRequire } from 'node:module';
 import fs from 'node:fs';

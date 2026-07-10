@@ -1,8 +1,12 @@
+> **Archived spec** (audit closed 2026-07-10). Active index: [../../README.md](../../README.md).
+
 # Song Pages SQLite & Data Layer Audit
 
-**Status:** Proposed audit specification  
+**Status:** Specification complete — audit **closed** 2026-07-10  
+**Deliverables:** [../../Song Pages SQLite and Data Layer Audit.md](../../Song%20Pages%20SQLite%20and%20Data%20Layer%20Audit.md) · [../../persistence-philosophy.md](../../persistence-philosophy.md) · [../../settings-and-persistence.md](../../settings-and-persistence.md)  
 **Purpose:** Evaluate the current SQLite database and application data layer before making structural changes  
-**Primary rule:** Do not change schema, migrations, queries, persistence behavior, or existing data until the audit is complete and findings are jointly reviewed  
+**Architectural context:** [persistence-philosophy.md](./persistence-philosophy.md) — Snapshot-First principle (relationship classes, FK scope)  
+**Primary rule (historical):** Do not change schema, migrations, queries, persistence behavior, or existing data until the audit is complete and findings are jointly reviewed — **satisfied; audit closed**  
 **Primary objective:** Improve reliability, clarity, maintainability, performance, data safety, and future extensibility without losing useful development data
 ---
 # 1. Context

@@ -1,5 +1,6 @@
 /**
  * Electron main process — window lifecycle, menu, IPC, SQLite, logging.
+ * @see documentation/README.md — project index for agents and contributors
  */
 const { app, BrowserWindow } = require('electron');
 const path = require('path');

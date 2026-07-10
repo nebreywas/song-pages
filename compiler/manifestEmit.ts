@@ -1,5 +1,6 @@
 /**
  * Generate Song Pages JSON manifests — compiler outputs, not canonical editor data.
+ * @see documentation/manifest-schemas.md
  */
 import type { StaticSiteBuildInfo } from './staticSiteBuild';
 import type { CompileArtistManifest, CompileSongManifest } from './artistPageCompileService';

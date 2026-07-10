@@ -2,6 +2,7 @@ node_modules/
 dist/
 build/
 releases/
+backups/
 electron/compiler-dist/
 *.log
 .DS_Store

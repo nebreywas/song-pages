@@ -7,7 +7,7 @@ function initLikedSongsSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS liked_songs (
       id                INTEGER PRIMARY KEY AUTOINCREMENT,
-      song_id           INTEGER UNIQUE REFERENCES songs(id) ON DELETE SET NULL,
+      song_id           INTEGER UNIQUE,
       source_artist_id  INTEGER,
       artist_name       TEXT NOT NULL,
       title             TEXT NOT NULL,

@@ -1,6 +1,6 @@
 /**
  * Song Pages system fallback values when song + host fallbacks are unavailable.
- * Asset paths are app-bundled; text values match Host-content-design.md.
+ * Asset paths are app-bundled; text values match archive/specs/Host-content-design.md.
  */
 
 import type { HostFallbackSlotId } from './constants';

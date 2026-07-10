@@ -1,6 +1,6 @@
 # Song Pages Real-Time Audio Effects Baseline
 
-**Status:** Working engineering baseline\
+**Status:** Canonical vocabulary · **Index:** [README.md](./README.md)
 **Purpose:** Establish a concise shared language and structural approach for real-time audio effects in Song Pages\
 **Scope:** Built-in Web Audio processing, AudioWorklet processing, hybrid effects, whole-song modes, and lightweight live performance effects
 

@@ -1,5 +1,8 @@
 /**
- * SQLite persistence for Listener Mode artists and songs.
+ * SQLite persistence for Listener Mode artists and songs (catalog mirror).
+ *
+ * User playlists are snapshots — not joined on read. See userPlaylists.js and
+ * documentation/persistence-philosophy.md.
  */
 const { getDatabase } = require('../database');
 
@@ -97,6 +100,9 @@ function initListenerSchema() {
 
   const { initSongCacheSchema } = require('./cache/schema');
   initSongCacheSchema(db);
+
+  const { migrateConvenienceForeignKeys } = require('./convenienceFkMigration');
+  migrateConvenienceForeignKeys(db);
 }
 
 function listArtists() {
@@ -174,6 +180,9 @@ function getSongById(id) {
 }
 
 function deleteArtist(id) {
+  // Catalog mirror cleanup is partial today (artist row only; songs may orphan).
+  // User playlist snapshots must survive — see documentation/persistence-philosophy.md.
+  // Full mirror cleanup deferred; see documentation/OPEN-QUESTIONS.md.
   const { invalidateArtistSync } = require('./cacheManager');
   invalidateArtistSync(id);
   getDatabase().prepare('DELETE FROM artists WHERE id = ?').run(id);
@@ -207,50 +216,13 @@ function upsertArtistFromCatalog(options) {
       ? catalog.songs.length
       : 0;
 
-  let artistId;
+  let previousRevision = null;
   /** @type {Map<string, number> | null} */
   let probedDurations = null;
 
   if (existing) {
     const previousArtist = getArtistById(existing.id);
-    const previousRevision = previousArtist?.build_version || null;
-
-    db.prepare(
-      `UPDATE artists SET
-         site_root_normalized = ?,
-         artist_slug = ?,
-         artist_name = ?,
-         artist_photo_url = ?,
-         artist_bio = ?,
-         artist_social_json = ?,
-         song_count = ?,
-         catalog_url = ?,
-         artist_manifest_url = ?,
-         build_version = ?,
-         site_root_manifest = ?,
-         last_fetched_at = ?
-       WHERE id = ?`
-    ).run(
-      siteRootNormalized,
-      artistSlug,
-      artistName,
-      artistPhotoUrl,
-      artistBio,
-      artistSocialJson,
-      songCount,
-      `${siteRootNormalized}/songpages-catalog.json`,
-      artistManifest ? `${siteRootNormalized}/songpages-artist.json` : null,
-      buildVersion,
-      siteRootManifest,
-      fetchedAt,
-      existing.id
-    );
-    artistId = existing.id;
-
-    if (previousRevision && buildVersion && previousRevision !== buildVersion) {
-      const { invalidateArtistSync } = require('./cacheManager');
-      invalidateArtistSync(artistId);
-    }
+    previousRevision = previousArtist?.build_version || null;
 
     // Keep runtime-probed lengths when refresh re-imports songs without catalog durations.
     probedDurations = new Map(
@@ -259,34 +231,9 @@ function upsertArtistFromCatalog(options) {
           `SELECT external_id, duration_seconds FROM songs
            WHERE artist_id = ? AND duration_seconds IS NOT NULL AND duration_seconds > 0`,
         )
-        .all(artistId)
+        .all(existing.id)
         .map((row) => [row.external_id, row.duration_seconds]),
     );
-
-    db.prepare('DELETE FROM songs WHERE artist_id = ?').run(artistId);
-  } else {
-    const result = db.prepare(
-      `INSERT INTO artists (
-         site_url, site_root_normalized, artist_slug, artist_name, artist_photo_url,
-         artist_bio, artist_social_json, song_count,
-         catalog_url, artist_manifest_url, build_version, site_root_manifest, last_fetched_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      siteUrl,
-      siteRootNormalized,
-      artistSlug,
-      artistName,
-      artistPhotoUrl,
-      artistBio,
-      artistSocialJson,
-      songCount,
-      `${siteRootNormalized}/songpages-catalog.json`,
-      artistManifest ? `${siteRootNormalized}/songpages-artist.json` : null,
-      buildVersion,
-      siteRootManifest,
-      fetchedAt
-    );
-    artistId = Number(result.lastInsertRowid);
   }
 
   const insertSong = db.prepare(
@@ -297,8 +244,69 @@ function upsertArtistFromCatalog(options) {
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
-  const insertMany = db.transaction((songs) => {
-    songs.forEach((song, index) => {
+  // Artist row + song replace must commit together — avoid empty catalog on crash mid-refresh.
+  const upsertCatalog = db.transaction(() => {
+    let artistId;
+
+    if (existing) {
+      db.prepare(
+        `UPDATE artists SET
+           site_root_normalized = ?,
+           artist_slug = ?,
+           artist_name = ?,
+           artist_photo_url = ?,
+           artist_bio = ?,
+           artist_social_json = ?,
+           song_count = ?,
+           catalog_url = ?,
+           artist_manifest_url = ?,
+           build_version = ?,
+           site_root_manifest = ?,
+           last_fetched_at = ?
+         WHERE id = ?`,
+      ).run(
+        siteRootNormalized,
+        artistSlug,
+        artistName,
+        artistPhotoUrl,
+        artistBio,
+        artistSocialJson,
+        songCount,
+        `${siteRootNormalized}/songpages-catalog.json`,
+        artistManifest ? `${siteRootNormalized}/songpages-artist.json` : null,
+        buildVersion,
+        siteRootManifest,
+        fetchedAt,
+        existing.id,
+      );
+      artistId = existing.id;
+      db.prepare('DELETE FROM songs WHERE artist_id = ?').run(artistId);
+    } else {
+      const result = db.prepare(
+        `INSERT INTO artists (
+           site_url, site_root_normalized, artist_slug, artist_name, artist_photo_url,
+           artist_bio, artist_social_json, song_count,
+           catalog_url, artist_manifest_url, build_version, site_root_manifest, last_fetched_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        siteUrl,
+        siteRootNormalized,
+        artistSlug,
+        artistName,
+        artistPhotoUrl,
+        artistBio,
+        artistSocialJson,
+        songCount,
+        `${siteRootNormalized}/songpages-catalog.json`,
+        artistManifest ? `${siteRootNormalized}/songpages-artist.json` : null,
+        buildVersion,
+        siteRootManifest,
+        fetchedAt,
+      );
+      artistId = Number(result.lastInsertRowid);
+    }
+
+    options.songs.forEach((song, index) => {
       const durationSeconds =
         song.durationSeconds ?? probedDurations?.get(song.externalId) ?? null;
 
@@ -317,12 +325,20 @@ function upsertArtistFromCatalog(options) {
         song.playbackScope,
         song.playbackQuality,
         durationSeconds,
-        index
+        index,
       );
     });
+
+    return artistId;
   });
 
-  insertMany(options.songs);
+  const artistId = upsertCatalog();
+
+  // Filesystem cache invalidation stays outside the DB transaction.
+  if (previousRevision && buildVersion && previousRevision !== buildVersion) {
+    const { invalidateArtistSync } = require('./cacheManager');
+    invalidateArtistSync(artistId);
+  }
 
   return getArtistById(artistId);
 }
