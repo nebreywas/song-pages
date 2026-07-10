@@ -1,0 +1,19 @@
+.command-kudo-prefix {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Preset name after "Kudo:" — theme token is --muted (not --text-muted). */
+.command-kudo-suffix {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.keybindings-action-button:hover .command-kudo-prefix,
+.keybindings-action-button:hover .command-kudo-suffix {
+  color: var(--accent);
+}
+
+.keybindings-action-button:hover .command-kudo-suffix {
+  opacity: 0.82;
+}

@@ -1,9 +1,27 @@
-import { COMMAND_MAPPINGS_STATE_VERSION } from './constants';
+import { COMMAND_MAPPINGS_STATE_VERSION, MODIFIER_OCAW } from './constants';
 import { normalizeUniqueBindings } from './assignments';
 import { createDefaultCommandMappingState, listFactoryConfiguredCommandIds } from './defaults';
 import { inferLegacyConfiguredCommandIds, pruneConfiguredState } from './configuredSet';
 import { migrateOrphanReservedKeysToSlots, syncReservedKudoKeysFromSlots } from './kudoReserve';
 import type { CommandBindingSlot, CommandMappingState } from './types';
+
+/** OCAW+H conflicts with macOS Hide Others — remap the host overlay to OCAW+F. */
+export function migrateToggleHostGraphicBinding(state: CommandMappingState): CommandMappingState {
+  const slot = state.commands['toggle-host'];
+  if (!slot?.direct) return state;
+  if (slot.direct.toLowerCase() !== `${MODIFIER_OCAW}+h`.toLowerCase()) return state;
+
+  return {
+    ...state,
+    commands: {
+      ...state.commands,
+      'toggle-host': {
+        ...slot,
+        direct: `${MODIFIER_OCAW}+f`,
+      },
+    },
+  };
+}
 
 function sanitizeBindingSlot(raw: unknown): CommandBindingSlot | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -80,7 +98,8 @@ export function migrateCommandMappingState(raw: unknown): CommandMappingState {
 
   const synced = syncReservedKudoKeysFromSlots(migrated);
   const withReserveSlots = migrateOrphanReservedKeysToSlots(synced);
-  return pruneConfiguredState(normalizeUniqueBindings(withReserveSlots));
+  const withHostBinding = migrateToggleHostGraphicBinding(withReserveSlots);
+  return pruneConfiguredState(normalizeUniqueBindings(withHostBinding));
 }
 
 export function sanitizeCommandMappingStateForSave(state: CommandMappingState): CommandMappingState {

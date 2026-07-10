@@ -1,89 +1,74 @@
-import { KUDOS_PARTICLE_ELEMENT_MAX, KUDOS_PARTICLE_ELEMENT_MIN } from '@shared/kudos';
-import type { ParticleElement } from '@shared/kudos';
+import { useCallback, useState } from 'react';
+import {
+  clearCompactElementSlot,
+  compactElementSlotIndex,
+  KUDOS_PARTICLE_ELEMENT_MAX,
+  setCompactElementSlot,
+  type ParticleElement,
+} from '@shared/kudos';
 
-import { KUDO_ASSET_CATALOG } from '../../kudos/catalog/kudoAssetCatalog.generated';
+import { findKudoAsset } from '../../kudos/catalog/kudoAssetCatalog.generated';
+
+import { KudoElementSlotGrid } from './KudoElementSlotGrid';
+import { KudoIconPickerPopover } from './KudoIconPickerPopover';
 
 type KudoBuiltinElementsEditorProps = {
   elements: ParticleElement[];
   onChange: (elements: ParticleElement[]) => void;
 };
 
-const DEFAULT_ICON_ID = 'heart';
-const ADD_ICON_ID = 'star';
-
 function assetIds(elements: ParticleElement[]): string[] {
-  const ids = elements
+  return elements
     .filter((el): el is { type: 'builtin-asset'; assetId: string } => el.type === 'builtin-asset')
-    .map((el) => el.assetId);
-  while (ids.length < KUDOS_PARTICLE_ELEMENT_MIN) {
-    ids.push(DEFAULT_ICON_ID);
-  }
-  return ids.slice(0, KUDOS_PARTICLE_ELEMENT_MAX);
+    .map((el) => el.assetId)
+    .slice(0, KUDOS_PARTICLE_ELEMENT_MAX);
 }
 
 function toBuiltinElements(ids: string[]): ParticleElement[] {
-  return ids.slice(0, KUDOS_PARTICLE_ELEMENT_MAX).map((assetId) => ({ type: 'builtin-asset', assetId }));
+  return ids.map((assetId) => ({ type: 'builtin-asset', assetId }));
 }
 
 /** Up to four built-in icon slots — random-mixed at spawn (spec §5.1–5.2). */
 export function KudoBuiltinElementsEditor({ elements, onChange }: KudoBuiltinElementsEditorProps) {
   const slots = assetIds(elements);
+  const [picker, setPicker] = useState<{ anchorRect: DOMRect; clickIndex: number } | null>(null);
 
-  const setSlot = (index: number, assetId: string) => {
-    const next = [...slots];
-    next[index] = assetId;
-    onChange(toBuiltinElements(next));
-  };
-
-  const addSlot = () => {
-    if (slots.length >= KUDOS_PARTICLE_ELEMENT_MAX) return;
-    onChange(toBuiltinElements([...slots, ADD_ICON_ID]));
-  };
-
-  const removeSlot = (index: number) => {
-    if (slots.length <= KUDOS_PARTICLE_ELEMENT_MIN) return;
-    onChange(toBuiltinElements(slots.filter((_, i) => i !== index)));
-  };
+  const applyPickerChoice = useCallback(
+    (clickIndex: number, assetId: string | null) => {
+      if (assetId === null) {
+        onChange(toBuiltinElements(clearCompactElementSlot(slots, clickIndex)));
+        return;
+      }
+      const next = setCompactElementSlot(slots, clickIndex, assetId, KUDOS_PARTICLE_ELEMENT_MAX);
+      onChange(toBuiltinElements(next));
+    },
+    [onChange, slots],
+  );
 
   return (
-    <div className="vc-kudos-emoji-elements">
-      <span className="vc-kudos-emoji-elements-label">
-        Icon elements ({slots.length}/{KUDOS_PARTICLE_ELEMENT_MAX})
-      </span>
-      <div className="vc-kudos-emoji-slots">
-        {slots.map((assetId, index) => (
-          <label key={index} className="vc-kudos-emoji-slot">
-            <span>Icon {index + 1}</span>
-            <select
-              className="vc-kudos-icon-select"
-              value={assetId}
-              onChange={(e) => setSlot(index, e.target.value)}
-              aria-label={`Icon ${index + 1}`}
-            >
-              {KUDO_ASSET_CATALOG.map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.label}
-                </option>
-              ))}
-            </select>
-            {slots.length > KUDOS_PARTICLE_ELEMENT_MIN ? (
-              <button
-                type="button"
-                className="vc-kudos-emoji-remove"
-                onClick={() => removeSlot(index)}
-                aria-label={`Remove icon ${index + 1}`}
-              >
-                ✕
-              </button>
-            ) : null}
-          </label>
-        ))}
-      </div>
-      {slots.length < KUDOS_PARTICLE_ELEMENT_MAX ? (
-        <button type="button" className="vc-btn vc-btn--ghost" onClick={addSlot}>
-          Add icon
-        </button>
+    <>
+      <KudoElementSlotGrid
+        label="Icons"
+        iconPreview
+        filledCount={slots.length}
+        onActivate={(clickIndex, anchor) => {
+          setPicker({ clickIndex, anchorRect: anchor.getBoundingClientRect() });
+        }}
+        renderFilled={(index) => {
+          const assetId = slots[index];
+          const asset = findKudoAsset(assetId);
+          const src = asset?.variants['single-color'] ?? asset?.variants.grays;
+          return src ? <img className="vc-kudos-element-slot-icon" src={src} alt="" draggable={false} /> : null;
+        }}
+      />
+      {picker ? (
+        <KudoIconPickerPopover
+          anchorRect={picker.anchorRect}
+          selectedAssetId={slots[compactElementSlotIndex(picker.clickIndex, slots.length)]}
+          onSelect={(assetId) => applyPickerChoice(picker.clickIndex, assetId)}
+          onClose={() => setPicker(null)}
+        />
       ) : null}
-    </div>
+    </>
   );
 }

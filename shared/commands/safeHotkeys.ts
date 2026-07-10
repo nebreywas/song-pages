@@ -11,6 +11,7 @@ export const SAFE_DIRECT_HOTKEY_POOL: SafeHotkeyDefinition[] = [
   { id: 'ocaw-d', logicalBinding: `${MODIFIER_OCAW}+d`, macBinding: 'Alt+Command+D', windowsBinding: 'Alt+Super+D', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
   { id: 'ocaw-f', logicalBinding: `${MODIFIER_OCAW}+f`, macBinding: 'Alt+Command+F', windowsBinding: 'Alt+Super+F', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
   { id: 'ocaw-g', logicalBinding: `${MODIFIER_OCAW}+g`, macBinding: 'Alt+Command+G', windowsBinding: 'Alt+Super+G', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
+  { id: 'ocaw-h', logicalBinding: `${MODIFIER_OCAW}+h`, macBinding: 'Alt+Command+H', windowsBinding: 'Alt+Super+H', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
   { id: 'ocaw-l', logicalBinding: `${MODIFIER_OCAW}+l`, macBinding: 'Alt+Command+L', windowsBinding: 'Alt+Super+L', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
   { id: 'ocaw-n', logicalBinding: `${MODIFIER_OCAW}+n`, macBinding: 'Alt+Command+N', windowsBinding: 'Alt+Super+N', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
   { id: 'ocaw-r', logicalBinding: `${MODIFIER_OCAW}+r`, macBinding: 'Alt+Command+R', windowsBinding: 'Alt+Super+R', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
@@ -18,6 +19,10 @@ export const SAFE_DIRECT_HOTKEY_POOL: SafeHotkeyDefinition[] = [
   { id: 'ocaw-u', logicalBinding: `${MODIFIER_OCAW}+u`, macBinding: 'Alt+Command+U', windowsBinding: 'Alt+Super+U', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
   { id: 'ocaw-eq', logicalBinding: `${MODIFIER_OCAW}+=`, macBinding: 'Alt+Command+=', windowsBinding: 'Alt+Super+=', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
   { id: 'ocaw-minus', logicalBinding: `${MODIFIER_OCAW}+-`, macBinding: 'Alt+Command+-', windowsBinding: 'Alt+Super+-', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
+  { id: 'ocaw-lbracket', logicalBinding: `${MODIFIER_OCAW}+[`, macBinding: 'Alt+Command+[', windowsBinding: 'Alt+Super+[', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
+  { id: 'ocaw-rbracket', logicalBinding: `${MODIFIER_OCAW}+]`, macBinding: 'Alt+Command+]', windowsBinding: 'Alt+Super+]', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
+  { id: 'ocaw-semicolon', logicalBinding: `${MODIFIER_OCAW}+;`, macBinding: 'Alt+Command+;', windowsBinding: 'Alt+Super+;', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
+  { id: 'ocaw-quote', logicalBinding: `${MODIFIER_OCAW}+'`, macBinding: "Alt+Command+'", windowsBinding: "Alt+Super+'", auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
   { id: 'ocaw-0', logicalBinding: `${MODIFIER_OCAW}+0`, macBinding: 'Alt+Command+0', windowsBinding: 'Alt+Super+0', auditVersion: SAFE_HOTKEY_AUDIT_VERSION, enabled: true },
 
   // CS extras for future player/VC commands

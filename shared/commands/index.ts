@@ -28,6 +28,7 @@ export {
   getBindingSlotForCommand,
   inferLegacyConfiguredCommandIds,
   listAvailableKeysForSource,
+  listBindingOptionsForCommand,
   listConfiguredActionRows,
   listUnassignedCatalogActions,
   pruneConfiguredState,

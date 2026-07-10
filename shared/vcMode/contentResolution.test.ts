@@ -295,10 +295,10 @@ test('resolveVcCellContent resolves upcoming covers when playlist has entries', 
     ],
   });
 
-  const upcoming = resolveVcCellContent('upcoming-covers', null, ctx, { upcomingLayout: 'gallery' });
+  const upcoming = resolveVcCellContent('upcoming-covers', null, ctx, { upcomingLayout: 'multi-row' });
   assert.equal(upcoming.kind, 'upcoming-covers');
   if (upcoming.kind === 'upcoming-covers') {
     assert.equal(upcoming.songs.length, 1);
-    assert.equal(upcoming.presentation.layout, 'gallery');
+    assert.equal(upcoming.presentation.layout, 'multi-row');
   }
 });

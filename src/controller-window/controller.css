@@ -41,16 +41,11 @@
   color: var(--text-muted);
 }
 
-.controller-invoke-feedback {
-  margin: 0.45rem 0 0;
-  font-size: 0.82rem;
-  color: #8fd19e;
-}
-
 .controller-gate-overlay {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .controller-gate-hint {
@@ -59,10 +54,25 @@
   color: var(--text-muted);
 }
 
-.controller-gate-message {
-  margin: 0;
-  font-size: 0.82rem;
-  color: #ffb86b;
+.controller-kudos {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.controller-kudo-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.controller-kudo-btn {
+  flex: 1 1 calc(50% - 0.5rem);
+  min-width: 8rem;
 }
 
 .controller-empty {
@@ -71,13 +81,65 @@
   color: var(--text-muted);
 }
 
-.controller-kudo-grid {
+.controller-dynamic-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(120, 170, 255, 0.35));
+  background: rgba(120, 170, 255, 0.06);
+  min-height: 2.5rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-.controller-kudo-btn {
-  flex: 1 1 calc(50% - 0.5rem);
-  min-width: 8rem;
+.controller-dynamic-footer-empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.controller-dynamic-message {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.controller-dynamic-message-invoke {
+  color: #8fd19e;
+}
+
+.controller-dynamic-message-gate {
+  color: #ffb86b;
+}
+
+.controller-dynamic-countdown {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #ff6b6b;
+}
+
+.controller-play-next {
+  flex-shrink: 0;
+}
+
+.controller-play-next-btn {
+  width: 100%;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.controller-special-pause-countdown {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ff4444;
+  text-align: center;
 }

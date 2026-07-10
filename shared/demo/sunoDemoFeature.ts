@@ -49,6 +49,16 @@ export function sunoDemoManifestUrl(songId: number): string {
   return `${SUNO_DEMO_MANIFEST_PREFIX}${songId}`;
 }
 
+const SUNO_CLIP_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Canonical Suno share URL — https://suno.com/song/{clip-uuid} */
+export function sunoShareUrlFromClipUuid(clipUuid: string | null | undefined): string | null {
+  const trimmed = String(clipUuid ?? '').trim();
+  if (!SUNO_CLIP_UUID_RE.test(trimmed)) return null;
+  return `https://suno.com/song/${trimmed.toLowerCase()}`;
+}
+
 /** Virtual sidebar row for one Suno playlist. */
 export function buildSunoPlaylistArtistRow(playlist: SunoDemoPlaylistRow) {
   return {

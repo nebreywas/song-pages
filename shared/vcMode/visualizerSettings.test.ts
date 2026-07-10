@@ -33,6 +33,7 @@ test('rotation trigger helpers match rule semantics', () => {
   assert.equal(shouldRotateVisualizerOnSongChange('5m'), false);
   assert.equal(shouldRotateVisualizerOnClick('click'), true);
   assert.equal(shouldRotateVisualizerOnClick('never'), false);
+  assert.equal(shouldRotateVisualizerOnClick('never', true), true);
 });
 
 test('pickNextVisualizerId prefers a different id when possible', () => {

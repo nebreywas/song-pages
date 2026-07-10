@@ -97,7 +97,7 @@ export function useAutoSaveVcConfig({ enabled, config }: UseAutoSaveVcConfigOpti
   };
 }
 
-export function vcConfigSaveStatusLabel(status: VcConfigSaveStatus): string {
+export function vcConfigSaveStatusLabel(status: VcConfigSaveStatus): string | null {
   switch (status) {
     case 'pending':
       return 'Unsaved changes…';
@@ -108,6 +108,6 @@ export function vcConfigSaveStatusLabel(status: VcConfigSaveStatus): string {
     case 'error':
       return 'Could not save — try again';
     default:
-      return 'Changes save automatically';
+      return null;
   }
 }

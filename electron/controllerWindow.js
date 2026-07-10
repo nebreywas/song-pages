@@ -108,9 +108,15 @@ function getControllerWindow() {
   return controllerWindow && !controllerWindow.isDestroyed() ? controllerWindow : null;
 }
 
+function sendControllerVcState(payload) {
+  if (!controllerWindow || controllerWindow.isDestroyed()) return;
+  controllerWindow.webContents.send('vc:state', payload);
+}
+
 module.exports = {
   openControllerWindow,
   closeControllerWindow,
   isControllerWindowOpen,
   getControllerWindow,
+  sendControllerVcState,
 };

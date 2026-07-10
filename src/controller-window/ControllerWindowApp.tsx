@@ -7,6 +7,7 @@ import {
   type CommandRuntimeContext,
 } from '@shared/commands';
 import { KUDOS_SETTINGS_KEY, migrateKudosState, type KudoPreset } from '@shared/kudos';
+import type { VcStatePayload } from '@shared/vcModeTypes';
 
 import { getApp } from '../lib/bridge';
 import { GateOverlayList } from '../commands/GateOverlayList';
@@ -32,6 +33,7 @@ export function ControllerWindowApp() {
   const [gateMessage, setGateMessage] = useState<string | null>(null);
   const [invokeFeedback, setInvokeFeedback] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [vcState, setVcState] = useState<VcStatePayload | null>(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
 
   const showInvokeFeedback = (message: string) => {
@@ -69,12 +71,14 @@ export function ControllerWindowApp() {
     void app?.commands?.getRuntimeContext?.().then((result) => {
       if (result?.ok && result.data) setRuntimeContext(result.data);
     });
+    const offVcState = app?.vc?.onState?.((payload) => setVcState(payload));
 
     return () => {
       offMapping?.();
       offGate?.();
       offGateEvent?.();
       offRuntime?.();
+      offVcState?.();
       if (feedbackTimeoutRef.current != null) window.clearTimeout(feedbackTimeoutRef.current);
     };
   }, []);
@@ -144,24 +148,44 @@ export function ControllerWindowApp() {
     });
   };
 
+  const playNextSong = () => {
+    void getApp()?.commands?.dispatch?.({
+      commandId: 'play-next-song',
+      source: 'controller-ui',
+      binding: 'controller-button',
+      timestamp: Date.now(),
+    });
+  };
+
+  const specialPause = vcState?.specialPlayPause;
+  const showSpecialPauseCountdown =
+    specialPause?.active === true &&
+    vcState?.config.specialPlayStyle.showCountdownOnController === true;
+
   return (
     <div className={`controller-shell${gateState.open ? ' is-gate-open' : ''}`}>
       <header className="controller-header">
         <h1>VC Controller</h1>
         <p className="controller-lead">Host controls — not shown on the broadcast surface.</p>
-        {invokeFeedback ? <p className="controller-invoke-feedback">{invokeFeedback}</p> : null}
       </header>
 
       {gateState.open ? (
         <section className="controller-gate-overlay" aria-live="polite">
           <p className="controller-gate-hint">Press a mapped key. Unavailable commands are grayed out.</p>
-          {gateMessage ? <p className="controller-gate-message">{gateMessage}</p> : null}
           <GateOverlayList
             rows={overlayRows}
             showAbortRow
             remainingSeconds={remainingSeconds}
             variant="live"
           />
+        </section>
+      ) : null}
+
+      {specialPause?.active ? (
+        <section className="controller-play-next">
+          <button type="button" className="btn controller-play-next-btn" onClick={playNextSong}>
+            Play Next Song
+          </button>
         </section>
       ) : null}
 
@@ -176,6 +200,28 @@ export function ControllerWindowApp() {
           {kudoPresets.length === 0 ? <p className="controller-empty">No Kudo presets saved.</p> : null}
         </div>
       </section>
+
+      <footer className="controller-dynamic-footer" aria-live="polite">
+        {showSpecialPauseCountdown ? (
+          <p className="controller-special-pause-countdown">
+            {specialPause?.secondsRemaining != null
+              ? `${specialPause.secondsRemaining}s`
+              : 'Paused — ready when you are'}
+          </p>
+        ) : null}
+        {gateState.open && remainingSeconds != null ? (
+          <p className="controller-dynamic-countdown">Gate closes in {remainingSeconds}s</p>
+        ) : null}
+        {gateMessage ? (
+          <p className="controller-dynamic-message controller-dynamic-message-gate">{gateMessage}</p>
+        ) : null}
+        {invokeFeedback ? (
+          <p className="controller-dynamic-message controller-dynamic-message-invoke">{invokeFeedback}</p>
+        ) : null}
+        {!gateMessage && !invokeFeedback && !showSpecialPauseCountdown && (gateState.open ? remainingSeconds == null : true) ? (
+          <p className="controller-dynamic-footer-empty">Status messages appear here.</p>
+        ) : null}
+      </footer>
     </div>
   );
 }

@@ -59,10 +59,18 @@ type RegionContentPopoverProps = {
   onUpdateFloatField?: (field: 'x' | 'y' | 'width' | 'height', pct: number) => void;
   onUpdateFloat?: (patch: Partial<VcFloatGeometry>) => void;
   onClose: () => void;
-  visualizerConfig: Pick<VcModeConfig, 'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence'>;
+  visualizerConfig: Pick<
+    VcModeConfig,
+    'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence' | 'visualizerAlsoClickToChange'
+  >;
   windowVisualizers: VisualizerPluginOption[];
   onVisualizerConfigChange: (
-    patch: Partial<Pick<VcModeConfig, 'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence'>>,
+    patch: Partial<
+      Pick<
+        VcModeConfig,
+        'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence' | 'visualizerAlsoClickToChange'
+      >
+    >,
   ) => void;
 };
 
@@ -632,6 +640,7 @@ export function RegionContentPopover({
                   visualizerId={visualizerConfig.visualizerId}
                   visualizerChangeRule={visualizerConfig.visualizerChangeRule}
                   visualizerSequence={visualizerConfig.visualizerSequence}
+                  visualizerAlsoClickToChange={visualizerConfig.visualizerAlsoClickToChange === true}
                   visualizers={windowVisualizers}
                   onChange={onVisualizerConfigChange}
                 />
@@ -661,6 +670,7 @@ export function RegionContentPopover({
                   visualizerId={visualizerConfig.visualizerId}
                   visualizerChangeRule={visualizerConfig.visualizerChangeRule}
                   visualizerSequence={visualizerConfig.visualizerSequence}
+                  visualizerAlsoClickToChange={visualizerConfig.visualizerAlsoClickToChange === true}
                   visualizers={windowVisualizers}
                   onChange={onVisualizerConfigChange}
                 />

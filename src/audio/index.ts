@@ -39,6 +39,16 @@ export { useAudioAnalyser } from './hooks/useAudioAnalyser';
 export { useAnalyserPlaybackMirror } from './hooks/useAnalyserPlaybackMirror';
 export { usePlaybackEffects } from './hooks/usePlaybackEffects';
 
+export {
+  EffectsLabPanel,
+  useEffectsLabHotkey,
+  effectsLabStore,
+  LAB_EFFECT_DEFINITIONS,
+  DEFAULT_EFFECTS_LAB_STATE,
+  isEffectsLabAudible,
+} from './effectsLab';
+export type { EffectsLabState, LabEffectId } from './effectsLab';
+
 export { audioDebug, emptyAudioDebugSnapshot } from './debug/audioDebug';
 export { AudioDebugPanel, useAudioDebugHotkey } from './debug/AudioDebugPanel';
 export { useAudioDebugReporter } from './debug/useAudioDebugReporter';

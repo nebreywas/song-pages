@@ -1,17 +1,28 @@
 import { useMemo } from 'react';
 
+import type { HostContentCatalog } from '@shared/hostContent';
 import type { VcOverlayId, VcStatePayload } from '@shared/vcModeTypes';
 
 import { formatTime } from '../listener/formatTime';
+import { useHostGraphicPopupUrl } from '../vc-mode/useHostGraphicPopupUrl';
+import { VcUpcomingOverlay } from './VcUpcomingOverlay';
 
 type VcOverlaysProps = {
   state: VcStatePayload;
   activeOverlay: VcOverlayId | null;
+  hostCatalog: HostContentCatalog;
 };
 
-export function VcOverlays({ state, activeOverlay }: VcOverlaysProps) {
+export function VcOverlays({ state, activeOverlay, hostCatalog }: VcOverlaysProps) {
   const song = state.currentSong;
   const playback = state.playback;
+  const hostPopupId = state.config.hostGraphicPopupId;
+  const catalogHostGraphicUrl = useHostGraphicPopupUrl(
+    hostCatalog,
+    hostPopupId,
+    state.hostGraphicUrl,
+  );
+  const hostGraphicUrl = catalogHostGraphicUrl ?? state.hostGraphicUrl;
 
   const elapsedRemaining = useMemo(() => {
     const elapsed = formatTime(playback.currentTime);
@@ -25,46 +36,57 @@ export function VcOverlays({ state, activeOverlay }: VcOverlaysProps) {
         <div className="vc-overlay vc-overlay-remaining">{elapsedRemaining}</div>
       ) : null}
 
-      {activeOverlay === 'next' && state.nextSong ? (
+      {activeOverlay === 'next' ? (
         <div className="vc-overlay vc-overlay-next">
-          The next song is <strong>{state.nextSong.title}</strong> by {state.nextSong.artist}
+          {state.nextSong ? (
+            <>
+              The next song is <strong>{state.nextSong.title}</strong> by {state.nextSong.artist}
+            </>
+          ) : (
+            <span>No next song in queue.</span>
+          )}
         </div>
       ) : null}
 
-      {activeOverlay === 'cover' && song?.coverUrl ? (
+      {activeOverlay === 'cover' ? (
         <div className="vc-overlay vc-overlay-center-box">
-          <img src={song.coverUrl} alt="" className="vc-overlay-cover-img" />
+          {song?.coverUrl ? (
+            <img src={song.coverUrl} alt="" className="vc-overlay-cover-img" />
+          ) : (
+            <p className="vc-overlay-empty-message">No cover art for the current song.</p>
+          )}
         </div>
       ) : null}
 
-      {activeOverlay === 'host' && state.hostGraphicUrl ? (
+      {activeOverlay === 'host' ? (
         <div className="vc-overlay vc-overlay-center-box vc-overlay-host-box">
-          <img src={state.hostGraphicUrl} alt="VC host" className="vc-overlay-host-img" />
+          {!hostPopupId ? (
+            <p className="vc-overlay-empty-message">No host graphic selected in VC Settings.</p>
+          ) : hostGraphicUrl ? (
+            <img src={hostGraphicUrl} alt="VC host" className="vc-overlay-host-img" />
+          ) : (
+            <p className="vc-overlay-host-status">Loading host graphic…</p>
+          )}
         </div>
       ) : null}
 
-      {activeOverlay === 'songInfo' && song ? (
+      {activeOverlay === 'songInfo' ? (
         <div className="vc-overlay vc-overlay-center-box vc-overlay-info-box">
-          <h2>{song.title}</h2>
-          {song.year ? <p className="vc-overlay-year">{song.year}</p> : null}
-          {song.caption ? <p className="vc-overlay-caption">{song.caption}</p> : null}
-          {song.about ? <p className="vc-overlay-about">{song.about}</p> : null}
+          {song ? (
+            <>
+              <h2>{song.title}</h2>
+              {song.year ? <p className="vc-overlay-year">{song.year}</p> : null}
+              {song.caption ? <p className="vc-overlay-caption">{song.caption}</p> : null}
+              {song.about ? <p className="vc-overlay-about">{song.about}</p> : null}
+            </>
+          ) : (
+            <p className="vc-overlay-empty-message">No song is loaded.</p>
+          )}
         </div>
       ) : null}
 
-      {activeOverlay === 'upcoming' && state.upcoming.length ? (
-        <div className="vc-overlay vc-overlay-center-box vc-overlay-upcoming-box">
-          <h3>Up next</h3>
-          <ul>
-            {state.upcoming.map((entry) => (
-              <li key={entry.id}>
-                <span>{entry.title}</span>
-                <span>{entry.artist}</span>
-                <span>{entry.durationSeconds ? formatTime(entry.durationSeconds) : '—'}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {activeOverlay === 'upcoming' ? (
+        <VcUpcomingOverlay songs={state.upcoming} settings={state.config.upcomingOverlay} />
       ) : null}
     </>
   );

@@ -12,6 +12,7 @@ export type CommandRuntimeContext = {
   hasCoverArt?: boolean;
   hasHostGraphic?: boolean;
   hasPlaybackTiming?: boolean;
+  specialPlayPauseActive?: boolean;
 };
 
 export const DEFAULT_COMMAND_RUNTIME_CONTEXT: CommandRuntimeContext = {
@@ -33,8 +34,9 @@ export function deriveCommandRuntimeContextFromVcState(
     hasUpcomingSongs: payload.upcoming.length > 0,
     hasCurrentSong: payload.currentSong != null,
     hasCoverArt: Boolean(payload.currentSong?.coverUrl),
-    hasHostGraphic: Boolean(payload.hostGraphicUrl),
+    hasHostGraphic: Boolean(payload.hostGraphicUrl) || Boolean(payload.config.hostGraphicPopupId),
     hasPlaybackTiming: payload.playback.duration > 0,
+    specialPlayPauseActive: payload.specialPlayPause?.active === true,
   };
 }
 
@@ -60,5 +62,6 @@ function passesContextualAvailability(
   if (availability.requiresCoverArt && context.hasCoverArt === false) return false;
   if (availability.requiresHostGraphic && context.hasHostGraphic === false) return false;
   if (availability.requiresPlaybackTiming && context.hasPlaybackTiming === false) return false;
+  if (availability.requiresSpecialPlayPause && context.specialPlayPauseActive === false) return false;
   return true;
 }

@@ -52,6 +52,17 @@ function installDevMenu() {
           },
         },
         {
+          label: 'Toggle Effects Lab Panel',
+          accelerator: process.platform === 'darwin' ? 'Cmd+Ctrl+Alt+E' : 'Ctrl+Alt+E',
+          click: (_item, focusedWindow) => {
+            if (!focusedWindow) return;
+            focusedWindow.webContents.executeJavaScript(`
+              localStorage.setItem('songpages:effects-lab-panel', '1');
+              window.dispatchEvent(new Event('songpages-effects-lab-changed'));
+            `);
+          },
+        },
+        {
           label: 'Open User Data Folder',
           click: () => {
             shell.openPath(app.getPath('userData'));

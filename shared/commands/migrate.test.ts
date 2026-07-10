@@ -10,10 +10,26 @@ import { createDefaultCommandMappingState } from './defaults';
 import { migrateCommandMappingState, sanitizeCommandMappingStateForSave } from './migrate';
 import { resolveBindingToCommand } from './resolve';
 
+test('migrateCommandMappingState remaps toggle-host from OCAW+H to OCAW+F', () => {
+  const state = migrateCommandMappingState({
+    version: 2,
+    configuredCommandIds: ['toggle-host'],
+    configuredKudoPresetIds: [],
+    commands: {
+      'toggle-host': { direct: 'OCAW+h' },
+    },
+    reservedKudoKeys: [],
+    kudoPresetByReservedKey: {},
+    kudoPresetBindings: {},
+  });
+  assert.equal(state.commands['toggle-host']?.direct, 'OCAW+f');
+});
+
 test('migrateCommandMappingState seeds defaults when empty', () => {
   const state = migrateCommandMappingState(null);
   assert.equal(state.commands['toggle-vc-command-gate']?.direct, 'OCAW+g');
   assert.equal(state.commands['toggle-layout-mode']?.direct, 'OCAW+l');
+  assert.equal(state.commands['toggle-host']?.direct, 'OCAW+f');
 });
 
 test('resolveBindingToCommand finds direct legacy mapping', () => {

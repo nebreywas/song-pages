@@ -5,21 +5,23 @@ import {
   canRemoveCommandFromConfig,
   COMMAND_GATE_TIMEOUT_MS_DEFAULT,
   commandLabelForConflict,
-  EXTENDED_FUNCTION_KEYS,
-  GATED_KEY_POOL,
   getBindingSlotForCommand,
   isBindingLayerLocked,
+  listBindingOptionsForCommand,
   listCatalogCommands,
   listConfiguredActionRows,
-  listEnabledSafeDirectBindings,
   listOverlayMappings,
   listUnassignedCatalogActions,
+  type CommandBindingSlot,
+  type CommandInputSource,
+  type CommandMappingState,
 } from '@shared/commands';
 import { KUDOS_SETTINGS_KEY, migrateKudosState } from '@shared/kudos';
 
 import { getApp } from '../lib/bridge';
+import { HelpTooltip } from '../components/HelpTooltip';
 import { ActionPickerPopover } from './ActionPickerPopover';
-import { AddKeybindingDialog } from './AddKeybindingDialog';
+import { CommandDisplayLabel } from './CommandDisplayLabel';
 import { GateOverlayList } from './GateOverlayList';
 import { useCommandMappings } from './useCommandMappings';
 import './actionPicker.css';
@@ -33,6 +35,59 @@ const REGISTRATION_FAILURE_LABELS: Record<string, string> = {
   'duplicate-accelerator': 'Duplicate shortcut in your mapping set',
 };
 
+type BindingLayer = Exclude<CommandInputSource, 'controller-ui'>;
+
+function TrashIcon() {
+  return (
+    <svg className="keybindings-remove-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 7h18" />
+      <path d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7" />
+      <path d="M6 7h12l-1 12.5a1 1 0 0 1-1 .9H8a1 1 0 0 1-1-.9L6 7Z" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </svg>
+  );
+}
+
+type BindingLayerSelectProps = {
+  commandId: string;
+  layer: BindingLayer;
+  value: string | undefined;
+  disabled: boolean;
+  state: CommandMappingState;
+  formatLabel?: (binding: string) => string;
+  onChange: (patch: Partial<CommandBindingSlot>) => void;
+};
+
+/** One keybinding column — only unassigned keys plus this row's current binding. */
+function BindingLayerSelect({
+  commandId,
+  layer,
+  value,
+  disabled,
+  state,
+  formatLabel = (binding) => binding,
+  onChange,
+}: BindingLayerSelectProps) {
+  const options = listBindingOptionsForCommand(state, commandId, layer);
+  const field = layer === 'extended-function' ? 'extendedFunction' : layer;
+
+  return (
+    <select
+      value={value ?? ''}
+      disabled={disabled}
+      onChange={(e) => onChange({ [field]: e.target.value || undefined })}
+    >
+      <option value="">—</option>
+      {options.map((binding) => (
+        <option key={binding} value={binding}>
+          {formatLabel(binding)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /** Reusable Key Bindings & Controls editor — app settings + VC designer. */
 export function KeyBindingsPanel() {
   const {
@@ -45,12 +100,11 @@ export function KeyBindingsPanel() {
     addConfiguredCommand,
     removeConfiguredCommand,
     reassignCommand,
-    assignKeyBinding,
   } = useCommandMappings();
 
   const [kudoPresets, setKudoPresets] = useState<Array<{ id: string; name: string }>>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [gatePreviewOpen, setGatePreviewOpen] = useState(false);
   const [reassignCommandId, setReassignCommandId] = useState<string | null>(null);
   const [sidebarPreviewId, setSidebarPreviewId] = useState<string | null>(null);
 
@@ -77,7 +131,6 @@ export function KeyBindingsPanel() {
     () => listOverlayMappings(state, kudoPresets, { vcModeActive: true }),
     [state, kudoPresets],
   );
-  const safeDirectOptions = useMemo(() => listEnabledSafeDirectBindings(), []);
   const sidebarPreview = catalog.find((row) => row.id === sidebarPreviewId) ?? null;
 
   const persistBinding = async (
@@ -108,18 +161,30 @@ export function KeyBindingsPanel() {
   return (
     <div className="keybindings-panel">
       <div className="keybindings-toolbar">
-        <p className="keybindings-lead">
-          Configure which VC actions appear in your setup and which keys trigger them. Remove actions you
-          do not need, add Kudos from the catalog, or bind unassigned keys from inventory. F13–F24 work
-          with Stream Deck and macro tools without the gate.
-        </p>
         <div className="keybindings-toolbar-actions">
-          <button type="button" className="btn" onClick={() => setAddDialogOpen(true)}>
-            Add keybinding
+          <button type="button" className="btn" onClick={() => setGatePreviewOpen(true)}>
+            Gate overlay reference…
           </button>
           <button type="button" className="btn keybindings-restore" onClick={handleRestoreDefaults}>
             Restore factory layout
           </button>
+          <div className="keybindings-gate-timeout">
+            <label htmlFor="keybindings-gate-timeout">Gate auto-close</label>
+            <select
+              id="keybindings-gate-timeout"
+              value={state.gateTimeoutMs}
+              onChange={(e) => void updateGateTimeoutMs(Number(e.target.value))}
+            >
+              {GATE_TIMEOUT_OPTIONS_MS.map((ms) => (
+                <option key={ms} value={ms}>
+                  {ms / 1000}s
+                </option>
+              ))}
+            </select>
+            <HelpTooltip ariaLabel="About gate auto-close">
+              Default {COMMAND_GATE_TIMEOUT_MS_DEFAULT / 1000}s — idle timeout while the gate is open.
+            </HelpTooltip>
+          </div>
           {saveStatus === 'saving' ? <span className="keybindings-save-status">Saving…</span> : null}
           {saveStatus === 'saved' ? (
             <span className="keybindings-save-status keybindings-save-status-ok">Saved</span>
@@ -148,23 +213,9 @@ export function KeyBindingsPanel() {
         </div>
       ) : null}
 
-      <div className="keybindings-gate-timeout">
-        <label htmlFor="keybindings-gate-timeout">Gate auto-close</label>
-        <select
-          id="keybindings-gate-timeout"
-          value={state.gateTimeoutMs}
-          onChange={(e) => void updateGateTimeoutMs(Number(e.target.value))}
-        >
-          {GATE_TIMEOUT_OPTIONS_MS.map((ms) => (
-            <option key={ms} value={ms}>
-              {ms / 1000}s
-            </option>
-          ))}
-        </select>
-        <span className="keybindings-muted">
-          Default {COMMAND_GATE_TIMEOUT_MS_DEFAULT / 1000}s — idle timeout while the gate is open.
-        </span>
-      </div>
+      <p className="keybindings-lead">
+        Configure VC action key-bindings. F13-F24 work with Stream Deck and macro tools.
+      </p>
 
       <div className="keybindings-layout">
         <aside className="keybindings-sidebar panel">
@@ -181,8 +232,9 @@ export function KeyBindingsPanel() {
                   onClick={() => setSidebarPreviewId(action.id)}
                   onDoubleClick={() => void addConfiguredCommand(action.id)}
                 >
-                  <span>{action.label}</span>
-                  <span className="keybindings-sidebar-meta">{action.category}</span>
+                  <span>
+                    <CommandDisplayLabel label={action.label} />
+                  </span>
                 </button>
               </li>
             ))}
@@ -192,27 +244,21 @@ export function KeyBindingsPanel() {
           </ul>
           {sidebarPreview ? (
             <div className="keybindings-sidebar-about">
-              <strong>{sidebarPreview.label}</strong>
+              <strong>
+                <CommandDisplayLabel label={sidebarPreview.label} />
+              </strong>
               <p>{sidebarPreview.description ?? 'No description yet.'}</p>
             </div>
           ) : null}
         </aside>
 
         <div className="keybindings-main">
-          <div className="gate-overlay-preview-wrap">
-            <p className="gate-overlay-preview-hint">
-              Gate overlay preview (assumes VC Mode active). Live contextual graying appears on the VC
-              Controller while hosting.
-            </p>
-            <GateOverlayList rows={overlayPreviewRows} variant="preview" />
-          </div>
-
           <div className="keybindings-table-wrap">
             <table className="keybindings-table">
               <thead>
                 <tr>
                   <th>Action</th>
-                  <th>Direct (Safe)</th>
+                  <th>Direct</th>
                   <th>Gated</th>
                   <th>F13–F24</th>
                   <th aria-label="Remove" />
@@ -236,7 +282,7 @@ export function KeyBindingsPanel() {
                         >
                           <span className="keybindings-command-label">
                             {row.requiredInConfig ? '🔒 ' : ''}
-                            {row.label}
+                            <CommandDisplayLabel label={row.label} />
                           </span>
                         </button>
                         {row.isReserveKudoPlaceholder ? (
@@ -246,71 +292,47 @@ export function KeyBindingsPanel() {
                               : 'Preset TBD — link in Kudos designer'}
                           </span>
                         ) : null}
-                        <span className="keybindings-command-id">{row.commandId}</span>
                       </td>
                       <td>
-                        <select
-                          value={slot.direct ?? ''}
+                        <BindingLayerSelect
+                          commandId={row.commandId}
+                          layer="direct"
+                          value={slot.direct}
                           disabled={isBindingLayerLocked(row.commandId, 'direct', kudoPresets)}
-                          onChange={(e) =>
-                            void persistBinding(row.commandId, {
-                              direct: e.target.value || undefined,
-                            })
-                          }
-                        >
-                          <option value="">—</option>
-                          {safeDirectOptions.map((binding) => (
-                            <option key={binding} value={binding}>
-                              {binding}
-                            </option>
-                          ))}
-                        </select>
+                          state={state}
+                          onChange={(patch) => void persistBinding(row.commandId, patch)}
+                        />
                       </td>
                       <td>
-                        <select
-                          value={slot.gated ?? ''}
+                        <BindingLayerSelect
+                          commandId={row.commandId}
+                          layer="gated"
+                          value={slot.gated}
                           disabled={isBindingLayerLocked(row.commandId, 'gated', kudoPresets)}
-                          onChange={(e) =>
-                            void persistBinding(row.commandId, {
-                              gated: e.target.value || undefined,
-                            })
-                          }
-                        >
-                          <option value="">—</option>
-                          {GATED_KEY_POOL.map((key) => (
-                            <option key={key} value={key}>
-                              {key.toUpperCase()}
-                            </option>
-                          ))}
-                        </select>
+                          state={state}
+                          formatLabel={(key) => key.toUpperCase()}
+                          onChange={(patch) => void persistBinding(row.commandId, patch)}
+                        />
                       </td>
                       <td>
-                        <select
-                          value={slot.extendedFunction ?? ''}
+                        <BindingLayerSelect
+                          commandId={row.commandId}
+                          layer="extended-function"
+                          value={slot.extendedFunction}
                           disabled={isBindingLayerLocked(row.commandId, 'extendedFunction', kudoPresets)}
-                          onChange={(e) =>
-                            void persistBinding(row.commandId, {
-                              extendedFunction: e.target.value || undefined,
-                            })
-                          }
-                        >
-                          <option value="">—</option>
-                          {EXTENDED_FUNCTION_KEYS.map((key) => (
-                            <option key={key} value={key}>
-                              {key}
-                            </option>
-                          ))}
-                        </select>
+                          state={state}
+                          onChange={(patch) => void persistBinding(row.commandId, patch)}
+                        />
                       </td>
                       <td>
                         {canRemove ? (
                           <button
                             type="button"
-                            className="btn keybindings-remove"
+                            className="keybindings-remove"
                             aria-label={`Remove ${row.label}`}
                             onClick={() => void removeConfiguredCommand(row.commandId, kudoPresets)}
                           >
-                            Remove
+                            <TrashIcon />
                           </button>
                         ) : (
                           <span className="keybindings-muted" title="Required action">
@@ -324,7 +346,7 @@ export function KeyBindingsPanel() {
                 {configuredRows.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="keybindings-muted">
-                      No actions configured. Add one from the sidebar or bind a key.
+                      No actions configured. Add one from the sidebar.
                     </td>
                   </tr>
                 ) : null}
@@ -334,15 +356,40 @@ export function KeyBindingsPanel() {
         </div>
       </div>
 
-      <AddKeybindingDialog
-        open={addDialogOpen}
-        state={state}
-        kudoPresets={kudoPresets}
-        onClose={() => setAddDialogOpen(false)}
-        onAssign={(layer, binding, commandId) => {
-          void assignKeyBinding(layer, binding, commandId, kudoPresets);
-        }}
-      />
+      {gatePreviewOpen ? (
+        <div
+          className="keybindings-dialog-backdrop"
+          role="presentation"
+          onClick={() => setGatePreviewOpen(false)}
+        >
+          <div
+            className="keybindings-dialog panel keybindings-gate-preview-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="keybindings-gate-preview-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="keybindings-dialog-header">
+              <div>
+                <h3 id="keybindings-gate-preview-title">Gate overlay reference</h3>
+                <p className="keybindings-gate-preview-lead">
+                  Static map of gated keys (assumes VC Mode active). Live availability appears on the VC
+                  Controller while hosting.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn keybindings-dialog-close"
+                onClick={() => setGatePreviewOpen(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </header>
+            <GateOverlayList rows={overlayPreviewRows} variant="preview" />
+          </div>
+        </div>
+      ) : null}
 
       {reassignCommandId ? (
         <div className="keybindings-dialog-backdrop" role="presentation" onClick={() => setReassignCommandId(null)}>

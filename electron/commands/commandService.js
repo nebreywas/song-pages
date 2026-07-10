@@ -45,6 +45,19 @@ let gateOpenedAt = 0;
 /** @see shared/commands/constants.ts COMMAND_GATE_INPUT_GRACE_MS */
 const GATE_INPUT_GRACE_MS = 400;
 
+/** Playback commands routed to the main listener window (not VC hotkeys). */
+const MAIN_PLAYBACK_BY_COMMAND = {
+  'seek-back-500': { type: 'seekRelative', deltaSeconds: -0.5 },
+  'seek-back-1s': { type: 'seekRelative', deltaSeconds: -1 },
+  'seek-back-2s': { type: 'seekRelative', deltaSeconds: -2 },
+  'seek-back-5s': { type: 'seekRelative', deltaSeconds: -5 },
+  'stutter-500': { type: 'stutter', durationMs: 500 },
+  'stutter-1000': { type: 'stutter', durationMs: 1000 },
+  'stutter-1500': { type: 'stutter', durationMs: 1500 },
+  'stutter-2000': { type: 'stutter', durationMs: 2000 },
+  'play-next-song': { type: 'playNextSong' },
+};
+
 function loadMappingState() {
   try {
     const raw = database.getSetting(COMMAND_MAPPINGS_SETTINGS_KEY);
@@ -110,7 +123,28 @@ function broadcast(channel, payload) {
 
 function setRuntimeContext(next) {
   if (!next || typeof next !== 'object') return runtimeContext;
-  runtimeContext = { ...runtimeContext, ...next };
+  // Replace derived VC flags wholesale so stale false values cannot block overlay hotkeys.
+  if (
+    'hasNextSong' in next ||
+    'hasUpcomingSongs' in next ||
+    'hasCurrentSong' in next ||
+    'hasCoverArt' in next ||
+    'hasHostGraphic' in next ||
+    'hasPlaybackTiming' in next
+  ) {
+    runtimeContext = {
+      vcModeActive: next.vcModeActive !== false,
+      hasNextSong: next.hasNextSong,
+      hasUpcomingSongs: next.hasUpcomingSongs,
+      hasCurrentSong: next.hasCurrentSong,
+      hasCoverArt: next.hasCoverArt,
+      hasHostGraphic: next.hasHostGraphic,
+      hasPlaybackTiming: next.hasPlaybackTiming,
+      specialPlayPauseActive: next.specialPlayPauseActive,
+    };
+  } else {
+    runtimeContext = { ...runtimeContext, ...next };
+  }
   broadcast('commands:runtime-context', runtimeContext);
   return runtimeContext;
 }
@@ -222,6 +256,19 @@ function dispatchCommand(invocation) {
     return { ok: false, result: 'unavailable' };
   }
 
+  const playbackCommand = MAIN_PLAYBACK_BY_COMMAND[commandId];
+  if (playbackCommand) {
+    sendToWindow(mainWindowRef, 'listener:playback-command', playbackCommand);
+    broadcast('command:invoke', {
+      commandId,
+      source,
+      binding,
+      result: 'executed',
+      timestamp: Date.now(),
+    });
+    return { ok: true, result: 'executed' };
+  }
+
   const legacyAction = LEGACY_ACTION_BY_COMMAND[commandId];
   if (legacyAction) {
     broadcast('vc:hotkey', { action: legacyAction });
@@ -330,13 +377,15 @@ function registerActiveShortcuts() {
 
 function setVcModeActive(active) {
   vcModeActive = Boolean(active);
-  runtimeContext = { ...runtimeContext, vcModeActive };
-  broadcast('commands:runtime-context', runtimeContext);
   if (!vcModeActive) {
+    runtimeContext = { vcModeActive: false };
+    broadcast('commands:runtime-context', runtimeContext);
     closeGate('vc-inactive');
     unregisterAllShortcuts();
     return;
   }
+  runtimeContext = { vcModeActive: true };
+  broadcast('commands:runtime-context', runtimeContext);
   registerActiveShortcuts();
 }
 

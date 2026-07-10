@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SongPagesSongManifest } from '@shared/manifests';
-import type { VcModeConfig, VcStatePayload, VcSurfaceConfig, VcUpcomingSong } from '@shared/vcModeTypes';
+import type { VcModeConfig, VcPlaybackEffectsMirror, VcSpecialPlayPauseState, VcStatePayload, VcSurfaceConfig, VcUpcomingSong } from '@shared/vcModeTypes';
+import { DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR } from '@shared/vcMode/playbackEffectsMirror';
 import { deriveCommandRuntimeContextFromVcState } from '@shared/commands';
 import { configUsesVisualizer, normalizeVcConfig } from '@shared/vcModeTypes';
 
@@ -13,13 +14,19 @@ import { isButterchurnExperienceId } from '../visualizers/butterchurn/presets/ap
 import { normalizeExperienceId } from '../visualizers/native/registry';
 import { useExperienceSettings } from '../visualizers/settings/useExperienceSettings';
 import { useAudioAnalyser } from '../visualizers/useAudioAnalyser';
-import { createDefaultVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
+import { createDefaultVcConfig, migrateVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
+import { useHostGraphicPopupUrl } from './useHostGraphicPopupUrl';
 import { useKudoPresets } from '../kudos/useKudoPresets';
+import { loadHostContentCatalog } from '../host-content/loadHostContentCatalog';
+import {
+  createDefaultHostContentCatalog,
+  migrateHostContentCatalog,
+  type HostContentCatalog,
+} from '@shared/hostContent';
 
 const FRAME_INTERVAL_MS = 16;
 const STATE_INTERVAL_MS = 200;
 const SURFACE_SAVE_DEBOUNCE_MS = 500;
-const UPCOMING_MAX = 10;
 
 type UseVcModeManagerOptions = {
   /** Hidden mirror for VC visualizer FFT — see useAnalyserPlaybackMirror. */
@@ -37,6 +44,9 @@ type UseVcModeManagerOptions = {
   /** Resolved HLS URL for the active track — mirrored into the VC window for stream capture. */
   activePlaybackUrl: string | null;
   volume: number;
+  /** Bass / lo-fi / Effects Lab — mirrored for audible FX in the VC capture window. */
+  playbackEffects?: VcPlaybackEffectsMirror;
+  specialPlayPause?: VcSpecialPlayPauseState | null;
 };
 
 function buildSongPayload(
@@ -78,6 +88,8 @@ export function useVcModeManager({
   duration,
   activePlaybackUrl,
   volume,
+  playbackEffects = DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR,
+  specialPlayPause = null,
 }: UseVcModeManagerOptions) {
   const [modalOpen, setModalOpen] = useState(false);
   const [vcOpen, setVcOpen] = useState(false);
@@ -85,16 +97,52 @@ export function useVcModeManager({
   const [canvasMirrorFrame, setCanvasMirrorFrame] = useState<string | null>(null);
   const [songManifest, setSongManifest] = useState<SongPagesSongManifest | null>(null);
   const [artistProfile, setArtistProfile] = useState<ArtistRow | null>(null);
+  const [hostCatalog, setHostCatalog] = useState<HostContentCatalog>(() => createDefaultHostContentCatalog());
 
   const manifestCacheRef = useRef(new Map<string, SongPagesSongManifest>());
   const timingRef = useRef({ currentTime, duration, isPlaying });
   const canvasMirrorFrameRef = useRef<string | null>(null);
   const activeConfigRef = useRef(activeConfig);
   const surfaceSaveTimerRef = useRef<number | null>(null);
+  /** Prevents a late settings hydrate from overwriting config passed to Start VC. */
+  const activeConfigSourceRef = useRef<'default' | 'settings' | 'start'>('default');
 
   const [reportedVisualizerId, setReportedVisualizerId] = useState<string | null>(null);
   const prevVcOpenRef = useRef(false);
   const kudos = useKudoPresets();
+
+  useEffect(() => {
+    const app = getApp();
+    if (!app?.getSettings) return;
+
+    let cancelled = false;
+    void app.getSettings(VC_SETTINGS_KEY).then((saved) => {
+      if (cancelled || saved == null) return;
+      // Start VC passes an explicit config — never clobber it with an older async load.
+      if (activeConfigSourceRef.current === 'start') return;
+      setActiveConfig(migrateVcConfig(saved));
+      activeConfigSourceRef.current = 'settings';
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadHostContentCatalog().then((catalog) => {
+      if (!cancelled) setHostCatalog(migrateHostContentCatalog(catalog));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hostGraphicPopupUrl = useHostGraphicPopupUrl(
+    hostCatalog,
+    activeConfig.hostGraphicPopupId,
+  );
 
   useEffect(() => {
     activeConfigRef.current = activeConfig;
@@ -141,28 +189,32 @@ export function useVcModeManager({
 
   /** Playing song, or the song page currently selected in the listener — for designer preview assets. */
   const designerSong = playingSong ?? previewSong ?? null;
+  /** Queue overlays anchor on the playing track, or the selected song page when idle. */
+  const queueAnchorSongId = playingSongId ?? previewSong?.id ?? null;
 
   const nextSongPreview = useMemo(() => {
-    if (playingSongId == null) return null;
-    const nextId = pickNextSongId(playingSongId);
+    if (queueAnchorSongId == null) return null;
+    const nextId = pickNextSongId(queueAnchorSongId);
     if (nextId == null) return null;
     const next = sortedSongs.find((song) => song.id === nextId);
     if (!next) return null;
     return { title: next.title, artist: next.artist_name ?? '' };
-  }, [pickNextSongId, playingSongId, sortedSongs]);
+  }, [pickNextSongId, queueAnchorSongId, sortedSongs]);
+
+  const upcomingMax = activeConfig.upcomingOverlay.maxCount;
 
   const upcoming = useMemo((): VcUpcomingSong[] => {
-    if (playingSongId == null) return [];
-    const currentIndex = sortedSongs.findIndex((song) => song.id === playingSongId);
+    if (queueAnchorSongId == null) return [];
+    const currentIndex = sortedSongs.findIndex((song) => song.id === queueAnchorSongId);
     if (currentIndex < 0) return [];
-    return sortedSongs.slice(currentIndex + 1, currentIndex + 1 + UPCOMING_MAX).map((song) => ({
+    return sortedSongs.slice(currentIndex + 1, currentIndex + 1 + upcomingMax).map((song) => ({
       id: song.id,
       title: song.title,
       artist: song.artist_name ?? '',
       durationSeconds: song.duration_seconds,
       coverUrl: resolveAssetUrl(song.page_url, song.cover_url ?? null),
     }));
-  }, [playingSongId, sortedSongs]);
+  }, [queueAnchorSongId, sortedSongs, upcomingMax]);
 
   useEffect(() => {
     if (!designerSong?.song_manifest_url) {
@@ -229,16 +281,18 @@ export function useVcModeManager({
         songId: playingSong?.id ?? null,
         playbackUrl: activePlaybackUrl ?? playingSong?.playback_url ?? null,
         volume,
+        playbackEffects,
       },
       currentSong: buildSongPayload(displaySong, songManifest, artistProfile),
       nextSong: nextSongPreview,
       upcoming,
-      hostGraphicUrl: null,
+      hostGraphicUrl: hostGraphicPopupUrl,
       artistName: vcArtistDisplayName(displaySong, artistProfile, songManifest?.artistName),
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
       effectiveVisualizerId: vcVisualizerId,
       kudoPresets: kudos.presets,
+      specialPlayPause,
     };
   }, [
     activeConfig,
@@ -247,14 +301,17 @@ export function useVcModeManager({
     currentTime,
     duration,
     isPlaying,
+    hostGraphicPopupUrl,
     kudos.presets,
     nextSongPreview,
     playingSong,
     previewSong,
     songManifest,
+    specialPlayPause,
     upcoming,
     vcVisualizerId,
     volume,
+    playbackEffects,
   ]);
 
   /** Song + artist context for Surface designer preview (playing or selected song page). */
@@ -270,16 +327,17 @@ export function useVcModeManager({
             duration: song?.duration_seconds ?? 0,
             isPlaying: false,
           },
-      audioMirror: { songId: null, playbackUrl: null, volume },
+      audioMirror: { songId: null, playbackUrl: null, volume, playbackEffects },
       currentSong: buildSongPayload(song, songManifest, artistProfile),
       nextSong: nextSongPreview,
       upcoming,
-      hostGraphicUrl: null,
+      hostGraphicUrl: hostGraphicPopupUrl,
       artistName: vcArtistDisplayName(song, artistProfile, songManifest?.artistName),
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
       effectiveVisualizerId: vcVisualizerId,
       kudoPresets: kudos.presets,
+      specialPlayPause,
     };
   }, [
     activeConfig,
@@ -288,12 +346,16 @@ export function useVcModeManager({
     designerSong,
     duration,
     isPlaying,
+    hostGraphicPopupUrl,
     kudos.presets,
     nextSongPreview,
     playingSong,
     songManifest,
+    specialPlayPause,
     upcoming,
     vcVisualizerId,
+    volume,
+    playbackEffects,
   ]);
 
   useEffect(() => {
@@ -377,6 +439,19 @@ export function useVcModeManager({
     };
   }, [buildStatePayload, vcOpen]);
 
+  /** Push VC state when the host popup URL resolves so Toggle Host Graphic Display stays available. */
+  useEffect(() => {
+    if (!vcOpen) return;
+    const app = getApp();
+    if (!app?.vc) return;
+
+    const payload = buildStatePayload();
+    app.vc.sendState(payload);
+    app.commands?.setRuntimeContext?.(
+      deriveCommandRuntimeContextFromVcState(payload, { vcModeActive: true }),
+    );
+  }, [buildStatePayload, hostGraphicPopupUrl, vcOpen]);
+
   useEffect(() => {
     if (vcOpen) return;
     getApp()?.commands?.setRuntimeContext?.({ vcModeActive: false });
@@ -427,6 +502,8 @@ export function useVcModeManager({
     const offOpened = app.vc.onOpened(() => setVcOpen(true));
     const offClosed = app.vc.onClosed(() => {
       setVcOpen(false);
+      // Return host to Surface designer after VC ends (window X or programmatic close).
+      setModalOpen(true);
     });
 
     return () => {
@@ -446,7 +523,21 @@ export function useVcModeManager({
       if (!app?.vc) return;
 
       await closeVisualizerSurfaces();
-      setActiveConfig(normalizeVcConfig(config));
+      const [catalog, savedVc] = await Promise.all([
+        loadHostContentCatalog(),
+        app.getSettings?.(VC_SETTINGS_KEY) ?? Promise.resolve(null),
+      ]);
+      setHostCatalog(migrateHostContentCatalog(catalog));
+      const savedConfig = savedVc != null ? migrateVcConfig(savedVc) : null;
+      const normalized = normalizeVcConfig({
+        ...config,
+        hostGraphicPopupId:
+          config.hostGraphicPopupId ?? savedConfig?.hostGraphicPopupId ?? null,
+        upcomingOverlay: config.upcomingOverlay ?? savedConfig?.upcomingOverlay,
+      });
+      activeConfigSourceRef.current = 'start';
+      activeConfigRef.current = normalized;
+      setActiveConfig(normalized);
       setModalOpen(false);
       setVcOpen(true);
       await app.vc.open({});
@@ -460,6 +551,7 @@ export function useVcModeManager({
     await app.vc.close();
     setVcOpen(false);
     setCanvasMirrorFrame(null);
+    setModalOpen(true);
   }, []);
 
   const openModal = useCallback(() => setModalOpen(true), []);
@@ -474,6 +566,7 @@ export function useVcModeManager({
   return {
     modalOpen,
     vcOpen,
+    activeConfig,
     analyserEnabled,
     vcVisualizerId,
     vcVisualizerSettings,

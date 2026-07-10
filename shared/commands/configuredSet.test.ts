@@ -6,6 +6,7 @@ import { createDefaultCommandMappingState } from './defaults';
 import {
   addCommandToConfiguredSet,
   listAvailableKeysForSource,
+  listBindingOptionsForCommand,
   listUnassignedCatalogActions,
   removeCommandFromConfiguredSet,
 } from './configuredSet';
@@ -44,4 +45,18 @@ test('listAvailableKeysForSource excludes assigned gated keys', () => {
   const available = listAvailableKeysForSource(state, 'gated');
   assert.equal(available.includes('c'), false);
   assert.equal(available.includes('h'), true);
+});
+
+test('listBindingOptionsForCommand keeps current key and excludes keys used elsewhere', () => {
+  let state = createDefaultCommandMappingState();
+  state = applyCommandBindingPatch(state, 'toggle-cover', { gated: 'c' });
+  state = applyCommandBindingPatch(state, 'toggle-host', { gated: 'h' });
+
+  const coverOptions = listBindingOptionsForCommand(state, 'toggle-cover', 'gated');
+  assert.equal(coverOptions.includes('c'), true);
+  assert.equal(coverOptions.includes('h'), false);
+
+  const hostOptions = listBindingOptionsForCommand(state, 'toggle-host', 'gated');
+  assert.equal(hostOptions.includes('h'), true);
+  assert.equal(hostOptions.includes('c'), false);
 });

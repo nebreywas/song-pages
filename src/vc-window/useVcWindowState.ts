@@ -22,8 +22,6 @@ export type VcWindowContext = {
   canvasFrame: string | null;
   activeOverlay: VcOverlayId | null;
   kudoTrigger: KudoTriggerState;
-  /** Bright red area/float outlines — toggled by ⌘⌥D / Ctrl+Alt+D. */
-  debugOutlines: boolean;
   /** Fullscreen layout editing — toggled by ⌘⌥L / Ctrl+Alt+L. */
   layoutMode: boolean;
   onChangeSurface: (patch: Partial<import('@shared/vcModeTypes').VcSurfaceConfig>) => void;
@@ -36,7 +34,6 @@ export function useVcWindowState(): VcWindowContext {
   const [canvasFrame, setCanvasFrame] = useState<string | null>(null);
   const [activeOverlay, setActiveOverlay] = useState<VcOverlayId | null>(null);
   const [kudoTrigger, setKudoTrigger] = useState<KudoTriggerState>({ token: 0, presetId: null });
-  const [debugOutlines, setDebugOutlines] = useState(false);
   const [layoutMode, setLayoutMode] = useState(false);
 
   const fireKudo = useCallback((presetId: string) => {
@@ -63,11 +60,6 @@ export function useVcWindowState(): VcWindowContext {
     });
 
     const offHotkey = app.vc.onHotkey(({ action }: { action: VcHotkeyAction }) => {
-      if (action === 'debugOutlines') {
-        setDebugOutlines((value) => !value);
-        return;
-      }
-
       if (action === 'layoutMode') {
         setLayoutMode((value) => !value);
         return;
@@ -115,7 +107,6 @@ export function useVcWindowState(): VcWindowContext {
     canvasFrame,
     activeOverlay,
     kudoTrigger,
-    debugOutlines,
     layoutMode,
     onChangeSurface,
   };

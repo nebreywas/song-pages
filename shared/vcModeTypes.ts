@@ -55,6 +55,7 @@ import { sanitizeGridDesign, type VcGridDesignSettings } from './vcMode/gridDesi
 import {
   DEFAULT_VC_VISUALIZER_CHANGE_RULE,
   DEFAULT_VC_VISUALIZER_SEQUENCE,
+  migrateVisualizerClickSetting,
   sanitizeVisualizerChangeRule,
   sanitizeVisualizerSequence,
   type VcVisualizerChangeRule,
@@ -65,6 +66,29 @@ export {
   VC_VISUALIZER_CHANGE_RULE_OPTIONS,
   VC_VISUALIZER_SEQUENCE_OPTIONS,
 } from './vcMode/visualizerSettings';
+import {
+  DEFAULT_SPECIAL_PLAY_STYLE_SETTINGS,
+  sanitizeSpecialPlayStyleSettings,
+  type VcSpecialPlayPauseState,
+  type VcSpecialPlayStyleSettings,
+} from './vcMode/specialPlayStyles';
+export type { VcSpecialPlayPauseState, VcSpecialPlayStyle, VcSpecialPlayStyleSettings } from './vcMode/specialPlayStyles';
+export { VC_SPECIAL_PLAY_STYLE_OPTIONS, DEFAULT_SPECIAL_PLAY_STYLE_SETTINGS } from './vcMode/specialPlayStyles';
+import {
+  DEFAULT_VC_UPCOMING_OVERLAY_SETTINGS,
+  sanitizeUpcomingOverlaySettings,
+  type VcUpcomingOverlaySettings,
+} from './vcMode/upcomingOverlaySettings';
+export type {
+  VcUpcomingOverlayMaxCount,
+  VcUpcomingOverlayPosition,
+  VcUpcomingOverlaySettings,
+} from './vcMode/upcomingOverlaySettings';
+export {
+  DEFAULT_VC_UPCOMING_OVERLAY_SETTINGS,
+  VC_UPCOMING_OVERLAY_MAX_OPTIONS,
+  VC_UPCOMING_OVERLAY_POSITION_OPTIONS,
+} from './vcMode/upcomingOverlaySettings';
 import {
   pickOptionalBorderStyle,
   pickOptionalBorderThickness,
@@ -172,10 +196,18 @@ export type VcModeConfig = {
   visualizerChangeRule: VcVisualizerChangeRule;
   /** Pool used when a rotation rule picks the next visualizer. */
   visualizerSequence: VcVisualizerSequence;
+  /** When true, clicking the visualizer cell randomizes plugin regardless of change rule. */
+  visualizerAlsoClickToChange?: boolean;
   /** When false, missing song content renders blank instead of host/system fallbacks. */
   useFallbacks: boolean;
   /** Surface background, divider lines, and default text typography. */
   gridDesign: VcGridDesignSettings;
+  /** Between-song pacing for VC hosts (pause / countdown). */
+  specialPlayStyle: VcSpecialPlayStyleSettings;
+  /** Host graphic shown when the host overlay hotkey (OCAW+F) is toggled. */
+  hostGraphicPopupId: string | null;
+  /** Hotkey upcoming queue overlay — placement and list length. */
+  upcomingOverlay: VcUpcomingOverlaySettings;
 };
 
 export type VcPlaybackState = {
@@ -184,11 +216,23 @@ export type VcPlaybackState = {
   isPlaying: boolean;
 };
 
+export type {
+  VcEffectsLabMirror,
+  VcPlaybackEffectsMirror,
+} from './vcMode/playbackEffectsMirror';
+export {
+  DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR,
+  isVcPlaybackEffectsAudible,
+} from './vcMode/playbackEffectsMirror';
+import type { VcPlaybackEffectsMirror } from './vcMode/playbackEffectsMirror';
+
 /** Stream URL + volume mirrored into the VC window so screen-share captures audio from that window. */
 export type VcAudioMirror = {
   songId: number | null;
   playbackUrl: string | null;
   volume: number;
+  /** Host playback FX — applied in the VC window so capture hears one processed stream. */
+  playbackEffects: VcPlaybackEffectsMirror;
 };
 
 export type VcSongPayload = {
@@ -236,6 +280,8 @@ export type VcStatePayload = {
   effectiveVisualizerId?: string;
   /** Host Kudo presets in list order (cycle trigger follows this order). */
   kudoPresets?: KudoPreset[];
+  /** Active between-song pause while a special play style is engaged. */
+  specialPlayPause?: VcSpecialPlayPauseState | null;
 };
 
 export const VC_SONG_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: string }> = [
@@ -315,7 +361,6 @@ export type VcHotkeyAction =
   | 'remaining'
   | 'songInfo'
   | 'upcoming'
-  | 'debugOutlines'
   /** Toggle fullscreen layout editing on the VC projection surface (⌘⌥L). */
   | 'layoutMode'
   /** Nudge ALARE lyric scroll slightly faster (⌘⌥=). Resets each song. */
@@ -323,7 +368,9 @@ export type VcHotkeyAction =
   /** Nudge ALARE lyric scroll slightly slower (⌘⌥-). Resets each song. */
   | 'alareSpeedDown'
   /** Reset ALARE lyric scroll trim to default (⌘⌥0). */
-  | 'alareSpeedReset';
+  | 'alareSpeedReset'
+  /** Randomize the active visualizer plugin (host override). */
+  | 'changeVisualizer';
 
 export const VC_SETTINGS_KEY = 'vc.lastConfig';
 
@@ -494,16 +541,30 @@ export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
   const dividers = resolveDividers(templateId, config.surface?.dividers);
   const cells = sanitizeCells(config.cells);
   const floatContent = sanitizeFloatContent(config.floatContent, floats);
+  // Migrate legacy "click" rule before sanitize drops unknown values.
+  const migratedClick = migrateVisualizerClickSetting(
+    config.visualizerChangeRule === 'click'
+      ? 'click'
+      : sanitizeVisualizerChangeRule(config.visualizerChangeRule),
+    config.visualizerAlsoClickToChange,
+  );
 
   return {
     surface: { templateId, dividers, floats },
     cells,
     floatContent,
     visualizerId: config.visualizerId,
-    visualizerChangeRule: sanitizeVisualizerChangeRule(config.visualizerChangeRule),
+    visualizerChangeRule: migratedClick.visualizerChangeRule,
     visualizerSequence: sanitizeVisualizerSequence(config.visualizerSequence),
+    visualizerAlsoClickToChange: migratedClick.visualizerAlsoClickToChange,
     useFallbacks: config.useFallbacks !== false,
     gridDesign: sanitizeGridDesign(config.gridDesign),
+    specialPlayStyle: sanitizeSpecialPlayStyleSettings(config.specialPlayStyle),
+    hostGraphicPopupId:
+      typeof config.hostGraphicPopupId === 'string' && config.hostGraphicPopupId.trim()
+        ? config.hostGraphicPopupId.trim()
+        : null,
+    upcomingOverlay: sanitizeUpcomingOverlaySettings(config.upcomingOverlay),
   };
 }
 

@@ -55,18 +55,43 @@ test('deriveCommandRuntimeContextFromVcState reflects queue and media flags', ()
   assert.equal(context.hasPlaybackTiming, true);
 });
 
-test('toggle-next-overlay is unavailable without a next song', () => {
-  const command = getBuiltinCommand('toggle-next-overlay');
-  assert.ok(command);
+test('overlay toggle commands stay available in VC mode even without queue data', () => {
+  const context = { vcModeActive: true, hasNextSong: false, hasUpcomingSongs: false };
 
-  const available = isCommandAvailable(command, {
-    vcModeActive: true,
-    hasNextSong: false,
-  });
-  assert.equal(available, false);
+  for (const commandId of [
+    'toggle-host',
+    'toggle-next-overlay',
+    'toggle-upcoming',
+    'toggle-cover',
+    'toggle-song-info',
+    'toggle-remaining',
+  ]) {
+    const command = getBuiltinCommand(commandId);
+    assert.ok(command);
+    assert.equal(isCommandAvailable(command, context), true, commandId);
+  }
 });
 
-test('listOverlayMappings grays Toggle Next when runtime context lacks next song', () => {
+test('toggle-host is available when hostGraphicPopupId is configured', () => {
+  const command = getBuiltinCommand('toggle-host');
+  assert.ok(command);
+
+  const available = isCommandAvailable(
+    command,
+    deriveCommandRuntimeContextFromVcState(
+      sampleVcPayload({
+        config: {
+          ...sampleVcPayload().config,
+          hostGraphicPopupId: 'graphic-1',
+        },
+      }),
+      { vcModeActive: true },
+    ),
+  );
+  assert.equal(available, true);
+});
+
+test('listOverlayMappings keeps Toggle Next available without queue data', () => {
   let state = createDefaultCommandMappingState();
   state = applyCommandBindingPatch(state, 'toggle-next-overlay', { gated: 'n' });
 
@@ -75,5 +100,5 @@ test('listOverlayMappings grays Toggle Next when runtime context lacks next song
     hasNextSong: false,
   });
   const nextRow = rows.find((row) => row.commandId === 'toggle-next-overlay');
-  assert.equal(nextRow?.available, false);
+  assert.equal(nextRow?.available, true);
 });

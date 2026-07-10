@@ -16,11 +16,11 @@ import {
   type VcGridLineSettings,
   type VcGridLineStyle,
 } from '@shared/vcMode/gridDesign';
-import { findHostContentItem, listItemsByType, type HostContentCatalog } from '@shared/hostContent';
+import { listItemsByType, type HostContentCatalog } from '@shared/hostContent';
 
 import { DesignerOverlayLayer } from './DesignerOverlayLayer';
+import { HostGraphicPreviewBox } from './HostGraphicPreviewBox';
 import { VcColorField } from '../../components/color/VcColorField';
-import { useResolvedMediaUrl } from '../../vc-window/useResolvedMediaUrl';
 
 type GridDesignSettingsPanelProps = {
   gridDesign: VcGridDesignSettings;
@@ -60,26 +60,14 @@ function FullscreenGraphicPreview({
   catalog: HostContentCatalog;
   opacityPct: number;
 }) {
-  const item = itemId ? findHostContentItem(catalog, itemId) : null;
-  const mediaPath = item?.type === 'graphic' ? item.mediaPath : null;
-  const { url } = useResolvedMediaUrl(null, mediaPath);
-  const graphicName = item?.type === 'graphic' ? item.name : null;
-
   return (
-    <div
+    <HostGraphicPreviewBox
+      itemId={itemId}
+      catalog={catalog}
+      opacityPct={opacityPct}
       className="vc-grid-design-fullscreen-preview"
-      aria-hidden={!itemId}
-      title={graphicName ?? undefined}
-    >
-      {url ? (
-        <img
-          className="vc-grid-design-fullscreen-preview-image"
-          src={url}
-          alt={graphicName ?? ''}
-          style={{ opacity: opacityPct / 100 }}
-        />
-      ) : null}
-    </div>
+      imageClassName="vc-grid-design-fullscreen-preview-image"
+    />
   );
 }
 

@@ -9,11 +9,12 @@ const FACTORY_COMMAND_IDS = [
   'toggle-song-info',
   'toggle-upcoming',
   'toggle-layout-mode',
-  'toggle-debug-outlines',
   'alare-speed-up',
   'alare-speed-down',
   'alare-speed-reset',
+  'change-visualizer',
   'toggle-vc-command-gate',
+  'play-next-song',
 ] as const;
 
 /** Factory-default command bindings shipped with MVP 1.0. */
@@ -32,11 +33,12 @@ export function createDefaultCommandMappingState(): CommandMappingState {
       'toggle-song-info': { direct: `${O}+s` },
       'toggle-upcoming': { direct: `${O}+u` },
       'toggle-layout-mode': { direct: `${O}+l` },
-      'toggle-debug-outlines': { direct: `${O}+d` },
       'alare-speed-up': { direct: `${O}+=` },
       'alare-speed-down': { direct: `${O}+-` },
       'alare-speed-reset': { direct: `${O}+0` },
+      'change-visualizer': { direct: `${O}+v` },
       'toggle-vc-command-gate': { direct: `${O}+g` },
+      'play-next-song': { direct: `${O}+.` },
     },
     reservedKudoKeys: [],
     kudoPresetByReservedKey: {},

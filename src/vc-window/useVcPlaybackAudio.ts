@@ -154,11 +154,6 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
   ]);
 
   useEffect(() => {
-    if (!audioEl || !state) return;
-    audioEl.volume = state.audioMirror.volume;
-  }, [audioEl, state?.audioMirror.volume, state]);
-
-  useEffect(() => {
     if (!audioEl || !state?.audioMirror.playbackUrl) return;
 
     if (state.playback.isPlaying && audioEl.paused) {
@@ -196,5 +191,5 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
     };
   }, [audioEl, reportPlaybackStatus]);
 
-  return audioRef;
+  return { audioRef, audioEl };
 }

@@ -5,4 +5,5 @@ export type VcTransportCommand =
   | { type: 'prev' }
   | { type: 'next' }
   | { type: 'seek'; seconds: number }
-  | { type: 'playSong'; songId: number };
+  | { type: 'playSong'; songId: number }
+  | { type: 'playNextSong' };

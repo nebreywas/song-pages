@@ -13,9 +13,15 @@ type VisualizerAssignmentSettingsProps = {
   visualizerId: string;
   visualizerChangeRule: VcModeConfig['visualizerChangeRule'];
   visualizerSequence: VcModeConfig['visualizerSequence'];
+  visualizerAlsoClickToChange: boolean;
   visualizers: VisualizerPluginOption[];
   onChange: (
-    patch: Partial<Pick<VcModeConfig, 'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence'>>,
+    patch: Partial<
+      Pick<
+        VcModeConfig,
+        'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence' | 'visualizerAlsoClickToChange'
+      >
+    >,
   ) => void;
 };
 
@@ -24,6 +30,7 @@ export function VisualizerAssignmentSettings({
   visualizerId,
   visualizerChangeRule,
   visualizerSequence,
+  visualizerAlsoClickToChange,
   visualizers,
   onChange,
 }: VisualizerAssignmentSettingsProps) {
@@ -59,6 +66,19 @@ export function VisualizerAssignmentSettings({
           ))}
         </select>
       </label>
+
+      <label className="vc-field vc-field-inline">
+        <input
+          type="checkbox"
+          checked={visualizerAlsoClickToChange}
+          onChange={(e) => onChange({ visualizerAlsoClickToChange: e.target.checked })}
+        />
+        <span>Also click to change?</span>
+      </label>
+      <p className="vc-assignment-hint">
+        When checked, clicking the visualizer on the live surface randomizes the plugin even if the change
+        rule is Never. Use the Change Visualizer command for the same effect from the controller or a hotkey.
+      </p>
 
       <label className="vc-field">
         <span>Sequence</span>

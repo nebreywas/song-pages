@@ -25,7 +25,10 @@ export type VcGroupPresentationMode = 'slideshow' | 'gallery';
 export type VcSlideshowTransition = 'none' | 'fade' | 'flip';
 export type VcGalleryLayout = 'static' | 'scroll' | 'coverflow';
 export type VcSlideshowPlayback = 'once' | 'loop';
-export type VcUpcomingLayout = 'gallery' | 'overflow';
+/** Upcoming covers layout — single horizontal row or multi-row grid. */
+export type VcUpcomingLayout = 'single-row' | 'multi-row';
+/** How extra upcoming covers move when they do not all fit (static = no motion). */
+export type VcUpcomingScroll = 'static' | 'marquee-slow' | 'marquee-medium' | 'bounce-slow' | 'bounce-medium';
 export type VcTextAlign = 'left' | 'center' | 'right' | 'justify';
 
 export const VC_TEXT_ALIGN_IDS = ['left', 'center', 'right', 'justify'] as const satisfies readonly VcTextAlign[];
@@ -86,8 +89,13 @@ export type VcAssignmentOverrides = {
   seekIncludeTransport?: boolean;
   /** Seek bar: allow click/drag to seek. */
   seekClickable?: boolean;
-  /** Upcoming covers: multi-row gallery vs single horizontal row. */
+  /** Upcoming covers: single horizontal row vs multi-row grid. */
   upcomingLayout?: VcUpcomingLayout;
+  /** Upcoming covers scroll when more tracks exist than fit in the region. */
+  upcomingScroll?: VcUpcomingScroll;
+  upcomingShowArtist?: boolean;
+  upcomingShowTitle?: boolean;
+  upcomingClickToZoom?: boolean;
   /** Lyrics scroll container: feather top/bottom edges into the region background. */
   lyricsEdgeFade?: boolean;
   /** Lyrics: omit [bracketed annotation] segments at display time (Simple Scroll only). */
@@ -150,7 +158,14 @@ const GROUP_MODES = new Set<VcGroupPresentationMode>(['slideshow', 'gallery']);
 const SLIDE_TRANSITIONS = new Set<VcSlideshowTransition>(['none', 'fade', 'flip']);
 const SLIDE_PLAYBACK = new Set<VcSlideshowPlayback>(['once', 'loop']);
 const GALLERY_LAYOUTS = new Set<VcGalleryLayout>(['static', 'scroll', 'coverflow']);
-const UPCOMING_LAYOUTS = new Set<VcUpcomingLayout>(['gallery', 'overflow']);
+const UPCOMING_LAYOUTS = new Set<VcUpcomingLayout>(['single-row', 'multi-row']);
+const UPCOMING_SCROLL_MODES = new Set<VcUpcomingScroll>([
+  'static',
+  'marquee-slow',
+  'marquee-medium',
+  'bounce-slow',
+  'bounce-medium',
+]);
 const TEXT_ALIGNS = new Set<VcTextAlign>(VC_TEXT_ALIGN_IDS);
 const LYRIC_TRACKING_MODES = new Set<VcLyricTracking>(VC_LYRIC_TRACKING_IDS);
 
@@ -195,7 +210,14 @@ const OVERRIDE_KEYS_BY_CONTENT: Partial<Record<VcCellContent, Array<keyof VcAssi
   'elapsed-remaining': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
   'seek-bar': ['seekIncludeTransport', 'seekClickable', 'fontStyle', 'fontSize', 'color'],
   'player-controls': ['controlScalePct'],
-  'upcoming-covers': ['upcomingLayout'],
+  'upcoming-covers': [
+    'upcomingLayout',
+    'upcomingScroll',
+    'upcomingShowArtist',
+    'upcomingShowTitle',
+    'upcomingClickToZoom',
+    'color',
+  ],
   'host-graphic': ['insetPct', 'fitMode', 'overflow'],
   'host-video': ['insetPct', 'fitMode', 'playback'],
   'host-title-text': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign', 'overflow'],
@@ -232,6 +254,13 @@ function pickEnum<T extends string>(raw: unknown, allowed: Set<T>): T | undefine
 
 function pickColor(raw: unknown): string | undefined {
   return typeof raw === 'string' && /^#[0-9a-f]{6}$/i.test(raw) ? raw : undefined;
+}
+
+/** Legacy gallery/overflow layout ids → current names. */
+function normalizeUpcomingLayout(raw: unknown): VcUpcomingLayout | undefined {
+  if (raw === 'gallery') return 'multi-row';
+  if (raw === 'overflow') return 'single-row';
+  return pickEnum(raw, UPCOMING_LAYOUTS);
 }
 
 /** Normalize persisted sparse overrides. */
@@ -276,8 +305,13 @@ export function sanitizeAssignmentOverrides(raw: unknown): VcAssignmentOverrides
   }
   if (typeof value.seekIncludeTransport === 'boolean') next.seekIncludeTransport = value.seekIncludeTransport;
   if (typeof value.seekClickable === 'boolean') next.seekClickable = value.seekClickable;
-  const upcomingLayout = pickEnum(value.upcomingLayout, UPCOMING_LAYOUTS);
+  const upcomingLayout = normalizeUpcomingLayout(value.upcomingLayout);
   if (upcomingLayout) next.upcomingLayout = upcomingLayout;
+  const upcomingScroll = pickEnum(value.upcomingScroll, UPCOMING_SCROLL_MODES);
+  if (upcomingScroll) next.upcomingScroll = upcomingScroll;
+  if (typeof value.upcomingShowArtist === 'boolean') next.upcomingShowArtist = value.upcomingShowArtist;
+  if (typeof value.upcomingShowTitle === 'boolean') next.upcomingShowTitle = value.upcomingShowTitle;
+  if (typeof value.upcomingClickToZoom === 'boolean') next.upcomingClickToZoom = value.upcomingClickToZoom;
   if (typeof value.lyricsEdgeFade === 'boolean') next.lyricsEdgeFade = value.lyricsEdgeFade;
   if (typeof value.lyricsRemoveBracketed === 'boolean') next.lyricsRemoveBracketed = value.lyricsRemoveBracketed;
   const lyricTracking = pickEnum(value.lyricTracking, LYRIC_TRACKING_MODES);
@@ -726,7 +760,20 @@ export type EffectivePlayerControlsPresentation = {
 
 export type EffectiveUpcomingCoversPresentation = {
   layout: VcUpcomingLayout;
+  scroll: VcUpcomingScroll;
+  showArtist: boolean;
+  showTitle: boolean;
+  clickToZoom: boolean;
+  textColor: string;
 };
+
+export const VC_UPCOMING_SCROLL_OPTIONS: Array<{ value: VcUpcomingScroll; label: string }> = [
+  { value: 'static', label: 'Static (no scroll)' },
+  { value: 'marquee-slow', label: 'Scroll left — slow' },
+  { value: 'marquee-medium', label: 'Scroll left — medium' },
+  { value: 'bounce-slow', label: 'Bounce left — slow' },
+  { value: 'bounce-medium', label: 'Bounce left — medium' },
+];
 
 export function resolveSeekBarPresentation(
   overrides: VcAssignmentOverrides,
@@ -750,8 +797,19 @@ export function resolvePlayerControlsPresentation(
 
 export function resolveUpcomingCoversPresentation(
   overrides: VcAssignmentOverrides,
+  gridTypography: VcGridDefaultTypography = DEFAULT_VC_GRID_DESIGN.defaultTypography,
 ): EffectiveUpcomingCoversPresentation {
+  const layout =
+    normalizeUpcomingLayout(
+      overrides.upcomingLayout !== undefined ? overrides.upcomingLayout : 'single-row',
+    ) ?? 'single-row';
+
   return {
-    layout: pickOverride(overrides, 'upcomingLayout', 'overflow', 'overflow'),
+    layout,
+    scroll: pickOverride(overrides, 'upcomingScroll', 'static', 'static'),
+    showArtist: pickOverride(overrides, 'upcomingShowArtist', false, false),
+    showTitle: pickOverride(overrides, 'upcomingShowTitle', false, false),
+    clickToZoom: pickOverride(overrides, 'upcomingClickToZoom', false, false),
+    textColor: pickOverride(overrides, 'color', gridTypography.color, gridTypography.color),
   };
 }

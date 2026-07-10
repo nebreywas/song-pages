@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import {
   defaultEmojiParticleConfig,
@@ -13,7 +13,8 @@ import {
   type KudoPreset,
 } from '@shared/kudos';
 
-import { KudoLayer } from '../../kudos/KudoLayer';
+import { KudoLayer, type KudoLayerHandle } from '../../kudos/KudoLayer';
+import { IconPlay } from '../../listener/PlayerIcons';
 import { useCommandMappings } from '../../commands/useCommandMappings';
 import { formatReservedBindingLabel } from '@shared/commands';
 import { KudoParticleEditor } from './KudoParticleEditor';
@@ -63,7 +64,7 @@ export function KudosManager({
   onReorderPresets,
 }: KudosManagerProps) {
   const [selectedId, setSelectedId] = useState<string | null>(presets[0]?.id ?? null);
-  const [previewToken, setPreviewToken] = useState(0);
+  const previewLayerRef = useRef<KudoLayerHandle>(null);
   const { state: commandMappings, assignKudoPresetToReservedKey } = useCommandMappings();
 
   const selected = useMemo(
@@ -175,23 +176,25 @@ export function KudosManager({
   return (
     <div className="vc-kudos-manager">
       <div className="vc-kudos-manager-header">
-        <h3 className="vc-kudos-manager-title">Kudos</h3>
-        <button type="button" className="vc-btn" onClick={handleAdd}>
-          New Kudo
-        </button>
+        <div className="vc-kudos-manager-heading">
+          <h3 className="vc-kudos-manager-title">Kudos</h3>
+          <button
+            type="button"
+            className="btn icon-btn vc-kudos-add-btn"
+            onClick={handleAdd}
+            aria-label="New Kudo"
+            title="New Kudo"
+          >
+            +
+          </button>
+        </div>
       </div>
 
       <div className="vc-kudos-manager-body">
-        <KudosPresetList
-          presets={presets}
-          selectedId={selected?.id ?? null}
-          onSelect={setSelectedId}
-          onDelete={(id) => void onDeletePreset(id)}
-          onReorder={(fromIndex, toIndex) => void onReorderPresets(fromIndex, toIndex)}
-        />
-
-        {selected && isEditableContentType(selected.contentType) ? (
-          <section className="vc-kudos-editor">
+        <div className="vc-kudos-editor-column">
+          <div className="vc-kudos-editor-scroll">
+            {selected && isEditableContentType(selected.contentType) ? (
+              <section className="vc-kudos-editor">
             <div className="vc-kudos-editor-top-row">
               <label className="vc-field vc-kudos-name-field">
                 <span>Name</span>
@@ -263,36 +266,51 @@ export function KudosManager({
                 />
               </div>
             ) : null}
-          </section>
-        ) : (
-          <p className="vc-kudos-empty">Create a Kudo to get started.</p>
-        )}
-      </div>
+            </section>
+            ) : (
+              <p className="vc-kudos-empty">Create a Kudo to get started.</p>
+            )}
+          </div>
+        </div>
 
-      <footer className="vc-kudos-preview-dock">
-        <div className="vc-kudos-preview-toolbar">
-          <span className="vc-kudos-preview-label">Preview</span>
-          <button
-            type="button"
-            className="vc-btn"
-            disabled={!previewPreset}
-            onClick={() => setPreviewToken((t) => t + 1)}
-          >
-            Play
-          </button>
+        <div className="vc-kudos-sidebar">
+          <KudosPresetList
+            presets={presets}
+            selectedId={selected?.id ?? null}
+            onSelect={setSelectedId}
+            onDelete={(id) => void onDeletePreset(id)}
+            onReorder={(fromIndex, toIndex) => void onReorderPresets(fromIndex, toIndex)}
+          />
+
+          <footer className="vc-kudos-preview-dock">
+            <div className="vc-kudos-preview-toolbar">
+              <span className="vc-kudos-preview-label">Preview</span>
+              <button
+                type="button"
+                className="vc-kudos-preview-play-btn"
+                disabled={!previewPreset}
+                onClick={() => previewPreset && previewLayerRef.current?.playPreset(previewPreset.id)}
+                aria-label="Play preview"
+                title="Play preview"
+              >
+                <IconPlay />
+              </button>
+            </div>
+            <div className="vc-kudos-preview-stage">
+              {previewPreset ? (
+                <KudoLayer
+                  ref={previewLayerRef}
+                  presets={[previewPreset]}
+                  triggerToken={0}
+                  triggerPresetId={null}
+                />
+              ) : (
+                <p className="vc-kudos-preview-empty">Select a Kudo to preview.</p>
+              )}
+            </div>
+          </footer>
         </div>
-        <div className="vc-kudos-preview-stage">
-          {previewPreset ? (
-            <KudoLayer
-              presets={[previewPreset]}
-              triggerToken={previewToken}
-              triggerPresetId={previewPreset.id}
-            />
-          ) : (
-            <p className="vc-kudos-preview-empty">Select a Kudo to preview.</p>
-          )}
-        </div>
-      </footer>
+      </div>
     </div>
   );
 }

@@ -1,86 +1,281 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 
 import type { EffectiveUpcomingCoversPresentation } from '@shared/vcMode/assignmentSettings';
 import type { VcUpcomingSong } from '@shared/vcModeTypes';
 
 import { sendVcTransport } from './useVcTransport';
 
-const MIN_COVER_PX = 120;
 const COVER_GAP_PX = 20;
+const MIN_COVER_PX = 72;
+const LABEL_LINE_PX = 18;
 
 type VcUpcomingCoversViewProps = {
   songs: VcUpcomingSong[];
   presentation: EffectiveUpcomingCoversPresentation;
 };
 
+type LayoutMetrics = {
+  coverSize: number;
+  visibleCount: number;
+  columns: number;
+  rows: number;
+  scrollDistance: number;
+  animationDurationSec: number;
+};
+
+function scrollPixelsPerSecond(scroll: EffectiveUpcomingCoversPresentation['scroll']): number {
+  if (scroll === 'marquee-slow' || scroll === 'bounce-slow') return 28;
+  if (scroll === 'marquee-medium' || scroll === 'bounce-medium') return 48;
+  return 0;
+}
+
+function isBounceScroll(scroll: EffectiveUpcomingCoversPresentation['scroll']): boolean {
+  return scroll === 'bounce-slow' || scroll === 'bounce-medium';
+}
+
+function computeSingleRowLayout(
+  width: number,
+  height: number,
+  songCount: number,
+  presentation: EffectiveUpcomingCoversPresentation,
+): LayoutMetrics {
+  const labelRows = (presentation.showArtist ? 1 : 0) + (presentation.showTitle ? 1 : 0);
+  const labelHeight = labelRows * LABEL_LINE_PX;
+  const maxCoverByHeight = Math.max(MIN_COVER_PX, height - labelHeight - 8);
+  let coverSize = maxCoverByHeight;
+
+  let visibleCount = 1;
+  if (width > 0) {
+    visibleCount = Math.max(1, Math.floor((width + COVER_GAP_PX) / (coverSize + COVER_GAP_PX)));
+    const totalWidth = visibleCount * coverSize + (visibleCount - 1) * COVER_GAP_PX;
+    if (totalWidth > width && visibleCount > 1) {
+      coverSize = Math.max(MIN_COVER_PX, Math.floor((width - (visibleCount - 1) * COVER_GAP_PX) / visibleCount));
+    }
+  }
+
+  const trackWidth = songCount * coverSize + Math.max(0, songCount - 1) * COVER_GAP_PX;
+  const scrollDistance = Math.max(0, trackWidth - width);
+  const speed = scrollPixelsPerSecond(presentation.scroll);
+  const animationDurationSec = speed > 0 && scrollDistance > 0 ? scrollDistance / speed : 0;
+
+  return {
+    coverSize,
+    visibleCount,
+    columns: visibleCount,
+    rows: 1,
+    scrollDistance,
+    animationDurationSec,
+  };
+}
+
+function computeMultiRowLayout(
+  width: number,
+  height: number,
+  songCount: number,
+  presentation: EffectiveUpcomingCoversPresentation,
+): LayoutMetrics {
+  const labelRows = (presentation.showArtist ? 1 : 0) + (presentation.showTitle ? 1 : 0);
+  const labelHeight = labelRows * LABEL_LINE_PX;
+  const cellHeight = MIN_COVER_PX + labelHeight + 8;
+
+  let rows = Math.max(1, Math.floor((height + COVER_GAP_PX) / (cellHeight + COVER_GAP_PX)));
+  let columns = Math.max(1, Math.floor((width + COVER_GAP_PX) / (MIN_COVER_PX + COVER_GAP_PX)));
+  rows = Math.min(rows, songCount);
+  columns = Math.min(columns, Math.max(1, Math.ceil(songCount / rows)));
+
+  const coverByWidth = Math.max(
+    MIN_COVER_PX,
+    Math.floor((width - (columns - 1) * COVER_GAP_PX) / columns),
+  );
+  const coverByHeight = Math.max(
+    MIN_COVER_PX,
+    Math.floor((height - (rows - 1) * COVER_GAP_PX - rows * labelHeight) / rows),
+  );
+  const coverSize = Math.min(coverByWidth, coverByHeight);
+  const visibleCount = rows * columns;
+
+  const totalRows = Math.ceil(songCount / columns);
+  const trackHeight = totalRows * (coverSize + labelHeight + 8) + Math.max(0, totalRows - 1) * COVER_GAP_PX;
+  const scrollDistance = Math.max(0, trackHeight - height);
+  const speed = scrollPixelsPerSecond(presentation.scroll);
+  const animationDurationSec = speed > 0 && scrollDistance > 0 ? scrollDistance / speed : 0;
+
+  return {
+    coverSize,
+    visibleCount,
+    columns,
+    rows,
+    scrollDistance,
+    animationDurationSec,
+  };
+}
+
 function CoverTile({
   song,
-  onSingleClick,
-  onDoubleClick,
+  presentation,
+  coverSize,
+  onActivate,
 }: {
   song: VcUpcomingSong;
-  onSingleClick: () => void;
-  onDoubleClick: () => void;
+  presentation: EffectiveUpcomingCoversPresentation;
+  coverSize: number;
+  onActivate: () => void;
 }) {
+  const textStyle = { color: presentation.textColor };
+
   return (
     <button
       type="button"
       className="vc-upcoming-cover-tile"
-      onClick={onSingleClick}
+      style={{ width: coverSize }}
+      onClick={onActivate}
       onDoubleClick={(event) => {
         event.preventDefault();
-        onDoubleClick();
+        sendVcTransport({ type: 'playSong', songId: song.id });
       }}
     >
+      {presentation.showArtist && song.artist ? (
+        <span className="vc-upcoming-cover-artist" style={textStyle}>
+          {song.artist}
+        </span>
+      ) : null}
       {song.coverUrl ? (
-        <img className="vc-upcoming-cover-img" src={song.coverUrl} alt="" />
+        <img
+          className="vc-upcoming-cover-img"
+          src={song.coverUrl}
+          alt=""
+          style={{ width: coverSize, height: coverSize }}
+        />
       ) : (
-        <div className="vc-upcoming-cover-placeholder" aria-hidden="true" />
+        <div
+          className="vc-upcoming-cover-placeholder"
+          aria-hidden="true"
+          style={{ width: coverSize, height: coverSize }}
+        />
       )}
-      <span className="vc-upcoming-cover-title">{song.title}</span>
+      {presentation.showTitle ? (
+        <span className="vc-upcoming-cover-title" style={textStyle}>
+          {song.title}
+        </span>
+      ) : null}
     </button>
   );
 }
 
-/** Upcoming playlist covers — gallery (multi-row) or overflow (single horizontal row). */
+/** Upcoming playlist covers — fit-to-region single row or multi-row grid with optional scroll. */
 export function VcUpcomingCoversView({ songs, presentation }: VcUpcomingCoversViewProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const [enlargedId, setEnlargedId] = useState<number | null>(null);
   const enlarged = songs.find((song) => song.id === enlargedId) ?? null;
 
-  const layoutClass =
-    presentation.layout === 'gallery' ? 'vc-upcoming-gallery' : 'vc-upcoming-overflow';
+  useLayoutEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
 
-  const gridStyle = useMemo((): CSSProperties | undefined => {
-    if (presentation.layout !== 'gallery') return undefined;
-    return {
-      gridTemplateColumns: `repeat(auto-fill, minmax(${MIN_COVER_PX}px, 1fr))`,
-      gap: `${COVER_GAP_PX}px`,
+    const measure = () => {
+      const rect = node.getBoundingClientRect();
+      setSize({ width: rect.width, height: rect.height });
     };
-  }, [presentation.layout]);
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const dismissZoom = useCallback(() => setEnlargedId(null), []);
+
+  useEffect(() => {
+    if (!enlarged) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismissZoom();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [dismissZoom, enlarged]);
+
+  const metrics = useMemo(() => {
+    if (presentation.layout === 'multi-row') {
+      return computeMultiRowLayout(size.width, size.height, songs.length, presentation);
+    }
+    return computeSingleRowLayout(size.width, size.height, songs.length, presentation);
+  }, [presentation, size.height, size.width, songs.length]);
+
+  const staticSlice = presentation.scroll === 'static';
+  const visibleSongs =
+    staticSlice && songs.length > metrics.visibleCount
+      ? songs.slice(0, metrics.visibleCount)
+      : songs;
+  const shouldCenter =
+    staticSlice && visibleSongs.length > 0 && visibleSongs.length < metrics.visibleCount;
+
+  const scrollActive =
+    !staticSlice && metrics.scrollDistance > 0 && presentation.scroll !== 'static';
+
+  const trackStyle = useMemo((): CSSProperties => {
+    if (!scrollActive) return {};
+    const axis = presentation.layout === 'multi-row' ? 'Y' : 'X';
+    const animationName = isBounceScroll(presentation.scroll)
+      ? `vc-upcoming-bounce-${axis.toLowerCase()}`
+      : `vc-upcoming-marquee-${axis.toLowerCase()}`;
+    return {
+      ['--scroll-distance' as string]: `${metrics.scrollDistance}px`,
+      animationName,
+      animationDuration: `${Math.max(metrics.animationDurationSec, 4)}s`,
+      animationTimingFunction: isBounceScroll(presentation.scroll) ? 'ease-in-out' : 'linear',
+      animationIterationCount: 'infinite',
+    };
+  }, [metrics.animationDurationSec, metrics.scrollDistance, presentation.layout, presentation.scroll, scrollActive]);
+
+  const handleCoverActivate = (songId: number) => {
+    if (presentation.clickToZoom) {
+      setEnlargedId(songId);
+      return;
+    }
+    sendVcTransport({ type: 'playSong', songId });
+  };
 
   if (!songs.length) return <div className="vc-cell-empty" />;
 
+  const layoutClass =
+    presentation.layout === 'multi-row' ? 'vc-upcoming-multi-row' : 'vc-upcoming-single-row';
+
   return (
     <>
-      <div className={`vc-upcoming-covers ${layoutClass}`} style={gridStyle}>
-        {songs.map((song) => (
-          <CoverTile
-            key={song.id}
-            song={song}
-            onSingleClick={() => setEnlargedId(song.id)}
-            onDoubleClick={() => {
-              setEnlargedId(null);
-              sendVcTransport({ type: 'playSong', songId: song.id });
-            }}
-          />
-        ))}
+      <div
+        ref={containerRef}
+        className={`vc-upcoming-covers ${layoutClass}${shouldCenter ? ' is-centered' : ''}${
+          scrollActive ? ' is-scrolling' : ''
+        }`}
+      >
+        <div
+          className={`vc-upcoming-track${presentation.layout === 'multi-row' ? ' vc-upcoming-track-grid' : ''}`}
+          style={{
+            ...trackStyle,
+            gap: `${COVER_GAP_PX}px`,
+            ...(presentation.layout === 'multi-row'
+              ? { gridTemplateColumns: `repeat(${metrics.columns}, ${metrics.coverSize}px)` }
+              : undefined),
+          }}
+        >
+          {visibleSongs.map((song) => (
+            <CoverTile
+              key={song.id}
+              song={song}
+              presentation={presentation}
+              coverSize={metrics.coverSize}
+              onActivate={() => handleCoverActivate(song.id)}
+            />
+          ))}
+        </div>
       </div>
 
-      {enlarged ? (
+      {enlarged && presentation.clickToZoom ? (
         <div
           className="vc-upcoming-enlarge-backdrop"
           role="presentation"
-          onClick={() => setEnlargedId(null)}
+          onClick={dismissZoom}
         >
           <div
             className="vc-upcoming-enlarge-modal"

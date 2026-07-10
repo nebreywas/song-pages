@@ -35,7 +35,6 @@ type VcSurfaceProps = {
   frequencyData: Uint8Array;
   frame: number;
   canvasFrame: string | null;
-  debugOutlines?: boolean;
   layoutMode?: boolean;
   onChangeSurface?: (patch: Partial<VcModeConfig['surface']>) => void;
 };
@@ -84,7 +83,6 @@ export function VcSurface({
   frequencyData,
   frame,
   canvasFrame,
-  debugOutlines = false,
   layoutMode = false,
   onChangeSurface,
 }: VcSurfaceProps) {
@@ -119,7 +117,6 @@ export function VcSurface({
     onChangeSurface: onChangeSurface ?? (() => {}),
   });
 
-  const debugClass = debugOutlines ? ' vc-debug-outline' : '';
   const layoutClass = layoutMode ? ' vc-layout-mode' : '';
   const draggingClass = drag ? ' is-dragging' : '';
 
@@ -145,7 +142,7 @@ export function VcSurface({
     >
       <div
         ref={surfaceRef}
-        className={`vc-surface${debugOutlines ? ' vc-surface-debug' : ''}${layoutClass}${
+        className={`vc-surface${layoutClass}${
           hasActiveFullscreenGraphic(config.gridDesign) ? ' vc-has-fullscreen-graphic' : ''
         }`}
         style={
@@ -171,7 +168,7 @@ export function VcSurface({
           return (
             <div
               key={`area-${area.areaNumber}`}
-              className={`vc-surface-region${debugClass}${layoutMode ? ' vc-layout-region' : ''}${selected ? ' is-layout-selected' : ''}`}
+              className={`vc-surface-region${layoutMode ? ' vc-layout-region' : ''}${selected ? ' is-layout-selected' : ''}`}
               style={{
                 ...rectStyle(area),
                 background: areaBackground,
@@ -183,7 +180,6 @@ export function VcSurface({
                   ? {}
                   : regionOutlineCss(cell, config.gridDesign)),
               } as React.CSSProperties}
-              data-debug-label={debugOutlines ? `Area ${area.areaNumber}` : undefined}
               onPointerDown={
                 layoutMode
                   ? (event) => {
@@ -225,7 +221,7 @@ export function VcSurface({
           return (
             <div
               key={float.id}
-              className={`vc-surface-region vc-surface-float${debugClass}${layoutMode ? ' vc-layout-region vc-layout-float' : ''}${selected ? ' is-layout-selected' : ''}${isDragging ? ' is-layout-dragging' : ''}`}
+              className={`vc-surface-region vc-surface-float${layoutMode ? ' vc-layout-region vc-layout-float' : ''}${selected ? ' is-layout-selected' : ''}${isDragging ? ' is-layout-dragging' : ''}`}
               style={{
                 ...rectStyle(float),
                 zIndex: layoutMode ? 40 + float.zIndex : 10 + float.zIndex,
@@ -236,7 +232,6 @@ export function VcSurface({
                   config.gridDesign.backgroundColor,
                 ),
               } as React.CSSProperties}
-              data-debug-label={debugOutlines ? `Float ${floatNumber}` : undefined}
               onPointerDown={
                 layoutMode
                   ? (event) => {

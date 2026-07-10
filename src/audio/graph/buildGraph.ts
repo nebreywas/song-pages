@@ -4,30 +4,29 @@ import {
   BASS_FREQUENCY_HZ,
   BASS_GAIN_DB,
   FFT_SIZE,
-  LOFI_DRIVE_AMOUNT,
   LOFI_LOWPASS_HZ,
 } from '../constants';
+import { LINEAR_CURVE, LOFI_DRIVE_CURVE } from './driveCurve';
+import { applyLabEffectParams } from '../effectsLab/applyLabPreset';
+import { bypassParams } from '../effectsLab/presets';
+import {
+  createLabPerformanceNodes,
+  resetLabPerformanceNodes,
+} from '../effectsLab/performance/labPerformanceNodes';
+import { createLabSpatialNodes } from '../effectsLab/spatial/labSpatialNodes';
+import {
+  applyLabWorkletEnhance,
+  createLabWorkletEnhanceNodes,
+} from '../effectsLab/worklet/labWorkletEnhance';
 import type {
   AudioGraph,
   AudioGraphEffects,
+  AudioGraphLabNodes,
   BuildGraphOptions,
   ButterchurnAudioNodes,
   ButterchurnAudioSettings,
   PlaybackEffectSettings,
 } from '../types';
-
-function makeDriveCurve(amount: number): Float32Array<ArrayBuffer> {
-  const samples = 44100;
-  const curve = new Float32Array(samples);
-  for (let i = 0; i < samples; i += 1) {
-    const x = (i * 2) / samples - 1;
-    curve[i] = ((1 + amount) * x) / (1 + amount * Math.abs(x));
-  }
-  return curve;
-}
-
-const LINEAR_CURVE = makeDriveCurve(0);
-const LOFI_DRIVE_CURVE = makeDriveCurve(LOFI_DRIVE_AMOUNT);
 
 function createEffectsNodes(context: AudioContext): AudioGraphEffects {
   const bassFilter = context.createBiquadFilter();
@@ -46,6 +45,41 @@ function createEffectsNodes(context: AudioContext): AudioGraphEffects {
   lofiDrive.oversample = '4x';
 
   return { bassFilter, lofiLowpass, lofiDrive };
+}
+
+function createLabNodes(context: AudioContext): Omit<AudioGraphLabNodes, 'spatial'> {
+  const highpass = context.createBiquadFilter();
+  highpass.type = 'highpass';
+  highpass.frequency.value = 20;
+  highpass.Q.value = 0.7;
+
+  const highShelf = context.createBiquadFilter();
+  highShelf.type = 'highshelf';
+  highShelf.frequency.value = 8000;
+  highShelf.gain.value = 0;
+
+  const midPeaking = context.createBiquadFilter();
+  midPeaking.type = 'peaking';
+  midPeaking.frequency.value = 800;
+  midPeaking.Q.value = 1;
+  midPeaking.gain.value = 0;
+
+  const compressor = context.createDynamicsCompressor();
+  compressor.threshold.value = 0;
+  compressor.ratio.value = 1;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.25;
+  compressor.knee.value = 6;
+
+  const outputTrim = context.createGain();
+  outputTrim.gain.value = 1;
+
+  highpass.connect(highShelf);
+  highShelf.connect(midPeaking);
+  midPeaking.connect(compressor);
+  compressor.connect(outputTrim);
+
+  return { highpass, highShelf, midPeaking, compressor, outputTrim };
 }
 
 function createButterchurnAudioNodes(context: AudioContext): ButterchurnAudioNodes {
@@ -95,6 +129,10 @@ export function buildAudioGraphFromSource(
   options: BuildGraphOptions,
 ): AudioGraph {
   const effects = createEffectsNodes(context);
+  const lab = createLabNodes(context);
+  const workletEnhance = createLabWorkletEnhanceNodes(context);
+  const performance = createLabPerformanceNodes(context);
+  const spatial = createLabSpatialNodes(context);
   const analyser = context.createAnalyser();
   analyser.fftSize = FFT_SIZE;
   analyser.smoothingTimeConstant = 0.75;
@@ -104,7 +142,11 @@ export function buildAudioGraphFromSource(
   source.connect(effects.bassFilter);
   effects.bassFilter.connect(effects.lofiLowpass);
   effects.lofiLowpass.connect(effects.lofiDrive);
-  effects.lofiDrive.connect(analyser);
+  effects.lofiDrive.connect(lab.highpass);
+  lab.outputTrim.connect(workletEnhance.input);
+  workletEnhance.output.connect(performance.input);
+  performance.output.connect(spatial.input);
+  spatial.output.connect(analyser);
 
   let speakerGain: GainNode | null = null;
   if (options.connectSpeakers) {
@@ -136,11 +178,18 @@ export function buildAudioGraphFromSource(
     butterchurnTap: butterchurnAudio.tap,
     butterchurnAudio,
     effects,
+    lab: { ...lab, spatial },
+    performance,
+    workletEnhance,
+    tapeMod: workletEnhance,
     applyButterchurnAudioSettings: applyButterchurn,
   };
 
   applyButterchurn({ sensitivity: 1, bassEmphasis: 0 });
   applyPlaybackEffects(graph, { bassBoost: false, lofi: false });
+  applyLabEffectParams(graph, bypassParams());
+  applyLabWorkletEnhance(workletEnhance, null, false);
+  resetLabPerformanceNodes(performance, context);
   return graph;
 }
 

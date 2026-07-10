@@ -82,28 +82,6 @@
   background: transparent;
 }
 
-.vc-surface-region.vc-debug-outline {
-  outline: 3px solid #ff0000;
-  outline-offset: -3px;
-  box-shadow: inset 0 0 0 1px #ff0000;
-}
-
-.vc-surface-region.vc-debug-outline::after {
-  content: attr(data-debug-label);
-  position: absolute;
-  top: 0.35rem;
-  left: 0.35rem;
-  z-index: 50;
-  padding: 0.15rem 0.4rem;
-  border-radius: 3px;
-  font: 700 0.72rem/1.2 system-ui, sans-serif;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: #fff;
-  background: #ff0000;
-  pointer-events: none;
-}
-
 .vc-cell {
   position: relative;
   flex: 1 1 auto;
@@ -448,7 +426,7 @@
 
 .vc-overlay {
   position: absolute;
-  z-index: 20;
+  z-index: 40;
   pointer-events: none;
 }
 
@@ -500,8 +478,29 @@
   box-sizing: content-box;
 }
 
-.vc-overlay-info-box,
-.vc-overlay-upcoming-box {
+.vc-overlay-host-status {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f0f2f6;
+  font-size: 0.95rem;
+}
+
+.vc-overlay-empty-message {
+  margin: 0;
+  max-width: min(28rem, 70vw);
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d8dee8;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.vc-overlay-info-box {
   width: min(36rem, 86vw);
   max-height: 70vh;
   overflow: auto;
@@ -532,19 +531,206 @@
   line-height: 1.5;
 }
 
-.vc-overlay-upcoming-box ul {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
+/* Upcoming queue hotkey overlay — position from VC Settings (left | center | right). */
+.vc-overlay-upcoming {
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: clamp(1.25rem, 4vw, 2.75rem);
+  box-sizing: border-box;
+  /* Backdrop passes clicks through; panel re-enables pointer events for wheel scroll. */
+  pointer-events: none;
 }
 
-.vc-overlay-upcoming-box li {
+.vc-overlay-upcoming--left {
+  justify-content: flex-start;
+}
+
+.vc-overlay-upcoming--center {
+  justify-content: center;
+}
+
+.vc-overlay-upcoming--right {
+  justify-content: flex-end;
+}
+
+.vc-upcoming-panel {
+  width: min(34rem, 92vw);
+  max-height: min(82vh, 52rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(1.1rem, 2.2vw, 1.65rem);
+  border-radius: 18px;
+  background: linear-gradient(155deg, rgba(14, 20, 32, 0.96) 0%, rgba(8, 10, 18, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px);
+  color: #eef2f8;
+  pointer-events: auto;
+}
+
+.vc-upcoming-panel-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.vc-upcoming-panel-eyebrow {
+  margin: 0 0 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8b95a8;
+}
+
+.vc-upcoming-panel-title {
+  margin: 0;
+  font-size: clamp(1.65rem, 3.2vw, 2.35rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.vc-upcoming-panel-count {
+  flex-shrink: 0;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #c5cedd;
+}
+
+.vc-upcoming-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.15rem 0.35rem 0.15rem 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.vc-upcoming-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.vc-upcoming-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.vc-upcoming-row {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 0.5rem;
-  padding: 0.35rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0.88rem;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.vc-upcoming-row:first-child {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.vc-upcoming-rank {
+  min-width: 2rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #6f7a90;
+  text-align: center;
+}
+
+.vc-upcoming-row:first-child .vc-upcoming-rank {
+  color: #f0b35a;
+}
+
+.vc-upcoming-cover-wrap {
+  flex-shrink: 0;
+}
+
+.vc-upcoming-cover {
+  width: 4.25rem;
+  height: 4.25rem;
+  border-radius: 10px;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.vc-upcoming-cover-placeholder {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vc-upcoming-meta {
+  min-width: 0;
+}
+
+.vc-upcoming-title {
+  margin: 0;
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vc-upcoming-artist {
+  margin: 0.2rem 0 0;
+  font-size: clamp(0.92rem, 1.6vw, 1.05rem);
+  line-height: 1.25;
+  color: #a8b2c4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vc-upcoming-duration {
+  flex-shrink: 0;
+  padding: 0.3rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #d0d7e4;
+}
+
+.vc-upcoming-empty {
+  margin: 0.5rem 0 0;
+  padding: 1.25rem 1rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  text-align: center;
+  font-size: 1.05rem;
+  color: #a8b2c4;
 }
 
 .vc-kudo-layer-root {
@@ -898,35 +1084,82 @@
   border-radius: inherit;
 }
 
-/* --- Upcoming covers gallery --- */
+/* --- Upcoming covers --- */
+
+@keyframes vc-upcoming-marquee-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-1 * var(--scroll-distance, 0px)));
+  }
+}
+
+@keyframes vc-upcoming-bounce-x {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(calc(-1 * var(--scroll-distance, 0px)));
+  }
+}
+
+@keyframes vc-upcoming-marquee-y {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(-1 * var(--scroll-distance, 0px)));
+  }
+}
+
+@keyframes vc-upcoming-bounce-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(calc(-1 * var(--scroll-distance, 0px)));
+  }
+}
 
 .vc-upcoming-covers {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
   padding: 0.35rem;
+  overflow: hidden;
 }
 
-.vc-upcoming-overflow {
+.vc-upcoming-covers.is-centered {
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 20px;
-  overflow-x: auto;
-  overflow-y: hidden;
 }
 
-.vc-upcoming-gallery {
+.vc-upcoming-single-row .vc-upcoming-track {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 100%;
+}
+
+.vc-upcoming-multi-row .vc-upcoming-track-grid {
   display: grid;
   align-content: start;
-  overflow: auto;
+}
+
+.vc-upcoming-covers.is-scrolling .vc-upcoming-track {
+  will-change: transform;
 }
 
 .vc-upcoming-cover-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  min-width: 120px;
+  gap: 0.25rem;
+  flex-shrink: 0;
   border: none;
   background: transparent;
   color: #fff;
@@ -934,23 +1167,22 @@
   padding: 0;
 }
 
-.vc-upcoming-cover-img,
-.vc-upcoming-cover-placeholder {
-  width: 120px;
-  height: 120px;
-  object-fit: cover;
-  border-radius: 0.35rem;
-  background: rgba(255, 255, 255, 0.08);
-}
-
+.vc-upcoming-cover-artist,
 .vc-upcoming-cover-title {
   font-size: 0.72rem;
   line-height: 1.2;
   text-align: center;
-  max-width: 120px;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.vc-upcoming-cover-img,
+.vc-upcoming-cover-placeholder {
+  object-fit: cover;
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .vc-upcoming-enlarge-backdrop {
@@ -975,6 +1207,24 @@
   max-height: 16rem;
   object-fit: contain;
   border-radius: 0.35rem;
+}
+
+/* Special play style pause countdown (lower-right, broadcast surface). */
+.vc-special-play-countdown {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 180;
+  min-width: 3.5rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.35rem;
+  background: #fff;
+  color: #c00;
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .vc-upcoming-enlarge-title {
@@ -1052,8 +1302,34 @@
 }
 
 .vc-surface.vc-layout-mode .vc-layout-region.is-layout-selected {
-  outline-color: #ffb347;
+  outline-color: #3b82f6;
   z-index: 45;
+}
+
+/* Faint center guides for layout positioning (50% vertical + horizontal). */
+.vc-surface.vc-layout-mode::before,
+.vc-surface.vc-layout-mode::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+  background: rgba(220, 38, 38, 0.22);
+}
+
+.vc-surface.vc-layout-mode::before {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.vc-surface.vc-layout-mode::after {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform: translateY(-50%);
 }
 
 .vc-layout-region-content {

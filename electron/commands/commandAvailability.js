@@ -6,12 +6,15 @@
 /** @typedef {import('../../shared/commands/runtimeContext').CommandRuntimeContext} CommandRuntimeContext */
 
 const CONTEXTUAL_RULES = {
-  'toggle-next-overlay': ['requiresNextSong'],
-  'toggle-upcoming': ['requiresUpcomingSongs'],
-  'toggle-song-info': ['requiresCurrentSong'],
-  'toggle-cover': ['requiresCoverArt'],
-  'toggle-host': ['requiresHostGraphic'],
-  'toggle-remaining': ['requiresPlaybackTiming'],
+  'seek-back-500': ['requiresCurrentSong'],
+  'seek-back-1s': ['requiresCurrentSong'],
+  'seek-back-2s': ['requiresCurrentSong'],
+  'seek-back-5s': ['requiresCurrentSong'],
+  'stutter-500': ['requiresCurrentSong'],
+  'stutter-1000': ['requiresCurrentSong'],
+  'stutter-1500': ['requiresCurrentSong'],
+  'stutter-2000': ['requiresCurrentSong'],
+  'play-next-song': ['requiresSpecialPlayPause'],
 };
 
 const CONTEXT_FLAG_BY_RULE = {
@@ -21,6 +24,7 @@ const CONTEXT_FLAG_BY_RULE = {
   requiresCoverArt: 'hasCoverArt',
   requiresHostGraphic: 'hasHostGraphic',
   requiresPlaybackTiming: 'hasPlaybackTiming',
+  requiresSpecialPlayPause: 'specialPlayPauseActive',
 };
 
 /**

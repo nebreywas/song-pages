@@ -20,6 +20,13 @@ function sendOpenSettings() {
   }
 }
 
+/** Reopen VC Controller if the host closed it while VC Mode (or keybinding setup) is active. */
+function showVcControllerWindow() {
+  if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
+  const { openControllerWindow } = require('./controllerWindow');
+  openControllerWindow(mainWindowRef);
+}
+
 function buildAppMenu(isDev) {
   const isMac = process.platform === 'darwin';
 
@@ -68,6 +75,11 @@ function buildAppMenu(isDev) {
         label: 'Settings…',
         accelerator: 'CmdOrCtrl+,',
         click: () => sendOpenSettings(),
+      },
+      { type: 'separator' },
+      {
+        label: 'Show VC Controller',
+        click: () => showVcControllerWindow(),
       },
     ],
   });

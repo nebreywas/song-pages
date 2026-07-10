@@ -1,5 +1,7 @@
 import type { CommandOverlayRow } from '@shared/commands';
 
+import { CommandDisplayLabel } from './CommandDisplayLabel';
+
 type GateOverlayListProps = {
   rows: CommandOverlayRow[];
   /** Show ESC abort row — live gate overlay only. */
@@ -37,7 +39,9 @@ export function GateOverlayList({
             aria-disabled={row.available ? undefined : true}
           >
             <span className="gate-overlay-key">{row.key}</span>
-            <span className="gate-overlay-label">{row.label}</span>
+            <span className="gate-overlay-label">
+              <CommandDisplayLabel label={row.label} />
+            </span>
             {!row.available ? <span className="gate-overlay-unavailable-tag">Unavailable</span> : null}
           </li>
         ))}

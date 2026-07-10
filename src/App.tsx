@@ -5,6 +5,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { getApp } from './lib/bridge';
 import { useAppTheme } from './lib/useAppTheme';
 import { useAudioDebugHotkey } from './audio/debug/AudioDebugPanel';
+import { useEffectsLabHotkey } from './audio/effectsLab/effectsLabStore';
 import { ListenerMode } from './listener/ListenerMode';
 import { ArtistMode } from './artist/ArtistMode';
 import { DeveloperMode } from './developer/DeveloperMode';
@@ -28,6 +29,7 @@ export default function App() {
   }, []);
 
   useAudioDebugHotkey();
+  useEffectsLabHotkey();
 
   return (
     <div className="app-root">

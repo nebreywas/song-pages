@@ -24,14 +24,22 @@ import {
   resetTemplateProportions,
   switchTemplate,
   type VcCellAssignment,
+  VC_UPCOMING_OVERLAY_MAX_OPTIONS,
+  VC_UPCOMING_OVERLAY_POSITION_OPTIONS,
   type VcModeConfig,
   type VcStatePayload,
   type VcTemplateId,
 } from '@shared/vcModeTypes';
+import { DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR } from '@shared/vcMode/playbackEffectsMirror';
+import {
+  VC_SPECIAL_PLAY_STYLE_OPTIONS,
+  type VcSpecialPlayStyle,
+} from '@shared/vcMode/specialPlayStyles';
 import type { KudoPreset } from '@shared/kudos';
 import {
   createDefaultHostContentCatalog,
   HOST_CONTENT_SETTINGS_KEY,
+  listItemsByType,
   migrateHostContentCatalog,
   type HostContentCatalog,
 } from '@shared/hostContent';
@@ -44,11 +52,14 @@ import { useVcVisualizerRotation } from './useVcVisualizerRotation';
 import { DesignerCanvas, type DesignerSelection } from './designer/DesignerCanvas';
 import { GridDesignSettingsPanel } from './designer/GridDesignSettingsPanel';
 import { RegionContentPopover, type RegionTarget } from './designer/RegionContentPopover';
+import { HelpTooltip } from '../components/HelpTooltip';
 import { HostContentManager } from './host-content/HostContentManager';
 import { KeyBindingsPanel } from '../commands/KeyBindingsPanel';
 import { KudosManager } from './kudos/KudosManager';
+import { HostGraphicPreviewPopover } from './settings/HostGraphicPreviewPopover';
 import { createDefaultVcConfig, migrateVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
 import { useAutoSaveVcConfig, vcConfigSaveStatusLabel } from './useAutoSaveVcConfig';
+import { useHostGraphicPopupUrl } from './useHostGraphicPopupUrl';
 
 type VcModeModalProps = {
   open: boolean;
@@ -76,6 +87,15 @@ const DESIGNER_TABS: Array<{ id: DesignerTab; label: string }> = [
   { id: 'kudos', label: 'Kudos' },
   { id: 'settings', label: 'Settings' },
 ];
+
+const DESIGNER_TAB_FOOTER_HINTS: Record<DesignerTab, string> = {
+  surface:
+    'Right-click an area or float to assign content. Left-click floats to drag; use the corner handle to resize.',
+  'host-content':
+    'Create reusable host content — graphics, text groups, and fallback slots for your surface assignments.',
+  kudos: 'Define Kudo presets for audience reactions; bind keys in Settings when a preset is ready.',
+  settings: 'Configure content protection, between-song behavior, and key bindings for your show.',
+};
 
 function cellNeedsCycle(cell: VcCellAssignment): boolean {
   return cell.slotA !== '' && cell.slotB !== '';
@@ -268,16 +288,19 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
       previewState?.audioMirror?.songId ?? previewState?.currentSong?.id ?? null,
   });
 
+  const hostGraphicPopupUrl = useHostGraphicPopupUrl(hostCatalog, config.hostGraphicPopupId);
+  const hostGraphicOptions = useMemo(() => listItemsByType(hostCatalog, 'graphic'), [hostCatalog]);
+
   const designerPreview = useMemo((): VcStatePayload => {
     if (!previewState) {
       return {
         config,
         playback: { currentTime: 0, duration: 0, isPlaying: false },
-        audioMirror: { songId: null, playbackUrl: null, volume: 1 },
+        audioMirror: { songId: null, playbackUrl: null, volume: 1, playbackEffects: DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR },
         currentSong: null,
         nextSong: null,
         upcoming: [],
-        hostGraphicUrl: null,
+        hostGraphicUrl: hostGraphicPopupUrl,
         artistName: null,
         artistBio: null,
         artistPhotoUrl: null,
@@ -286,9 +309,9 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
     return {
       ...previewState,
       config,
-      hostGraphicUrl: null,
+      hostGraphicUrl: hostGraphicPopupUrl,
     };
-  }, [config, previewState]);
+  }, [config, hostGraphicPopupUrl, previewState]);
 
   const reloadHostCatalog = useCallback(() => {
     const app = getApp();
@@ -306,7 +329,7 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
         setGridDesignOpen(false);
         setSelection(null);
       }
-      if (tab === 'surface') {
+      if (tab === 'surface' || tab === 'settings') {
         reloadHostCatalog();
       }
     },
@@ -409,32 +432,34 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
       >
         <header className="vc-modal-header">
           <h2 id="vc-modal-title">VC Mode Designer</h2>
-          {saveStatusLabel ? (
-            <p
-              className={`vc-autosave-status vc-autosave-status-${saveStatus}`}
-              aria-live="polite"
-            >
-              {saveStatusLabel}
-            </p>
-          ) : null}
+          <button
+            type="button"
+            className="vc-modal-close"
+            onClick={onClose}
+            aria-label="Close VC Mode Designer"
+          >
+            ×
+          </button>
         </header>
 
-        <nav className="vc-designer-tabs" role="tablist" aria-label="VC Mode Designer sections">
-          {DESIGNER_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              id={`vc-designer-tab-${tab.id}`}
-              className={`vc-designer-tab${designerTab === tab.id ? ' is-active' : ''}`}
-              aria-selected={designerTab === tab.id}
-              aria-controls={`vc-designer-panel-${tab.id}`}
-              onClick={() => selectDesignerTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <div className="vc-designer-tabs-bar">
+          <nav className="vc-designer-tabs" role="tablist" aria-label="VC Mode Designer sections">
+            {DESIGNER_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`vc-designer-tab-${tab.id}`}
+                className={`vc-designer-tab${designerTab === tab.id ? ' is-active' : ''}`}
+                aria-selected={designerTab === tab.id}
+                aria-controls={`vc-designer-panel-${tab.id}`}
+                onClick={() => selectDesignerTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
 
         <div className="vc-designer-stage">
           {designerTab === 'surface' ? (
@@ -480,6 +505,14 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                 >
                   Grid Design Settings
                 </button>
+                {saveStatusLabel ? (
+                  <p
+                    className={`vc-autosave-status vc-surface-toolbar-autosave vc-autosave-status-${saveStatus}`}
+                    aria-live="polite"
+                  >
+                    {saveStatusLabel}
+                  </p>
+                ) : null}
               </div>
 
               <DesignerCanvas
@@ -531,30 +564,205 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
 
           {designerTab === 'settings' ? (
             <div
-              className="vc-designer-tab-panel"
+              className="vc-designer-tab-panel vc-designer-tab-panel-scroll"
               role="tabpanel"
               id="vc-designer-panel-settings"
               aria-labelledby="vc-designer-tab-settings"
             >
               <div className="vc-settings-panel">
-                <label className="vc-field vc-field-inline">
-                  <input
-                    type="checkbox"
-                    checked={config.useFallbacks !== false}
-                    onChange={(e) => {
-                      setConfig((prev) =>
-                        normalizeVcConfig({ ...prev, useFallbacks: e.target.checked }),
-                      );
-                    }}
-                  />
-                  <span>Use fallbacks when song content is missing</span>
-                </label>
-                <p className="vc-settings-hint">
-                  When enabled, missing song fields resolve through Host Content fallbacks, then system
-                  defaults. When disabled, unavailable song content renders blank.
-                </p>
+                <section className="vc-settings-section">
+                  <h3>VC Mode Settings</h3>
 
-                <KeyBindingsPanel />
+                  <div className="vc-settings-checkbox-row">
+                    <label className="vc-field vc-field-inline vc-settings-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={config.useFallbacks !== false}
+                        onChange={(e) => {
+                          setConfig((prev) =>
+                            normalizeVcConfig({ ...prev, useFallbacks: e.target.checked }),
+                          );
+                        }}
+                      />
+                      <span>Missing content protection</span>
+                    </label>
+                    <HelpTooltip ariaLabel="About missing content protection">
+                      When enabled, missing information attempts to be resolved by host/system content
+                      to avoid blank VC mode content.
+                    </HelpTooltip>
+                  </div>
+
+                  <div className="vc-settings-host-popup">
+                    <label className="vc-settings-host-popup-label" htmlFor="vc-host-graphic-popup">
+                      Host Content Graphic Popup
+                    </label>
+                    <div className="vc-settings-host-popup-controls">
+                      <select
+                        id="vc-host-graphic-popup"
+                        className="vc-settings-host-popup-select"
+                        value={config.hostGraphicPopupId ?? ''}
+                        onChange={(e) => {
+                          setConfig((prev) =>
+                            normalizeVcConfig({
+                              ...prev,
+                              hostGraphicPopupId: e.target.value || null,
+                            }),
+                          );
+                        }}
+                      >
+                        <option value="">None</option>
+                        {hostGraphicOptions.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                      <HostGraphicPreviewPopover
+                        itemId={config.hostGraphicPopupId}
+                        catalog={hostCatalog}
+                      />
+                    </div>
+                    <p className="vc-settings-hint">
+                      Pops up on the VC surface when you press Toggle Host Graphic Display (default
+                      OCAW+F).
+                    </p>
+                  </div>
+
+                  <div className="vc-settings-upcoming">
+                    <label className="vc-settings-upcoming-label" htmlFor="vc-upcoming-position">
+                      Upcoming overlay position
+                    </label>
+                    <select
+                      id="vc-upcoming-position"
+                      className="vc-settings-upcoming-select"
+                      value={config.upcomingOverlay.position}
+                      onChange={(e) => {
+                        setConfig((prev) =>
+                          normalizeVcConfig({
+                            ...prev,
+                            upcomingOverlay: {
+                              ...prev.upcomingOverlay,
+                              position: e.target.value as VcModeConfig['upcomingOverlay']['position'],
+                            },
+                          }),
+                        );
+                      }}
+                    >
+                      {VC_UPCOMING_OVERLAY_POSITION_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <label className="vc-settings-upcoming-label" htmlFor="vc-upcoming-max">
+                      Max upcoming to display
+                    </label>
+                    <select
+                      id="vc-upcoming-max"
+                      className="vc-settings-upcoming-select"
+                      value={config.upcomingOverlay.maxCount}
+                      onChange={(e) => {
+                        setConfig((prev) =>
+                          normalizeVcConfig({
+                            ...prev,
+                            upcomingOverlay: {
+                              ...prev.upcomingOverlay,
+                              maxCount: Number(e.target.value) as VcModeConfig['upcomingOverlay']['maxCount'],
+                            },
+                          }),
+                        );
+                      }}
+                    >
+                      {VC_UPCOMING_OVERLAY_MAX_OPTIONS.map((count) => (
+                        <option key={count} value={count}>
+                          {count}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="vc-settings-hint">
+                      Toggle Upcoming (default OCAW+U) shows this list on the VC projection surface.
+                    </p>
+                  </div>
+                </section>
+
+                <section className="vc-settings-section">
+                  <h3>Special Play Styles</h3>
+                  <div className="vc-settings-play-style">
+                    <label className="vc-settings-play-style-label" htmlFor="vc-between-song-behavior">
+                      Between-song behavior
+                    </label>
+                    <div className="vc-settings-play-style-controls">
+                      <select
+                        id="vc-between-song-behavior"
+                        className="vc-settings-play-style-select"
+                        value={config.specialPlayStyle.style}
+                        onChange={(e) => {
+                          const style = e.target.value as VcSpecialPlayStyle;
+                          setConfig((prev) =>
+                            normalizeVcConfig({
+                              ...prev,
+                              specialPlayStyle: { ...prev.specialPlayStyle, style },
+                            }),
+                          );
+                        }}
+                      >
+                        {VC_SPECIAL_PLAY_STYLE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      {config.specialPlayStyle.style !== 'normal' ? (
+                        <div className="vc-settings-play-style-options">
+                          <label className="vc-field vc-field-inline">
+                            <input
+                              type="checkbox"
+                              checked={config.specialPlayStyle.showCountdownOnSurface}
+                              onChange={(e) =>
+                                setConfig((prev) =>
+                                  normalizeVcConfig({
+                                    ...prev,
+                                    specialPlayStyle: {
+                                      ...prev.specialPlayStyle,
+                                      showCountdownOnSurface: e.target.checked,
+                                    },
+                                  }),
+                                )
+                              }
+                            />
+                            <span>Show countdown on screen?</span>
+                          </label>
+                          <label className="vc-field vc-field-inline">
+                            <input
+                              type="checkbox"
+                              checked={config.specialPlayStyle.showCountdownOnController}
+                              onChange={(e) =>
+                                setConfig((prev) =>
+                                  normalizeVcConfig({
+                                    ...prev,
+                                    specialPlayStyle: {
+                                      ...prev.specialPlayStyle,
+                                      showCountdownOnController: e.target.checked,
+                                    },
+                                  }),
+                                )
+                              }
+                            />
+                            <span>Show countdown on surface control?</span>
+                          </label>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="vc-settings-section vc-settings-keybindings">
+                  <hr className="vc-settings-section-divider" />
+                  <h3>Key Bindings setup</h3>
+                  <KeyBindingsPanel />
+                </section>
               </div>
             </div>
           ) : null}
@@ -644,6 +852,7 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                 visualizerId: config.visualizerId,
                 visualizerChangeRule: config.visualizerChangeRule,
                 visualizerSequence: config.visualizerSequence,
+                visualizerAlsoClickToChange: config.visualizerAlsoClickToChange,
               }}
               windowVisualizers={windowVisualizers}
               onVisualizerConfigChange={(patch) =>
@@ -662,24 +871,20 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
           ) : null}
         </div>
 
-        {designerTab === 'surface' && error ? <p className="error vc-modal-error">{error}</p> : null}
-
-        {designerTab === 'surface' ? (
-          <div className="vc-modal-footer">
-            <p className="vc-content-hint vc-designer-footer-hint">
-              Right-click an area or float to assign content. Left-click floats to drag; use the corner
-              handle to resize.
-            </p>
-            <div className="vc-modal-actions">
-              <button type="button" className="btn" onClick={onClose}>
-                Close
-              </button>
-              <button type="button" className="btn vc-start-btn" onClick={() => void handleStart()}>
-                Start VC Mode
-              </button>
-            </div>
+        <footer className="vc-modal-footer">
+          <div className="vc-designer-footer-context">
+            {error ? (
+              <p className="error vc-designer-footer-hint">{error}</p>
+            ) : (
+              <p className="vc-content-hint vc-designer-footer-hint">
+                {DESIGNER_TAB_FOOTER_HINTS[designerTab]}
+              </p>
+            )}
           </div>
-        ) : null}
+          <button type="button" className="btn vc-start-btn" onClick={() => void handleStart()}>
+            Start VC Mode
+          </button>
+        </footer>
       </div>
     </div>
   );

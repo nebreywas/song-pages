@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { VcPlaybackEffectsMirror } from '@shared/vcModeTypes';
 import { getApp } from '../lib/bridge';
 import Hls from 'hls.js';
 import { SongPageWebview } from './SongPageWebview';
@@ -6,6 +7,13 @@ import { ListenerWelcome } from './ListenerWelcome';
 import { ArtistInfoPanel } from './ArtistInfoPanel';
 import { usePlaybackEffects } from '../audio/hooks/usePlaybackEffects';
 import { useAnalyserPlaybackMirror } from '../audio/hooks/useAnalyserPlaybackMirror';
+import {
+  DEFAULT_EFFECTS_LAB_STATE,
+  EffectsLabPanel,
+  isEffectsLabAudible,
+  type EffectsLabState,
+} from '../audio/effectsLab';
+import { getAudioGraphIfExists } from '../audio/graph/registry';
 import { ToastStack } from './ToastStack';
 import { useToasts } from './useToasts';
 import { PlayerBar, type RepeatMode } from './PlayerBar';
@@ -56,7 +64,7 @@ import { SongToPlaylistModal } from './SongToPlaylistModal';
 import { CustomPlaylistPanel } from './CustomPlaylistPanel';
 import { sidebarEntryType, isRenamableSidebarPlaylist, isSidebarPlaylistContextTarget } from './sidebarEntry';
 import { SkippedSongMarker } from './SkippedSongMarker';
-import { shareableSongPageUrl } from './shareableSongPageUrl';
+import { shareableSongLink } from './shareableSongPageUrl';
 import { resolveSongAccess } from './resolveSongAccess';
 import {
   buildLikedSongsArtistRow,
@@ -89,6 +97,8 @@ import { useAudioDebugReporter } from '../audio/debug/useAudioDebugReporter';
 import { VcModeModal } from '../vc-mode/VcModeModal';
 import { VcCloseConfirmModal } from '../vc-mode/VcCloseConfirmModal';
 import { useVcModeManager } from '../vc-mode/useVcModeManager';
+import { useSpecialPlayPause } from './useSpecialPlayPause';
+import { useListenerPlaybackCommands } from './useListenerPlaybackCommands';
 import '../styles/themes.css';
 import '../styles/toast.css';
 import '../styles/select.css';
@@ -163,6 +173,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [activePlaybackUrl, setActivePlaybackUrl] = useState<string | null>(null);
   const [bassBoost, setBassBoost] = useState(false);
   const [lofi, setLofi] = useState(false);
+  const [effectsLab, setEffectsLab] = useState<EffectsLabState>(() => DEFAULT_EFFECTS_LAB_STATE);
   const [crossfades, setCrossfades] = useState(false);
   const [contentHeight, setContentHeight] = useState(DEFAULT_CONTENT_HEIGHT);
   const [runtimeDurations, setRuntimeDurations] = useState<Record<number, number>>({});
@@ -196,6 +207,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     song: SongRow;
     sourceArtistId: number;
   } | null>(null);
+  /** VC window mirror is playing — main speaker ducks so hosts do not hear doubled audio. */
+  const [vcMirrorPlaybackActive, setVcMirrorPlaybackActive] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   /** Muted HLS mirror for visualizer FFT — keeps main playback on native output for stream capture. */
@@ -206,6 +219,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const rowClickTimerRef = useRef<number | null>(null);
   const durationProbeRef = useRef<Set<number>>(new Set());
   const playSongRef = useRef<(song: SongRow) => Promise<void>>(async () => {});
+  const playNextRef = useRef<() => void>(() => {});
   /** Latest transport handlers for VC window IPC — avoids hook-order / TDZ issues. */
   const vcTransportHandlersRef = useRef({
     togglePlayPause: () => {},
@@ -286,15 +300,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     },
     [visualizer],
   );
-
-  usePlaybackEffects({
-    mainAudioRef: audioRef,
-    analyserAudioRef,
-    volume,
-    isPlaying,
-    bassBoost,
-    lofi,
-  });
 
   const toggleBassBoost = useCallback(() => {
     setBassBoost((on) => {
@@ -599,6 +604,33 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     [repeatMode, shuffle, sortedSongs],
   );
 
+  const specialPlay = useSpecialPlayPause({
+    onPlayNext: () => playNextRef.current(),
+  });
+
+  const vcPlaybackEffects = useMemo(
+    (): VcPlaybackEffectsMirror => ({
+      bassBoost,
+      lofi,
+      effectsLab: {
+        enabled: effectsLab.enabled,
+        effectId: effectsLab.effectId,
+        outputTrimDb: effectsLab.outputTrimDb,
+        abBypass: effectsLab.abBypass,
+        workletEnhance: effectsLab.workletEnhance,
+      },
+    }),
+    [
+      bassBoost,
+      effectsLab.abBypass,
+      effectsLab.effectId,
+      effectsLab.enabled,
+      effectsLab.outputTrimDb,
+      effectsLab.workletEnhance,
+      lofi,
+    ],
+  );
+
   const vc = useVcModeManager({
     analyserAudioRef,
     playingSong,
@@ -612,14 +644,26 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     duration,
     activePlaybackUrl,
     volume,
+    playbackEffects: vcPlaybackEffects,
+    specialPlayPause: specialPlay.specialPlayPause,
   });
+
+  useListenerPlaybackCommands({
+    mainAudioRef: audioRef,
+    onPlayNextSong: specialPlay.playNextAfterPause,
+  });
+
+  useEffect(() => {
+    if (!vc.vcOpen) specialPlay.clearPause();
+  }, [specialPlay.clearPause, vc.vcOpen]);
 
   const analyserMirrorEnabled =
     (visualizer.canVisualize && visualizer.activeSession !== 'none') ||
     (visualizer.windowOpen && visualizer.projectionMode === 'visualizer' && visualizer.canVisualize) ||
     vc.analyserEnabled ||
     bassBoost ||
-    lofi;
+    lofi ||
+    effectsLab.enabled;
 
   useAudioDebugReporter({
     surface: 'main',
@@ -647,8 +691,30 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   useEffect(() => {
     if (!vc.vcOpen) {
       setVcCloseConfirmOpen(false);
+      setVcMirrorPlaybackActive(false);
     }
   }, [vc.vcOpen]);
+
+  useEffect(() => {
+    const app = getApp();
+    if (!app?.vc?.onPlaybackStatus) return;
+
+    const off = app.vc.onPlaybackStatus((payload) => {
+      setVcMirrorPlaybackActive(Boolean(payload.active));
+    });
+    return () => off();
+  }, []);
+
+  usePlaybackEffects({
+    mainAudioRef: audioRef,
+    analyserAudioRef,
+    volume,
+    isPlaying,
+    bassBoost,
+    lofi,
+    effectsLab,
+    vcMirrorPlaybackActive: vc.vcOpen && vcMirrorPlaybackActive,
+  });
 
   useEffect(() => {
     const app = getApp();
@@ -675,17 +741,28 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       if (command.type === 'playSong') {
         const target = handlers.sortedSongs.find((song) => song.id === command.songId);
         if (target) void handlers.playSong(target);
+        return;
+      }
+      if (command.type === 'playNextSong') {
+        specialPlay.playNextAfterPause();
       }
     });
 
     return () => off();
-  }, [vc.vcOpen]);
+  }, [specialPlay.playNextAfterPause, vc.vcOpen]);
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || bassBoost || lofi) return;
+    if (!audio) return;
+
+    // VC window owns audible playback while mirroring — always duck main (FX path included).
+    if (vc.vcOpen && vcMirrorPlaybackActive) {
+      audio.volume = 0;
+      return;
+    }
+    if (bassBoost || lofi || isEffectsLabAudible(effectsLab)) return;
     audio.volume = volume;
-  }, [volume, bassBoost, lofi]);
+  }, [volume, bassBoost, lofi, effectsLab, vc.vcOpen, vcMirrorPlaybackActive]);
 
   const markSongAvailability = useCallback(
     async (song: SongRow, unavailable: boolean) => {
@@ -884,6 +961,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         return;
       }
       if (playingSongId == null) return;
+      if (
+        vc.vcOpen &&
+        specialPlay.beginPauseAfterSong(vc.activeConfig.specialPlayStyle)
+      ) {
+        return;
+      }
       const nextSongId = pickNextSongId(playingSongId);
       if (nextSongId == null) return;
       const nextSong = sortedSongs.find((song) => song.id === nextSongId);
@@ -906,7 +989,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       audio.removeEventListener('play', onPlay);
       audio.removeEventListener('pause', onPause);
     };
-  }, [persistSongDuration, pickNextSongId, playSong, playingSongId, repeatMode, sortedSongs]);
+  }, [persistSongDuration, pickNextSongId, playSong, playingSongId, repeatMode, sortedSongs, specialPlay.beginPauseAfterSong, vc.activeConfig.specialPlayStyle, vc.vcOpen]);
 
   useEffect(() => () => destroyHls(), []);
 
@@ -1484,7 +1567,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   const handleCopySongPageLink = async (song: SongRow) => {
     setPlaylistContextMenu(null);
-    const link = shareableSongPageUrl(song.page_url);
+    const link = shareableSongLink(song);
     try {
       await navigator.clipboard.writeText(link);
     } catch {
@@ -1517,6 +1600,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     const nextSong = sortedSongs.find((song) => song.id === nextSongId);
     if (nextSong) void playSong(nextSong);
   };
+  playNextRef.current = playNext;
 
   const cycleRepeat = () => {
     setRepeatMode((mode) => {
@@ -2059,6 +2143,21 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       ) : null}
 
       <AudioDebugPanel surface="main" />
+      <EffectsLabPanel
+        state={effectsLab}
+        onChange={setEffectsLab}
+        mainAudioRef={audioRef}
+        mirrorAudioRef={analyserAudioRef}
+        mainVolume={volume}
+        mirrorAttached={Boolean(
+          analyserAudioRef.current && getAudioGraphIfExists(analyserAudioRef.current),
+        )}
+        graphMode={
+          analyserAudioRef.current
+            ? getAudioGraphIfExists(analyserAudioRef.current)?.mode ?? 'none'
+            : 'none'
+        }
+      />
     </div>
   );
 }

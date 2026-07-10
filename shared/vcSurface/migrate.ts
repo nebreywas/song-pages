@@ -77,8 +77,15 @@ export function migrateVcConfig(raw: unknown, visualizerIdFallback: string = DEF
       visualizerId: typeof value.visualizerId === 'string' ? value.visualizerId : visualizerIdFallback,
       visualizerChangeRule: value.visualizerChangeRule,
       visualizerSequence: value.visualizerSequence,
+      visualizerAlsoClickToChange: value.visualizerAlsoClickToChange,
       useFallbacks: value.useFallbacks !== false,
       gridDesign: value.gridDesign as VcModeConfig['gridDesign'],
+      specialPlayStyle: value.specialPlayStyle as VcModeConfig['specialPlayStyle'],
+      hostGraphicPopupId:
+        typeof value.hostGraphicPopupId === 'string' && value.hostGraphicPopupId.trim()
+          ? value.hostGraphicPopupId.trim()
+          : null,
+      upcomingOverlay: value.upcomingOverlay,
     });
   }
 

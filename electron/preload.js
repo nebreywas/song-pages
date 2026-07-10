@@ -74,6 +74,11 @@ contextBridge.exposeInMainWorld('app', {
     cacheStats: () => ipcRenderer.invoke('listener:cacheStats'),
     cacheEvents: (limit) => ipcRenderer.invoke('listener:cacheEvents', limit),
     cacheClearEvents: () => ipcRenderer.invoke('listener:cacheClearEvents'),
+    onPlaybackCommand: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('listener:playback-command', handler);
+      return () => ipcRenderer.removeListener('listener:playback-command', handler);
+    },
   },
 
   artist: {

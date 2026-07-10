@@ -41,6 +41,7 @@ export function useVcVisualizerRotation({
 }: UseVcVisualizerRotationOptions) {
   const configuredId = normalizeExperienceId(config.visualizerId);
   const changeRule = config.visualizerChangeRule;
+  const alsoClickToChange = config.visualizerAlsoClickToChange === true;
   const sequence = config.visualizerSequence;
   const sessionKey = rotationSessionKey(vcOpen, configuredId, changeRule, sequence);
 
@@ -50,22 +51,28 @@ export function useVcVisualizerRotation({
 
   const pool = useMemo(() => listVcVisualizerPool(sequence), [sequence]);
 
-  // Reset to the configured plugin when VC opens or rotation settings change.
+  const pickRandom = useCallback(() => {
+    setRotatingId((current) => {
+      const candidates = pool.length > 0 ? pool : [configuredId];
+      return normalizeExperienceId(pickNextVisualizerId(candidates, current));
+    });
+  }, [configuredId, pool]);
+
+  const rotate = useCallback(() => {
+    if (changeRule === 'never') return;
+    pickRandom();
+  }, [changeRule, pickRandom]);
+
+  const rotateVisualizerRandom = useCallback(() => {
+    pickRandom();
+  }, [pickRandom]);
+
   useEffect(() => {
     if (sessionKeyRef.current === sessionKey) return;
     sessionKeyRef.current = sessionKey;
     setRotatingId(configuredId);
     prevSongIdRef.current = playingSongId;
   }, [sessionKey, configuredId, playingSongId]);
-
-  const rotate = useCallback(() => {
-    if (changeRule === 'never') return;
-
-    setRotatingId((current) => {
-      const candidates = pool.length > 0 ? pool : [configuredId];
-      return normalizeExperienceId(pickNextVisualizerId(candidates, current));
-    });
-  }, [changeRule, configuredId, pool]);
 
   useEffect(() => {
     if (!vcOpen || !shouldRotateVisualizerOnSongChange(changeRule)) return;
@@ -89,7 +96,8 @@ export function useVcVisualizerRotation({
     return () => window.clearInterval(timerId);
   }, [changeRule, rotate, vcOpen]);
 
-  const effectiveVisualizerId = changeRule === 'never' ? configuredId : rotatingId;
+  const effectiveVisualizerId =
+    changeRule === 'never' && !alsoClickToChange ? configuredId : rotatingId;
 
   useEffect(() => {
     if (!vcOpen || !reportToMain) return;
@@ -99,6 +107,7 @@ export function useVcVisualizerRotation({
   return {
     effectiveVisualizerId,
     rotateVisualizer: rotate,
-    visualizerClickEnabled: vcOpen && shouldRotateVisualizerOnClick(changeRule),
+    rotateVisualizerRandom,
+    visualizerClickEnabled: vcOpen && shouldRotateVisualizerOnClick(changeRule, alsoClickToChange),
   };
 }

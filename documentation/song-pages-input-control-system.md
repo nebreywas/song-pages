@@ -1014,13 +1014,12 @@ Default Safe Direct mappings include:
 | Command ID | Legacy action | Default direct |
 |------------|---------------|----------------|
 | `toggle-cover` | cover | OCAW+C |
-| `toggle-host` | host | OCAW+F |
+| `toggle-host` | host | OCAW+H |
 | `toggle-next-overlay` | next | OCAW+N |
 | `toggle-remaining` | remaining | OCAW+R |
 | `toggle-song-info` | songInfo | OCAW+S |
 | `toggle-upcoming` | upcoming | OCAW+U |
 | `toggle-layout-mode` | layoutMode | **OCAW+L** (locked) |
-| `toggle-debug-outlines` | debugOutlines | OCAW+D |
 | `alare-speed-up` | alareSpeedUp | OCAW+= |
 | `alare-speed-down` | alareSpeedDown | OCAW+- |
 | `alare-speed-reset` | alareSpeedReset | OCAW+0 |

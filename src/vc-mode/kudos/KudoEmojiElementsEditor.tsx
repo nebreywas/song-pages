@@ -1,6 +1,13 @@
-import { KUDOS_PARTICLE_ELEMENT_MAX, KUDOS_PARTICLE_ELEMENT_MIN } from '@shared/kudos';
-import type { ParticleElement } from '@shared/kudos';
-import { firstGrapheme } from '@shared/kudos';
+import { useRef, useState } from 'react';
+import {
+  firstGrapheme,
+  KUDOS_PARTICLE_ELEMENT_MAX,
+  KUDOS_PARTICLE_ELEMENT_MIN,
+  setCompactElementSlot,
+  type ParticleElement,
+} from '@shared/kudos';
+
+import { KudoElementSlotGrid } from './KudoElementSlotGrid';
 
 type KudoEmojiElementsEditorProps = {
   elements: ParticleElement[];
@@ -8,73 +15,88 @@ type KudoEmojiElementsEditorProps = {
 };
 
 function emojiValues(elements: ParticleElement[]): string[] {
-  const values = elements
+  return elements
     .filter((el): el is { type: 'emoji'; value: string } => el.type === 'emoji')
-    .map((el) => el.value);
-  while (values.length < KUDOS_PARTICLE_ELEMENT_MIN) {
-    values.push('🔥');
-  }
-  return values.slice(0, KUDOS_PARTICLE_ELEMENT_MAX);
+    .map((el) => el.value)
+    .slice(0, KUDOS_PARTICLE_ELEMENT_MAX);
+}
+
+function toEmojiElements(values: string[]): ParticleElement[] {
+  return values.map((value) => ({ type: 'emoji', value }));
 }
 
 /** Up to four OS emoji slots — grapheme-safe, random-mixed at spawn (spec §3.2). */
 export function KudoEmojiElementsEditor({ elements, onChange }: KudoEmojiElementsEditorProps) {
   const slots = emojiValues(elements);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [pendingClickIndex, setPendingClickIndex] = useState<number | null>(null);
+  const [inputAnchor, setInputAnchor] = useState<DOMRect | null>(null);
 
-  const setSlot = (index: number, raw: string) => {
+  const commitGrapheme = (clickIndex: number, raw: string) => {
     const grapheme = firstGrapheme(raw);
     if (!grapheme) return;
-    const next = [...slots];
-    next[index] = grapheme;
-    onChange(next.slice(0, KUDOS_PARTICLE_ELEMENT_MAX).map((value) => ({ type: 'emoji', value })));
+    const next = setCompactElementSlot(slots, clickIndex, grapheme, KUDOS_PARTICLE_ELEMENT_MAX);
+    onChange(toEmojiElements(next));
   };
 
-  const addSlot = () => {
-    if (slots.length >= KUDOS_PARTICLE_ELEMENT_MAX) return;
-    onChange([...slots, '✨'].map((value) => ({ type: 'emoji', value })));
+  const openEmojiInput = (clickIndex: number, anchor: HTMLElement) => {
+    setPendingClickIndex(clickIndex);
+    setInputAnchor(anchor.getBoundingClientRect());
+    requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.value = '';
+      input.focus();
+    });
   };
 
-  const removeSlot = (index: number) => {
+  const clearAt = (index: number) => {
     if (slots.length <= KUDOS_PARTICLE_ELEMENT_MIN) return;
-    onChange(slots.filter((_, i) => i !== index).map((value) => ({ type: 'emoji', value })));
+    onChange(toEmojiElements(slots.filter((_, i) => i !== index)));
   };
 
   return (
     <div className="vc-kudos-emoji-elements">
-      <span className="vc-kudos-emoji-elements-label">Emoji elements ({slots.length}/{KUDOS_PARTICLE_ELEMENT_MAX})</span>
-      <div className="vc-kudos-emoji-slots">
-        {slots.map((value, index) => (
-          <label key={index} className="vc-kudos-emoji-slot">
-            <span>Emoji {index + 1}</span>
-            <input
-              type="text"
-              className="vc-kudos-emoji-input"
-              value={value}
-              onChange={(e) => setSlot(index, e.target.value)}
-              aria-label={`Emoji ${index + 1}`}
-              inputMode="text"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            {slots.length > KUDOS_PARTICLE_ELEMENT_MIN ? (
-              <button
-                type="button"
-                className="vc-kudos-emoji-remove"
-                onClick={() => removeSlot(index)}
-                aria-label={`Remove emoji ${index + 1}`}
-              >
-                ✕
-              </button>
-            ) : null}
-          </label>
-        ))}
-      </div>
-      {slots.length < KUDOS_PARTICLE_ELEMENT_MAX ? (
-        <button type="button" className="vc-btn vc-btn--ghost" onClick={addSlot}>
-          Add emoji
-        </button>
-      ) : null}
-      <p className="vc-kudos-color-hint">Uses your OS emoji font. Each slot is one emoji; particles pick randomly.</p>
+      <input
+        ref={inputRef}
+        type="text"
+        className="vc-kudos-emoji-picker-input"
+        aria-label="Choose character"
+        inputMode="text"
+        autoComplete="off"
+        spellCheck={false}
+        style={
+          inputAnchor
+            ? {
+                left: inputAnchor.left,
+                top: inputAnchor.top,
+                width: inputAnchor.width,
+                height: inputAnchor.height,
+              }
+            : undefined
+        }
+        onChange={(event) => {
+          if (pendingClickIndex == null) return;
+          commitGrapheme(pendingClickIndex, event.target.value);
+          event.target.value = '';
+          setPendingClickIndex(null);
+          setInputAnchor(null);
+          event.target.blur();
+        }}
+        onBlur={() => {
+          setPendingClickIndex(null);
+          setInputAnchor(null);
+        }}
+      />
+      <KudoElementSlotGrid
+        label="Emoji + Type"
+        hint="Each slot is one character — emoji, letter, or number. Particles pick randomly."
+        filledCount={slots.length}
+        canClear={slots.length > KUDOS_PARTICLE_ELEMENT_MIN}
+        onActivate={(clickIndex, anchor) => openEmojiInput(clickIndex, anchor)}
+        onClear={clearAt}
+        renderFilled={(index) => <span className="vc-kudos-element-slot-emoji">{slots[index]}</span>}
+      />
     </div>
   );
 }

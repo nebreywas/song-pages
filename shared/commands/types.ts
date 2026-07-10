@@ -25,6 +25,8 @@ export interface CommandAvailability {
   requiresHostGraphic?: boolean;
   /** Elapsed/remaining overlay needs active playback timing. */
   requiresPlaybackTiming?: boolean;
+  /** Play Next Song — only while a special play-style pause is active. */
+  requiresSpecialPlayPause?: boolean;
 }
 
 /** Dev-level rules for whether a host can remove or clear bindings. */

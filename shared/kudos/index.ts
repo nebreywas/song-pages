@@ -16,6 +16,7 @@ export {
 export { nextKudoCycleIndex, kudoPresetAtCycleIndex } from './cycle';
 export { createStarterKudoPresets, defaultEmojiParticleConfig, defaultHybridParticleConfig, defaultParticleConfig, defaultTextEmojiKudoConfig, defaultTextKudoConfig } from './defaults';
 export { densityToParticleCountLegacy, resolveParticleCount } from './particleCount';
+export { compactElementSlotIndex, clearCompactElementSlot, setCompactElementSlot } from './elementSlots';
 export { isEmojiGrapheme, phraseIncludesEmoji, segmentPhrase, type PhraseSegment } from './phraseSegments';
 export { estimatePhraseWidthEm, kudoTextFontSizePx, peakTextEffectScale } from './textSizing';
 export { countGraphemes, firstGrapheme, isSingleGrapheme, sanitizeEmojiElements, segmentGraphemes, truncateToMaxGraphemes } from './graphemes';

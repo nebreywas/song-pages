@@ -2,6 +2,9 @@ import { MODIFIER_CS, MODIFIER_OCAW } from './constants';
 
 type Platform = 'darwin' | 'win32' | 'linux';
 
+/** Keys passed through literally to Electron — not uppercased like letters. */
+const LITERAL_ACCELERATOR_KEYS = new Set(['=', '-', '[', ']', ';', "'"]);
+
 /** Logical binding token, e.g. OCAW+L or CS+N or F17. */
 export function parseLogicalBinding(binding: string): {
   modifiers: string[];
@@ -40,13 +43,12 @@ export function logicalBindingToElectronAccelerator(binding: string, platform: P
     return [...electronModifiers, key.toUpperCase()].join('+');
   }
 
-  // Electron documents Plus but not Minus; legacy VC shortcuts used literal = and -.
-  const normalizedKey =
-    key === '=' || key === '-'
-      ? key
-      : key.length === 1
-        ? key.toUpperCase()
-        : key;
+  // Electron documents Plus but not Minus; legacy VC shortcuts use literal punctuation.
+  const normalizedKey = LITERAL_ACCELERATOR_KEYS.has(key)
+    ? key
+    : key.length === 1
+      ? key.toUpperCase()
+      : key;
 
   return [...electronModifiers, normalizedKey].join('+');
 }
@@ -84,9 +86,17 @@ export function electronAcceleratorToLogical(binding: string, platform: Platform
       ? '='
       : key === 'Minus' || key === '-'
         ? '-'
-        : /^[A-Z]$/.test(key)
-          ? key.toLowerCase()
-          : key;
+        : key === 'BracketLeft' || key === '['
+          ? '['
+          : key === 'BracketRight' || key === ']'
+            ? ']'
+            : key === 'Semicolon' || key === ';'
+              ? ';'
+              : key === 'Quote' || key === "'"
+                ? "'"
+                : /^[A-Z]$/.test(key)
+                  ? key.toLowerCase()
+                  : key;
 
   return [...logicalModifiers, logicalKey].join('+');
 }

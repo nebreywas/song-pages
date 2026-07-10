@@ -515,7 +515,7 @@ function applySongPresentation(
   }
 
   if (content === 'upcoming-covers' && resolved.kind === 'upcoming-covers') {
-    return { ...resolved, presentation: resolveUpcomingCoversPresentation(overrides) };
+    return { ...resolved, presentation: resolveUpcomingCoversPresentation(overrides, typography) };
   }
 
   const rule = SONG_CONTENT_SETTINGS_RULE[content];

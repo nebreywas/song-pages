@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 
 import type { KudoPreset } from '@shared/kudos';
 
@@ -9,9 +9,13 @@ import { useKudoTextInstances } from './useKudoTextInstances';
 
 type KudoLayerProps = {
   presets: KudoPreset[];
-  /** Increment when a specific preset should fire. */
+  /** Increment when a specific preset should fire (live VC path). */
   triggerToken: number;
   triggerPresetId: string | null;
+};
+
+export type KudoLayerHandle = {
+  playPreset: (presetId: string) => void;
 };
 
 function triggerForPreset(
@@ -34,7 +38,10 @@ function triggerForPreset(
 }
 
 /** VC Kudo renderer — fires a specific preset from the command registry. */
-export function KudoLayer({ presets, triggerToken, triggerPresetId }: KudoLayerProps) {
+export const KudoLayer = forwardRef<KudoLayerHandle, KudoLayerProps>(function KudoLayer(
+  { presets, triggerToken, triggerPresetId },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastTriggerTokenRef = useRef(0);
   const presetsRef = useRef(presets);
@@ -43,14 +50,22 @@ export function KudoLayer({ presets, triggerToken, triggerPresetId }: KudoLayerP
 
   presetsRef.current = presets;
 
+  const playPresetById = useCallback(
+    (presetId: string) => {
+      const preset = presetsRef.current.find((row) => row.id === presetId);
+      if (preset) triggerForPreset(preset, triggerParticle, triggerText);
+    },
+    [triggerParticle, triggerText],
+  );
+
+  useImperativeHandle(ref, () => ({ playPreset: playPresetById }), [playPresetById]);
+
   useEffect(() => {
     if (triggerToken <= 0 || triggerToken === lastTriggerTokenRef.current) return;
     lastTriggerTokenRef.current = triggerToken;
     if (!triggerPresetId) return;
-
-    const preset = presetsRef.current.find((row) => row.id === triggerPresetId);
-    if (preset) triggerForPreset(preset, triggerParticle, triggerText);
-  }, [triggerToken, triggerPresetId, triggerParticle, triggerText]);
+    playPresetById(triggerPresetId);
+  }, [triggerToken, triggerPresetId, playPresetById]);
 
   return (
     <div ref={containerRef} className="vc-kudo-layer-root">
@@ -58,4 +73,4 @@ export function KudoLayer({ presets, triggerToken, triggerPresetId }: KudoLayerP
       <KudoTextLayer instances={textInstances} />
     </div>
   );
-}
+});

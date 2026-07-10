@@ -6,12 +6,15 @@ import { getApp } from '../lib/bridge';
 import { createDefaultVcConfig } from '../vc-mode/vcModeDefaults';
 import { useVcVisualizerRotation } from '../vc-mode/useVcVisualizerRotation';
 import { VcOverlays } from './VcOverlays';
+import { VcSpecialPlayCountdown } from './VcSpecialPlayCountdown';
 import { VcSurface } from './VcSurface';
 import { VcVisualizerRotationProvider } from './VcVisualizerRotationContext';
 import { useHostContentCatalog } from '../host-content/useHostContentCatalog';
 import { VcAlareNudgeProvider } from './VcAlareNudgeContext';
 import { useVcPlaybackAudio } from './useVcPlaybackAudio';
+import { useVcPlaybackEffects } from './useVcPlaybackEffects';
 import { useVcWindowState } from './useVcWindowState';
+import { useHostGraphicPopupUrl } from '../vc-mode/useHostGraphicPopupUrl';
 import { KudoLayer } from '../kudos/KudoLayer';
 
 /** VC Mode display surface — template areas + floats + host hotkey overlays. */
@@ -23,12 +26,12 @@ export function VcWindowApp() {
     canvasFrame,
     activeOverlay,
     kudoTrigger,
-    debugOutlines,
     layoutMode,
     onChangeSurface,
   } = useVcWindowState();
   const { catalog: hostCatalog } = useHostContentCatalog({ readOnly: true });
-  const playbackAudioRef = useVcPlaybackAudio(state);
+  const { audioRef: playbackAudioRef, audioEl: playbackAudioEl } = useVcPlaybackAudio(state);
+  useVcPlaybackEffects(playbackAudioEl, state?.audioMirror, state?.playback.isPlaying ?? false);
 
   const [layoutSurface, setLayoutSurface] = useState<VcSurfaceConfig | null>(null);
   const layoutSurfaceRef = useRef<VcSurfaceConfig | null>(null);
@@ -95,6 +98,20 @@ export function VcWindowApp() {
     };
   }, [layoutMode, layoutSurface, state]);
 
+  const hostGraphicPopupUrl = useHostGraphicPopupUrl(
+    hostCatalog,
+    displayState?.config.hostGraphicPopupId,
+    displayState?.hostGraphicUrl,
+  );
+
+  const overlayState = useMemo(() => {
+    if (!displayState) return null;
+    return {
+      ...displayState,
+      hostGraphicUrl: hostGraphicPopupUrl ?? displayState.hostGraphicUrl,
+    };
+  }, [displayState, hostGraphicPopupUrl]);
+
   const visualizerRotation = useVcVisualizerRotation({
     vcOpen: displayState != null,
     config: displayState?.config ?? createDefaultVcConfig(),
@@ -106,15 +123,25 @@ export function VcWindowApp() {
   const rotationContextValue = useMemo(
     () => ({
       activeVisualizerId: visualizerRotation.effectiveVisualizerId,
-      rotateVisualizer: visualizerRotation.rotateVisualizer,
+      rotateVisualizer: visualizerRotation.rotateVisualizerRandom,
       visualizerClickEnabled: visualizerRotation.visualizerClickEnabled,
     }),
     [
       visualizerRotation.effectiveVisualizerId,
-      visualizerRotation.rotateVisualizer,
+      visualizerRotation.rotateVisualizerRandom,
       visualizerRotation.visualizerClickEnabled,
     ],
   );
+
+  useEffect(() => {
+    const app = getApp();
+    const off = app?.vc?.onHotkey?.(({ action }) => {
+      if (action === 'changeVisualizer') {
+        visualizerRotation.rotateVisualizerRandom();
+      }
+    });
+    return () => off?.();
+  }, [visualizerRotation.rotateVisualizerRandom]);
 
   return (
     <>
@@ -148,7 +175,6 @@ export function VcWindowApp() {
               frequencyData={frequencyData}
               frame={frame}
               canvasFrame={canvasFrame}
-              debugOutlines={debugOutlines}
               layoutMode={layoutMode}
               onChangeSurface={layoutMode ? handleChangeSurface : undefined}
             />
@@ -159,7 +185,12 @@ export function VcWindowApp() {
                   triggerToken={kudoTrigger.token}
                   triggerPresetId={kudoTrigger.presetId}
                 />
-                <VcOverlays state={displayState} activeOverlay={activeOverlay} />
+                <VcOverlays
+                  state={overlayState!}
+                  activeOverlay={activeOverlay}
+                  hostCatalog={hostCatalog}
+                />
+                <VcSpecialPlayCountdown state={displayState} />
               </>
             ) : null}
           </VcVisualizerRotationProvider>

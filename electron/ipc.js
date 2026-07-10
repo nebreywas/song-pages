@@ -627,7 +627,11 @@ function registerIpcHandlers() {
   }));
 
   ipcMain.on('vc:sendState', (_event, payload) => {
-    vcWindow.sendVcState(payload);
+    const { enrichVcStatePayload } = require('./vcStateEnrich');
+    const enriched = enrichVcStatePayload(payload);
+    vcWindow.sendVcState(enriched);
+    const controllerWindow = require('./controllerWindow');
+    controllerWindow.sendControllerVcState(enriched);
   });
 
   ipcMain.on('vc:sendFrame', (_event, payload) => {

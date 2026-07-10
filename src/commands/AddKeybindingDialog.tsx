@@ -21,12 +21,15 @@ type AddKeybindingDialogProps = {
 };
 
 const LAYER_OPTIONS: Array<{ id: BindingLayer; label: string }> = [
-  { id: 'direct', label: 'Direct (Safe)' },
+  { id: 'direct', label: 'Direct' },
   { id: 'gated', label: 'Gated' },
   { id: 'extended-function', label: 'F13–F24' },
 ];
 
-/** Pick an unassigned key from inventory, then assign an action. */
+/**
+ * Pick an unassigned key from inventory, then assign an action.
+ * Retained for a possible future flow — not mounted from KeyBindingsPanel (sidebar + row dropdowns cover setup).
+ */
 export function AddKeybindingDialog({
   open,
   state,

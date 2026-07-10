@@ -13,11 +13,12 @@ import {
   isReserveKudoSlotCommandId,
   isReserveKudoSlotTemplateId,
   linkedPresetLabelForReserveSlot,
+  listReserveKudoSlotCommandIds,
   reserveKudoSlotDefinition,
   syncReservedKudoKeysFromSlots,
 } from './kudoReserve';
 import { EXTENDED_FUNCTION_KEYS } from './extendedKeys';
-import { GATED_KEY_POOL, parseReservedBindingKey, reservedBindingKey } from './gatedKeys';
+import { GATED_KEY_POOL, normalizeGatedKey, parseReservedBindingKey, reservedBindingKey } from './gatedKeys';
 import { listEnabledSafeDirectBindings } from './safeHotkeys';
 import type { CommandBindingSlot, CommandDefinition, CommandInputSource, CommandMappingState } from './types';
 import { resolveBindingToCommand } from './resolve';
@@ -54,13 +55,64 @@ function bindingPoolForSource(source: Exclude<CommandInputSource, 'controller-ui
   return [...EXTENDED_FUNCTION_KEYS];
 }
 
+function slotFieldForSource(
+  source: Exclude<CommandInputSource, 'controller-ui'>,
+): keyof CommandBindingSlot {
+  return source === 'extended-function' ? 'extendedFunction' : source;
+}
+
+function bindingsMatchInPool(
+  source: Exclude<CommandInputSource, 'controller-ui'>,
+  left: string,
+  right: string,
+): boolean {
+  if (source === 'direct') return left.toLowerCase() === right.toLowerCase();
+  if (source === 'gated') return normalizeGatedKey(left) === normalizeGatedKey(right);
+  return left.toUpperCase() === right.toUpperCase();
+}
+
+/** True when any command or Kudo reserve slot already owns this binding. */
+function isBindingTaken(
+  state: CommandMappingState,
+  source: Exclude<CommandInputSource, 'controller-ui'>,
+  binding: string,
+): boolean {
+  if (resolveBindingToCommand(state, source, binding)) return true;
+
+  const field = slotFieldForSource(source);
+  for (const commandId of listReserveKudoSlotCommandIds(state)) {
+    const held = state.commands[commandId]?.[field];
+    if (held && bindingsMatchInPool(source, held, binding)) return true;
+  }
+  return false;
+}
+
 /** Keys in a layer that are not assigned to any command yet. */
 export function listAvailableKeysForSource(
   state: CommandMappingState,
   source: Exclude<CommandInputSource, 'controller-ui'>,
 ): string[] {
   const pool = bindingPoolForSource(source);
-  return pool.filter((binding) => !resolveBindingToCommand(state, source, binding));
+  return pool.filter((binding) => !isBindingTaken(state, source, binding));
+}
+
+/**
+ * Dropdown options for one binding layer — unassigned keys plus this row's current value
+ * so hosts can keep or change a binding without picking a key already used elsewhere.
+ */
+export function listBindingOptionsForCommand(
+  state: CommandMappingState,
+  commandId: string,
+  source: Exclude<CommandInputSource, 'controller-ui'>,
+): string[] {
+  const slot = getBindingSlotForCommand(state, commandId);
+  const current = slot[slotFieldForSource(source)];
+  const available = listAvailableKeysForSource(state, source);
+  if (!current) return available;
+  if (available.some((binding) => bindingsMatchInPool(source, binding, current))) {
+    return available;
+  }
+  return [current, ...available];
 }
 
 export function listConfiguredActionRows(
@@ -268,7 +320,9 @@ export function reassignConfiguredCommand(
 }
 
 export function pruneConfiguredState(state: CommandMappingState): CommandMappingState {
-  const configuredCommandIds = [...new Set([...state.configuredCommandIds, ...listRequiredBuiltinCommandIds()])];
+  const configuredCommandIds = [
+    ...new Set([...state.configuredCommandIds, ...listRequiredBuiltinCommandIds()]),
+  ].filter((commandId) => Boolean(getBuiltinCommand(commandId)));
   const configuredKudoPresetIds = [...new Set(state.configuredKudoPresetIds)];
 
   const commands: CommandMappingState['commands'] = {};

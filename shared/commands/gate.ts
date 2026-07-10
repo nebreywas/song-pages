@@ -38,7 +38,9 @@ export function isSafeDirectModifierChord(input: GateKeyInput): boolean {
 }
 
 function chordLetterKey(key: string): string {
-  if (key === '=' || key === '-') return key;
+  if (key === '=' || key === '-' || key === '[' || key === ']' || key === ';' || key === "'") {
+    return key;
+  }
   return key.length === 1 ? key.toLowerCase() : key;
 }
 

@@ -3,6 +3,7 @@ import { IconAdd, IconRefresh } from './PlayerIcons';
 import { artistInitials, resolveArtistPhotoUrl } from './artistDisplay';
 import { isLikedSongsArtist } from './likedSongs';
 import { isSunoDemoArtistId, SUNO_DEMO_FEATURE_ENABLED } from '@shared/demo/sunoDemoFeature';
+import { isUserPlaylistArtistId } from '@shared/listener/userPlaylists';
 import { sidebarEntryType, sidebarEntryTypeLabel, isSidebarPlaylistContextTarget } from './sidebarEntry';
 import type { ArtistRow } from '../types/app';
 
@@ -346,7 +347,8 @@ export function ListenerSidebar({
             {artists.map((artist) => {
               const isLikedEntry = isLikedSongsArtist(artist.id);
               const isSunoEntry = SUNO_DEMO_FEATURE_ENABLED && isSunoDemoArtistId(artist.id);
-              const photoUrl = isLikedEntry || isSunoEntry ? null : resolveArtistPhotoUrl(artist);
+              const isCustomEntry = isUserPlaylistArtistId(artist.id);
+              const photoUrl = isLikedEntry || isSunoEntry || isCustomEntry ? null : resolveArtistPhotoUrl(artist);
               const isActive = selectedArtistId === artist.id;
               const entryType = sidebarEntryType(artist);
               const typeLabel = sidebarEntryTypeLabel(entryType);
@@ -370,7 +372,9 @@ export function ListenerSidebar({
                       type="button"
                       className={`library-row library-row-compact${isActive ? ' active' : ''}${
                         isLikedEntry ? ' library-row-liked' : ''
-                      }${isSunoEntry ? ' library-row-suno' : ''}`}
+                      }${isSunoEntry ? ' library-row-suno' : ''}${
+                        isCustomEntry ? ' library-row-custom' : ''
+                      }`}
                       onClick={() => onSelectArtist(artist.id)}
                       aria-label={label}
                       title={label}
@@ -381,7 +385,11 @@ export function ListenerSidebar({
                         </span>
                       ) : isSunoEntry ? (
                         <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
-                          ☀
+                          S
+                        </span>
+                      ) : isCustomEntry ? (
+                        <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
+                          {artistInitials(artist.artist_name)}
                         </span>
                       ) : photoUrl ? (
                         <img className="library-row-avatar" src={photoUrl} alt="" />
@@ -399,7 +407,7 @@ export function ListenerSidebar({
                 <li key={artist.id}>
                   <button
                     type="button"
-                    className={`library-row${isActive ? ' active' : ''}${isLikedEntry ? ' library-row-liked' : ''}${isSunoEntry ? ' library-row-suno' : ''}`}
+                    className={`library-row${isActive ? ' active' : ''}${isLikedEntry ? ' library-row-liked' : ''}${isSunoEntry ? ' library-row-suno' : ''}${isCustomEntry ? ' library-row-custom' : ''}`}
                     onClick={() => onSelectArtist(artist.id)}
                     onContextMenu={handleContextMenu}
                     title={label}

@@ -2,7 +2,12 @@
  * Assignment settings for interactive VC song slots (seek bar, player controls, upcoming covers).
  */
 
-import type { VcAssignmentOverrides } from '@shared/vcMode/assignmentSettings';
+import {
+  VC_UPCOMING_SCROLL_OPTIONS,
+  type VcAssignmentOverrides,
+  type VcUpcomingLayout,
+  type VcUpcomingScroll,
+} from '@shared/vcMode/assignmentSettings';
 import type { VcCellContent, VcSongSlotSettings } from '@shared/vcModeTypes';
 
 type InteractiveSongAssignmentControlsProps = {
@@ -70,26 +75,96 @@ export function InteractiveSongAssignmentControls({
   }
 
   if (content === 'upcoming-covers') {
+    const layout = overrides.upcomingLayout ?? 'single-row';
+    const scrollOptions =
+      layout === 'multi-row'
+        ? VC_UPCOMING_SCROLL_OPTIONS.map((opt) =>
+            opt.value.startsWith('marquee')
+              ? { ...opt, label: opt.label.replace('left', 'down') }
+              : opt.value.startsWith('bounce')
+                ? { ...opt, label: opt.label.replace('left', 'down') }
+                : opt,
+          )
+        : VC_UPCOMING_SCROLL_OPTIONS;
+
     return (
       <>
         <label className="vc-field">
           <span>Layout</span>
           <select
-            value={overrides.upcomingLayout ?? 'overflow'}
+            value={layout}
             onChange={(e) =>
               onChange(
                 patchOverrides(settings, {
-                  upcomingLayout: e.target.value as 'gallery' | 'overflow',
+                  upcomingLayout: e.target.value as VcUpcomingLayout,
                 }),
               )
             }
           >
-            <option value="overflow">Overflow (horizontal row)</option>
-            <option value="gallery">Gallery (multi-row scroll)</option>
+            <option value="single-row">Single row</option>
+            <option value="multi-row">Multi-row</option>
           </select>
         </label>
+
+        <label className="vc-field">
+          <span>Overflow motion</span>
+          <select
+            value={overrides.upcomingScroll ?? 'static'}
+            onChange={(e) =>
+              onChange(
+                patchOverrides(settings, {
+                  upcomingScroll: e.target.value as VcUpcomingScroll,
+                }),
+              )
+            }
+          >
+            {scrollOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="vc-field vc-field-inline">
+          <input
+            type="checkbox"
+            checked={overrides.upcomingShowArtist ?? false}
+            onChange={(e) => onChange(patchOverrides(settings, { upcomingShowArtist: e.target.checked }))}
+          />
+          <span>Artist name?</span>
+        </label>
+
+        <label className="vc-field vc-field-inline">
+          <input
+            type="checkbox"
+            checked={overrides.upcomingShowTitle ?? false}
+            onChange={(e) => onChange(patchOverrides(settings, { upcomingShowTitle: e.target.checked }))}
+          />
+          <span>Show title?</span>
+        </label>
+
+        <label className="vc-field vc-field-inline">
+          <input
+            type="checkbox"
+            checked={overrides.upcomingClickToZoom ?? false}
+            onChange={(e) => onChange(patchOverrides(settings, { upcomingClickToZoom: e.target.checked }))}
+          />
+          <span>Click to zoom?</span>
+        </label>
+
+        <label className="vc-field">
+          <span>Label color</span>
+          <input
+            type="color"
+            value={overrides.color ?? '#ffffff'}
+            onChange={(e) => onChange(patchOverrides(settings, { color: e.target.value }))}
+          />
+        </label>
+
         <p className="vc-assignment-hint">
-          Single-click enlarges a cover; double-click jumps to that song. Covers are at least 120px wide with 20px gaps.
+          Covers fit the region with even spacing. Static mode shows only what fits (centered when fewer).
+          Double-click a cover to jump to that song. Zoom mode: click to enlarge, Esc or click outside to close.
         </p>
       </>
     );

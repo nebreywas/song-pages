@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 
 import type { CommandDefinition } from '@shared/commands';
 
+import { CommandDisplayLabel } from './CommandDisplayLabel';
+
 type ActionPickerPopoverProps = {
   commands: CommandDefinition[];
   selectedCommandId?: string;
@@ -56,7 +58,9 @@ export function ActionPickerPopover({
               onClick={() => setPreviewId(command.id)}
               onDoubleClick={() => onAssign(command)}
             >
-              <span className="action-picker-item-label">{command.label}</span>
+              <span className="action-picker-item-label">
+                <CommandDisplayLabel label={command.label} />
+              </span>
               <span className="action-picker-item-meta">{command.category}</span>
             </button>
           </li>
@@ -66,7 +70,9 @@ export function ActionPickerPopover({
 
       {preview ? (
         <div className="action-picker-about">
-          <strong>{preview.label}</strong>
+          <strong>
+            <CommandDisplayLabel label={preview.label} />
+          </strong>
           <p>{preview.description ?? 'No description provided for this action yet.'}</p>
           <p className="action-picker-about-id">{preview.id}</p>
           <p className="action-picker-hint">Double-click an action to assign it.</p>

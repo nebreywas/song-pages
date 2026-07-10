@@ -1,0 +1,43 @@
+.help-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.05rem;
+  height: 1.05rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: help;
+}
+
+.help-tooltip:hover,
+.help-tooltip:focus-visible {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--text));
+  outline: none;
+}
+
+.help-tooltip-popover {
+  position: fixed;
+  z-index: 1250;
+  width: max-content;
+  max-width: 18rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel, var(--bg));
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: normal;
+  line-height: 1.45;
+  text-align: left;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
+  pointer-events: none;
+}

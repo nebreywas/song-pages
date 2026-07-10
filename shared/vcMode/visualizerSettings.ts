@@ -21,7 +21,6 @@ export const VC_VISUALIZER_CHANGE_RULE_OPTIONS: Array<{
   label: string;
 }> = [
   { value: 'never', label: 'Never change' },
-  { value: 'click', label: 'Change on click' },
   { value: 'new-song', label: 'Change on new song' },
   { value: '30s', label: 'Change every 30 seconds' },
   { value: '1m', label: 'Change every minute' },
@@ -47,6 +46,27 @@ export function sanitizeVisualizerChangeRule(raw: unknown): VcVisualizerChangeRu
   return typeof raw === 'string' && CHANGE_RULE_SET.has(raw)
     ? (raw as VcVisualizerChangeRule)
     : DEFAULT_VC_VISUALIZER_CHANGE_RULE;
+}
+
+/** Legacy configs used change rule "click" — migrate to checkbox + never. */
+export function migrateVisualizerClickSetting(
+  rule: VcVisualizerChangeRule,
+  alsoClickToChange: boolean | undefined,
+): { visualizerChangeRule: VcVisualizerChangeRule; visualizerAlsoClickToChange: boolean } {
+  if (rule === 'click') {
+    return { visualizerChangeRule: 'never', visualizerAlsoClickToChange: true };
+  }
+  return {
+    visualizerChangeRule: rule,
+    visualizerAlsoClickToChange: alsoClickToChange === true,
+  };
+}
+
+export function shouldVisualizerClickChange(
+  rule: VcVisualizerChangeRule,
+  alsoClickToChange: boolean,
+): boolean {
+  return alsoClickToChange || rule === 'click';
 }
 
 export function sanitizeVisualizerSequence(raw: unknown): VcVisualizerSequence {
@@ -79,8 +99,11 @@ export function shouldRotateVisualizerOnSongChange(rule: VcVisualizerChangeRule)
   return rule === 'new-song';
 }
 
-export function shouldRotateVisualizerOnClick(rule: VcVisualizerChangeRule): boolean {
-  return rule === 'click';
+export function shouldRotateVisualizerOnClick(
+  rule: VcVisualizerChangeRule,
+  alsoClickToChange = false,
+): boolean {
+  return shouldVisualizerClickChange(rule, alsoClickToChange);
 }
 
 /** Pick a different id when the pool allows; otherwise return the only candidate. */

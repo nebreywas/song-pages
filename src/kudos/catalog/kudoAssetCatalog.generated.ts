@@ -14,7 +14,7 @@ import asset_checkmark_grays from '../../assets/images/kudo-images/checkmark-gra
 import asset_confetti_single_color from '../../assets/images/kudo-images/confetti-single-color-image.png';
 import asset_confetti_grays from '../../assets/images/kudo-images/confetti-grays-image.png';
 import asset_cutdiamond_single_color from '../../assets/images/kudo-images/cutdiamond-single-color-image.png';
-import asset_cutdiamong_grays from '../../assets/images/kudo-images/cutdiamong-grays-image.png';
+import asset_cutdiamond_grays from '../../assets/images/kudo-images/cutdiamond-grays-image.png';
 import asset_diamond_single_color from '../../assets/images/kudo-images/diamond-single-color-image.png';
 import asset_diamond_grays from '../../assets/images/kudo-images/diamond-grays-image.png';
 import asset_doublenote_single_color from '../../assets/images/kudo-images/doublenote-single-color-image.png';
@@ -122,13 +122,7 @@ export const KUDO_ASSET_CATALOG: BuiltInKudoAsset[] = [
     label: 'Cutdiamond',
     variants: {
     'single-color': asset_cutdiamond_single_color,
-    },
-  },
-  {
-    id: 'cutdiamong',
-    label: 'Cutdiamong',
-    variants: {
-    'grays': asset_cutdiamong_grays,
+    'grays': asset_cutdiamond_grays,
     },
   },
   {

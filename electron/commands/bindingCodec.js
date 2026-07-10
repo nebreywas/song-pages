@@ -48,11 +48,28 @@ const LEGACY_ACTION_BY_COMMAND = {
   'toggle-song-info': 'songInfo',
   'toggle-upcoming': 'upcoming',
   'toggle-layout-mode': 'layoutMode',
-  'toggle-debug-outlines': 'debugOutlines',
   'alare-speed-up': 'alareSpeedUp',
   'alare-speed-down': 'alareSpeedDown',
   'alare-speed-reset': 'alareSpeedReset',
+  'change-visualizer': 'changeVisualizer',
 };
+
+function migrateToggleHostGraphicBinding(state) {
+  const slot = state.commands['toggle-host'];
+  if (!slot?.direct) return state;
+  if (slot.direct.toLowerCase() !== `${MODIFIER_OCAW}+h`.toLowerCase()) return state;
+
+  return {
+    ...state,
+    commands: {
+      ...state.commands,
+      'toggle-host': {
+        ...slot,
+        direct: `${MODIFIER_OCAW}+f`,
+      },
+    },
+  };
+}
 
 function createDefaultMappingState() {
   const O = MODIFIER_OCAW;
@@ -64,11 +81,12 @@ function createDefaultMappingState() {
     'toggle-song-info',
     'toggle-upcoming',
     'toggle-layout-mode',
-    'toggle-debug-outlines',
     'alare-speed-up',
     'alare-speed-down',
     'alare-speed-reset',
+    'change-visualizer',
     'toggle-vc-command-gate',
+    'play-next-song',
   ];
   return {
     version: 2,
@@ -83,11 +101,12 @@ function createDefaultMappingState() {
       'toggle-song-info': { direct: `${O}+s` },
       'toggle-upcoming': { direct: `${O}+u` },
       'toggle-layout-mode': { direct: `${O}+l` },
-      'toggle-debug-outlines': { direct: `${O}+d` },
       'alare-speed-up': { direct: `${O}+=` },
       'alare-speed-down': { direct: `${O}+-` },
       'alare-speed-reset': { direct: `${O}+0` },
+      'change-visualizer': { direct: `${O}+v` },
       'toggle-vc-command-gate': { direct: `${O}+g` },
+      'play-next-song': { direct: `${O}+.` },
     },
     reservedKudoKeys: [],
     kudoPresetByReservedKey: {},
@@ -268,7 +287,8 @@ function migrateMappingState(raw) {
 
   const synced = syncReservedKudoKeysFromSlots(migrated);
   const withReserveSlots = migrateOrphanReservedKeysToSlots(synced);
-  return normalizeUniqueBindings(withReserveSlots);
+  const withHostBinding = migrateToggleHostGraphicBinding(withReserveSlots);
+  return normalizeUniqueBindings(withHostBinding);
 }
 
 function resolveBindingToCommand(state, source, binding) {

@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
 
+import type { EffectsLabState } from '../effectsLab/types';
 import {
-  applyPlaybackEffects,
-  getAudioGraphIfExists,
-  getOrCreatePlaybackGraph,
-  resumeAudioContext,
-} from '../graph/registry';
+  configureMirrorPlaybackEffectsGraph,
+  isMirrorPlaybackAudible,
+  resetMirrorToTapGraph,
+} from '../graph/configureMirrorPlaybackEffects';
+import { getAudioGraphIfExists } from '../graph/registry';
 
 type UsePlaybackEffectsOptions = {
   /** Audible player — ducked while FX run on the mirror element. Never gets Web Audio. */
@@ -16,9 +17,16 @@ type UsePlaybackEffectsOptions = {
   isPlaying: boolean;
   bassBoost: boolean;
   lofi: boolean;
+  /** Optional discovery lab — takes mirror path when enabled (legacy toggles win if both on). */
+  effectsLab?: EffectsLabState;
+  /**
+   * VC projection window is audibly mirroring the same track — silence mirror graph speakers
+   * and let VC window own the FX chain (no duplicate audible stream).
+   */
+  vcMirrorPlaybackActive?: boolean;
 };
 
-/** Bass boost / lo-fi on the mirror element; main playback stays native for stream capture. */
+/** Bass boost / lo-fi / effects lab on the mirror element; main stays native for capture when FX off. */
 export function usePlaybackEffects({
   mainAudioRef,
   analyserAudioRef,
@@ -26,35 +34,50 @@ export function usePlaybackEffects({
   isPlaying,
   bassBoost,
   lofi,
+  effectsLab,
+  vcMirrorPlaybackActive = false,
 }: UsePlaybackEffectsOptions): void {
-  const effectsActive = bassBoost || lofi;
+  const input = { bassBoost, lofi, effectsLab };
+  const mirrorAudible = isMirrorPlaybackAudible(input);
 
   useEffect(() => {
     const main = mainAudioRef.current;
     const mirror = analyserAudioRef.current;
     if (!main || !mirror) return;
 
-    if (effectsActive) {
+    // VC window plays the track for capture with FX — main mirror stays analyser-only.
+    if (mirrorAudible && vcMirrorPlaybackActive) {
       main.volume = 0;
-      const graph = getOrCreatePlaybackGraph(mirror);
-      applyPlaybackEffects(graph, { bassBoost, lofi });
-      if (graph.speakerGain) {
-        graph.speakerGain.gain.value = 1;
-      }
-      if (isPlaying) {
-        resumeAudioContext(graph.context);
-      }
+      resetMirrorToTapGraph(mirror, 0);
       return;
     }
 
-    main.volume = volume;
-    const graph = getAudioGraphIfExists(mirror);
-    if (!graph) return;
-
-    graph.mode = 'tap';
-    applyPlaybackEffects(graph, { bassBoost: false, lofi: false });
-    if (graph.speakerGain) {
-      graph.speakerGain.gain.value = 0;
+    if (mirrorAudible) {
+      main.volume = 0;
+      configureMirrorPlaybackEffectsGraph(mirror, input, { speakerGain: 1, isPlaying });
+      return;
     }
-  }, [analyserAudioRef, bassBoost, effectsActive, isPlaying, lofi, mainAudioRef, volume]);
+
+    if (vcMirrorPlaybackActive) {
+      main.volume = 0;
+    } else {
+      main.volume = volume;
+    }
+    if (!getAudioGraphIfExists(mirror)) return;
+    resetMirrorToTapGraph(mirror, 0);
+  }, [
+    analyserAudioRef,
+    bassBoost,
+    effectsLab?.abBypass,
+    effectsLab?.effectId,
+    effectsLab?.outputTrimDb,
+    effectsLab?.workletEnhance,
+    effectsLab?.enabled,
+    isPlaying,
+    lofi,
+    mainAudioRef,
+    mirrorAudible,
+    vcMirrorPlaybackActive,
+    volume,
+  ]);
 }

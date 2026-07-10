@@ -236,6 +236,9 @@ declare global {
           error?: string;
         }>;
         cacheClearEvents: () => Promise<{ ok: boolean; error?: string }>;
+        onPlaybackCommand: (
+          callback: (payload: import('@shared/listener/playbackCommands').ListenerPlaybackCommand) => void,
+        ) => () => void;
       };
       artist: {
         pickAudio: () => Promise<string | null>;

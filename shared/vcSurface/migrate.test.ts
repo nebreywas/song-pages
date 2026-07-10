@@ -132,8 +132,22 @@ test('migrateVcConfig preserves visualizer rotation settings', () => {
     useFallbacks: true,
   });
 
-  assert.equal(migrated.visualizerChangeRule, 'click');
+  assert.equal(migrated.visualizerChangeRule, 'never');
+  assert.equal(migrated.visualizerAlsoClickToChange, true);
   assert.equal(migrated.visualizerSequence, 'random-builtin');
+});
+
+test('migrateVcConfig preserves visualizerAlsoClickToChange on modern configs', () => {
+  const migrated = migrateVcConfig({
+    ...modernPersistedConfig(),
+    visualizerChangeRule: 'new-song',
+    visualizerSequence: 'random-milkdrop',
+    visualizerAlsoClickToChange: true,
+  });
+
+  assert.equal(migrated.visualizerChangeRule, 'new-song');
+  assert.equal(migrated.visualizerSequence, 'random-milkdrop');
+  assert.equal(migrated.visualizerAlsoClickToChange, true);
 });
 
 test('migrateVcConfig migrates legacy cell content strings through normalize', () => {
