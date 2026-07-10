@@ -52,6 +52,8 @@ type DesignerCanvasProps = {
   onSelect: (selection: DesignerSelection) => void;
   onChangeSurface: (patch: Partial<VcModeConfig['surface']>) => void;
   onRegionContextMenu: (target: RegionTarget, event: React.MouseEvent) => void;
+  /** Fired after a divider/float layout drag or resize ends so the parent can flush saves. */
+  onSurfaceLayoutCommit?: () => void;
   previewVisualizerId?: string;
   onPreviewVisualizerClick?: () => void;
   previewVisualizerClickEnabled?: boolean;
@@ -87,6 +89,7 @@ export function DesignerCanvas({
   onSelect,
   onChangeSurface,
   onRegionContextMenu,
+  onSurfaceLayoutCommit,
   previewVisualizerId,
   onPreviewVisualizerClick,
   previewVisualizerClickEnabled = false,
@@ -95,10 +98,12 @@ export function DesignerCanvas({
   const frameRef = useRef<HTMLDivElement>(null);
   const configRef = useRef(config);
   const onChangeSurfaceRef = useRef(onChangeSurface);
+  const onSurfaceLayoutCommitRef = useRef(onSurfaceLayoutCommit);
   const [drag, setDrag] = useState<DragState>(null);
 
   configRef.current = config;
   onChangeSurfaceRef.current = onChangeSurface;
+  onSurfaceLayoutCommitRef.current = onSurfaceLayoutCommit;
 
   const layout = useMemo(
     () => computeSurfaceLayout(config.surface.templateId, config.surface.dividers),
@@ -181,6 +186,13 @@ export function DesignerCanvas({
 
     const onEnd = (event: PointerEvent) => {
       if (event.pointerId !== drag.pointerId) return;
+      if (
+        drag.type === 'divider'
+        || drag.type === 'float-move'
+        || drag.type === 'float-resize'
+      ) {
+        onSurfaceLayoutCommitRef.current?.();
+      }
       endDrag();
     };
 

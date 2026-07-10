@@ -36,6 +36,7 @@ import {
   type VcSpecialPlayStyle,
 } from '@shared/vcMode/specialPlayStyles';
 import type { KudoPreset } from '@shared/kudos';
+import { VC_SURFACE_DESIGNS_KEY, type VcSurfaceDesign } from '@shared/vcSurfaceDesigns';
 import {
   createDefaultHostContentCatalog,
   HOST_CONTENT_SETTINGS_KEY,
@@ -50,6 +51,8 @@ import { getApp } from '../lib/bridge';
 import { listVisualizers, visualizerSupportsSurface } from '../visualizers/registry';
 import { useVcVisualizerRotation } from './useVcVisualizerRotation';
 import { DesignerCanvas, type DesignerSelection } from './designer/DesignerCanvas';
+import { SurfaceDesignDeleteConfirmModal } from './designer/SurfaceDesignDeleteConfirmModal';
+import { SurfaceDesignsPopover } from './designer/SurfaceDesignsPopover';
 import { GridDesignSettingsPanel } from './designer/GridDesignSettingsPanel';
 import { RegionContentPopover, type RegionTarget } from './designer/RegionContentPopover';
 import { HelpTooltip } from '../components/HelpTooltip';
@@ -57,8 +60,9 @@ import { HostContentManager } from './host-content/HostContentManager';
 import { KeyBindingsPanel } from '../commands/KeyBindingsPanel';
 import { KudosManager } from './kudos/KudosManager';
 import { HostGraphicPreviewPopover } from './settings/HostGraphicPreviewPopover';
-import { createDefaultVcConfig, migrateVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
+import { createDefaultVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
 import { useAutoSaveVcConfig, vcConfigSaveStatusLabel } from './useAutoSaveVcConfig';
+import { useVcSurfaceDesigns } from './useVcSurfaceDesigns';
 import { useHostGraphicPopupUrl } from './useHostGraphicPopupUrl';
 
 type VcModeModalProps = {
@@ -212,16 +216,24 @@ function applyCellPatch(
 
 export function VcModeModal({ open, onClose, onStart, previewState = null, kudos }: VcModeModalProps) {
   const [config, setConfig] = useState<VcModeConfig>(() => createDefaultVcConfig());
+  const configRef = useRef(config);
+  configRef.current = config;
   const [hostCatalog, setHostCatalog] = useState<HostContentCatalog>(() => createDefaultHostContentCatalog());
   const [designerTab, setDesignerTab] = useState<DesignerTab>('surface');
   const [selection, setSelection] = useState<DesignerSelection>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [gridDesignOpen, setGridDesignOpen] = useState(false);
+  const [surfaceDesignPendingDelete, setSurfaceDesignPendingDelete] = useState<VcSurfaceDesign | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const surfaceDesigns = useVcSurfaceDesigns();
+  const updateActiveDesignConfigRef = useRef(surfaceDesigns.updateActiveDesignConfig);
+  updateActiveDesignConfigRef.current = surfaceDesigns.updateActiveDesignConfig;
 
   const { saveStatus, isHydrated, markHydrated, resetHydration, flushSave } = useAutoSaveVcConfig({
     enabled: open,
     config,
+    onPersist: (next) => updateActiveDesignConfigRef.current(next),
   });
   const saveStatusLabel = isHydrated ? vcConfigSaveStatusLabel(saveStatus) : null;
   const flushSaveRef = useRef(flushSave);
@@ -235,13 +247,19 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
     const app = getApp();
     if (!app?.getSettings) return;
 
-    void app.getSettings(VC_SETTINGS_KEY).then((saved) => {
+    void Promise.all([
+      app.getSettings(VC_SURFACE_DESIGNS_KEY),
+      app.getSettings(VC_SETTINGS_KEY),
+    ]).then(async ([catalogRaw, saved]) => {
       if (cancelled) return;
-      setConfig(migrateVcConfig(saved));
+      const catalog = await surfaceDesigns.hydrateCatalog(catalogRaw, saved);
+      const active = catalog.designs.find((design) => design.id === catalog.activeDesignId) ?? catalog.designs[0]!;
+      setConfig(active.config);
       setError(null);
       setSelection(null);
       setPopover(null);
       setGridDesignOpen(false);
+      setSurfaceDesignPendingDelete(null);
       setDesignerTab('surface');
       markHydrated();
     });
@@ -253,7 +271,7 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
     return () => {
       cancelled = true;
     };
-  }, [open, markHydrated]);
+  }, [open, markHydrated, surfaceDesigns.hydrateCatalog]);
 
   // Flush pending saves when the designer closes.
   const prevOpenRef = useRef(open);
@@ -320,6 +338,54 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
       setHostCatalog(migrateHostContentCatalog(raw));
     });
   }, []);
+
+  const applySurfaceDesignConfig = useCallback((next: VcModeConfig) => {
+    setConfig(next);
+    setSelection(null);
+    setPopover(null);
+    setGridDesignOpen(false);
+    setError(null);
+  }, []);
+
+  const handleSelectSurfaceDesign = useCallback(
+    async (designId: string) => {
+      if (designId === surfaceDesigns.catalog.activeDesignId) return;
+      await flushSave();
+      const result = await surfaceDesigns.switchDesign(designId, configRef.current);
+      applySurfaceDesignConfig(result.config);
+    },
+    [applySurfaceDesignConfig, flushSave, surfaceDesigns],
+  );
+
+  const handleCreateSurfaceDesign = useCallback(async () => {
+    await flushSave();
+    const result = await surfaceDesigns.createDesign(configRef.current);
+    applySurfaceDesignConfig(result.config);
+  }, [applySurfaceDesignConfig, flushSave, surfaceDesigns]);
+
+  const handleRenameSurfaceDesign = useCallback(
+    async (designId: string, name: string) => {
+      await surfaceDesigns.renameDesign(designId, name);
+    },
+    [surfaceDesigns],
+  );
+
+  const handleRequestDeleteSurfaceDesign = useCallback((design: VcSurfaceDesign) => {
+    setSurfaceDesignPendingDelete(design);
+  }, []);
+
+  const handleConfirmDeleteSurfaceDesign = useCallback(async () => {
+    if (!surfaceDesignPendingDelete) return;
+    await flushSave();
+    const result = await surfaceDesigns.deleteDesign(surfaceDesignPendingDelete.id, configRef.current);
+    setSurfaceDesignPendingDelete(null);
+    if (result) applySurfaceDesignConfig(result.config);
+  }, [
+    applySurfaceDesignConfig,
+    flushSave,
+    surfaceDesignPendingDelete,
+    surfaceDesigns,
+  ]);
 
   const selectDesignerTab = useCallback(
     (tab: DesignerTab) => {
@@ -470,6 +536,14 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
               aria-labelledby="vc-designer-tab-surface"
             >
               <div className="vc-surface-toolbar">
+                <SurfaceDesignsPopover
+                  designs={surfaceDesigns.catalog.designs}
+                  activeDesignId={surfaceDesigns.catalog.activeDesignId}
+                  onSelect={(designId) => void handleSelectSurfaceDesign(designId)}
+                  onCreate={() => void handleCreateSurfaceDesign()}
+                  onRename={(designId, name) => void handleRenameSurfaceDesign(designId, name)}
+                  onDelete={handleRequestDeleteSurfaceDesign}
+                />
                 <label className="vc-toolbar-field">
                   <span>Grid area template</span>
                   <select
@@ -523,6 +597,7 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                 onSelect={setSelection}
                 onChangeSurface={setSurface}
                 onRegionContextMenu={openRegionPopover}
+                onSurfaceLayoutCommit={() => void flushSaveRef.current()}
                 previewVisualizerId={designerVisualizerRotation.effectiveVisualizerId}
                 onPreviewVisualizerClick={designerVisualizerRotation.rotateVisualizer}
                 previewVisualizerClickEnabled={designerVisualizerRotation.visualizerClickEnabled}
@@ -885,6 +960,13 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
             Start VC Mode
           </button>
         </footer>
+
+        <SurfaceDesignDeleteConfirmModal
+          open={surfaceDesignPendingDelete != null}
+          designName={surfaceDesignPendingDelete?.name ?? ''}
+          onConfirm={() => void handleConfirmDeleteSurfaceDesign()}
+          onCancel={() => setSurfaceDesignPendingDelete(null)}
+        />
       </div>
     </div>
   );

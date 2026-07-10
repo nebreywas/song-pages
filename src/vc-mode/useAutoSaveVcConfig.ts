@@ -16,13 +16,19 @@ export type VcConfigSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'erro
 type UseAutoSaveVcConfigOptions = {
   enabled: boolean;
   config: VcModeConfig;
+  /** Optional second persist path (e.g. surface design catalog). */
+  onPersist?: (config: VcModeConfig) => Promise<unknown>;
 };
 
-export function useAutoSaveVcConfig({ enabled, config }: UseAutoSaveVcConfigOptions) {
+export function useAutoSaveVcConfig({ enabled, config, onPersist }: UseAutoSaveVcConfigOptions) {
   const [saveStatus, setSaveStatus] = useState<VcConfigSaveStatus>('idle');
   const [isHydrated, setIsHydrated] = useState(false);
   const saveTimerRef = useRef<number | null>(null);
   const savedFadeTimerRef = useRef<number | null>(null);
+  const configRef = useRef(config);
+  configRef.current = config;
+  const onPersistRef = useRef(onPersist);
+  onPersistRef.current = onPersist;
 
   const clearSaveTimer = useCallback(() => {
     if (saveTimerRef.current != null) {
@@ -43,6 +49,7 @@ export function useAutoSaveVcConfig({ enabled, config }: UseAutoSaveVcConfigOpti
     setSaveStatus('saving');
     try {
       await getApp()?.saveSettings?.(VC_SETTINGS_KEY, normalized);
+      if (onPersistRef.current) await onPersistRef.current(normalized);
       setSaveStatus('saved');
       clearSavedFadeTimer();
       savedFadeTimerRef.current = window.setTimeout(() => {
@@ -75,7 +82,7 @@ export function useAutoSaveVcConfig({ enabled, config }: UseAutoSaveVcConfigOpti
     setSaveStatus((current) => (current === 'saving' ? current : 'pending'));
     clearSaveTimer();
     saveTimerRef.current = window.setTimeout(() => {
-      void persistNow(config);
+      void persistNow(configRef.current);
     }, AUTOSAVE_DEBOUNCE_MS);
 
     return clearSaveTimer;
@@ -85,8 +92,8 @@ export function useAutoSaveVcConfig({ enabled, config }: UseAutoSaveVcConfigOpti
   const flushSave = useCallback(async (): Promise<boolean> => {
     if (!isHydrated) return true;
     clearSaveTimer();
-    return persistNow(config);
-  }, [clearSaveTimer, config, isHydrated, persistNow]);
+    return persistNow(configRef.current);
+  }, [clearSaveTimer, isHydrated, persistNow]);
 
   return {
     saveStatus,

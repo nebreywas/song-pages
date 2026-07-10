@@ -186,6 +186,143 @@
   padding-left: 0.75rem;
 }
 
+.vc-surface-designs-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.vc-surface-designs-trigger-name {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.vc-surface-designs-popover {
+  position: fixed;
+  z-index: 12000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+.vc-surface-designs-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.vc-surface-designs-popover-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.vc-surface-designs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.vc-surface-designs-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+  padding: 0.35rem 0.4rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.vc-surface-designs-item.is-active {
+  border-color: color-mix(in srgb, var(--accent, #6ea8fe) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent, #6ea8fe) 10%, var(--surface-2));
+}
+
+.vc-surface-designs-select {
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0.15rem 0.1rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.vc-surface-designs-rename-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.3rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.vc-surface-designs-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.vc-surface-designs-action {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  padding: 0.15rem 0.25rem;
+  cursor: pointer;
+}
+
+.vc-surface-designs-action:hover {
+  color: var(--text);
+}
+
+.vc-surface-designs-action--danger:hover {
+  color: var(--danger);
+}
+
+.vc-surface-design-delete-modal {
+  width: min(100%, 26rem);
+  padding: 1rem 1.1rem 1.05rem;
+}
+
+.vc-surface-design-delete-modal h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.vc-surface-design-delete-lead {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.vc-surface-design-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .vc-toolbar-field {
   display: flex;
   flex-direction: row;
