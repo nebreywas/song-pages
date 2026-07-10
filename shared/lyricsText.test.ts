@@ -1,7 +1,24 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { normalizeAlareLyricsText, stripBracketedLyricsText, stripMarkdownLyricsText } from './lyricsText';
+import {
+  collapseLyricsBlankLines,
+  formatListenerLyricsDisplayText,
+  normalizeAlareLyricsText,
+  stripBracketedLyricsText,
+  stripMarkdownLyricsText,
+} from './lyricsText';
+
+test('collapseLyricsBlankLines reduces triple newlines to double', () => {
+  assert.equal(collapseLyricsBlankLines('Line one\n\n\nLine two'), 'Line one\n\nLine two');
+  assert.equal(collapseLyricsBlankLines('Line one\n \n \nLine two'), 'Line one\n\nLine two');
+  assert.equal(collapseLyricsBlankLines('Line one\n\n'), 'Line one\n\n');
+});
+
+test('formatListenerLyricsDisplayText collapses blank lines even without bracket strip', () => {
+  assert.equal(formatListenerLyricsDisplayText('A\n\n\nB', false), 'A\n\nB');
+  assert.equal(formatListenerLyricsDisplayText('[Verse]\n\n\nLine', true), '\n\nLine');
+});
 
 test('stripBracketedLyricsText removes inline bracket comments', () => {
   const input = 'Hello [whispered] world';

@@ -81,12 +81,12 @@ export const DEFAULT_VC_GRID_DESIGN: VcGridDesignSettings = {
   },
   gridLines: {
     style: 'solid',
-    thicknessPx: 1,
+    thicknessPx: 0,
     color: '#5c677a',
   },
   floatLines: {
     style: 'solid',
-    thicknessPx: 1,
+    thicknessPx: 0,
     color: '#5b9fd4',
   },
   floatBackground: { ...DEFAULT_VC_FLOAT_BACKGROUND },
@@ -179,18 +179,40 @@ export function sanitizeGridDesign(raw: unknown): VcGridDesignSettings {
   };
 }
 
+/** True when template divider bars should be drawn (thickness 0 = hidden). */
+export function areGridLinesVisible(lines: VcGridLineSettings): boolean {
+  return lines.thicknessPx > 0;
+}
+
+/** True when float region outlines should be drawn (thickness 0 = hidden). */
+export function areFloatLinesVisible(lines: VcGridLineSettings): boolean {
+  return lines.thicknessPx > 0;
+}
+
 /** CSS for draggable grid divider bars (designer + live VC). */
 export function gridDividerCss(
   axis: 'vertical' | 'horizontal',
   lines: VcGridLineSettings,
+  options?: { preserveHitAreaPx?: number },
 ): GridDividerCss {
   const thickness = lines.thicknessPx;
+  const crossSize = axis === 'vertical' ? 'width' : 'height';
+
   if (thickness <= 0) {
-    return { opacity: 0, pointerEvents: 'none' as const };
+    // Designer still needs an invisible grab target when lines are hidden.
+    if (options?.preserveHitAreaPx && options.preserveHitAreaPx > 0) {
+      return {
+        opacity: 0,
+        pointerEvents: 'auto' as const,
+        background: 'transparent',
+        border: 'none',
+        [crossSize]: `${options.preserveHitAreaPx}px`,
+      };
+    }
+    return { display: 'none', pointerEvents: 'none' as const };
   }
 
   const borderSide = axis === 'vertical' ? 'borderLeft' : 'borderTop';
-  const crossSize = axis === 'vertical' ? 'width' : 'height';
 
   if (lines.style === 'solid') {
     return {
@@ -450,7 +472,69 @@ export function resolveRegionBorderDraft(
     };
   }
   const { lockAppearanceToGrid: _lock, savedRegionAppearance: _saved, ...draft } = overrides;
-  return mergeRegionBorder(draft, gridDesign);
+  const merged = mergeRegionBorder(draft, gridDesign);
+  // Once any border field is customized, show the full merged border in the editor.
+  if (regionHasBorderOverride(overrides)) {
+    return merged;
+  }
+  return {
+    ...merged,
+    thicknessPx: resolveFloatBorderThickness(draft, gridDesign, overrides),
+  };
+}
+
+/**
+ * Coalesce border control edits so sparse storage keeps color/thickness/style in sync.
+ * Prevents changing one line field from dropping the other in the layout popover.
+ */
+export function patchRegionBorderControls(
+  overrides: VcRegionAppearanceState,
+  gridDesign: VcGridDesignSettings,
+  patch: Partial<VcRegionBorderOverrides>,
+): Partial<VcRegionBorderOverrides> {
+  const defaults = gridDesign.floatLines;
+  const currentDraft = resolveRegionBorderDraft(overrides, gridDesign);
+
+  const next = {
+    style: patch.borderStyle ?? currentDraft.style,
+    thicknessPx: patch.borderThicknessPx ?? currentDraft.thicknessPx,
+    color: patch.borderColor ?? currentDraft.color,
+  };
+
+  const isBorderEdit =
+    patch.borderColor !== undefined ||
+    patch.borderStyle !== undefined ||
+    patch.borderThicknessPx !== undefined;
+
+  if (!isBorderEdit) return {};
+
+  const sparse: Partial<VcRegionBorderOverrides> = {};
+  if (next.color !== defaults.color) sparse.borderColor = next.color;
+  if (next.style !== defaults.style) sparse.borderStyle = next.style;
+  if (next.thicknessPx !== defaults.thicknessPx) sparse.borderThicknessPx = next.thicknessPx;
+
+  const hadBorder = regionHasBorderOverride(overrides);
+  if (hadBorder || Object.keys(sparse).length > 0) {
+    if (next.color !== defaults.color && sparse.borderColor === undefined) {
+      sparse.borderColor = next.color;
+    }
+    if (next.thicknessPx !== defaults.thicknessPx && sparse.borderThicknessPx === undefined) {
+      sparse.borderThicknessPx = next.thicknessPx;
+    }
+    if (next.style !== defaults.style && sparse.borderStyle === undefined) {
+      sparse.borderStyle = next.style;
+    }
+  }
+
+  if (Object.keys(sparse).length === 0 && hadBorder) {
+    return {
+      borderColor: undefined,
+      borderStyle: undefined,
+      borderThicknessPx: undefined,
+    };
+  }
+
+  return sparse;
 }
 
 export function pickOptionalBorderStyle(raw: unknown): VcGridLineStyle | undefined {
@@ -474,12 +558,44 @@ export function regionHasBorderOverride(overrides: VcRegionAppearanceState): boo
   );
 }
 
+/** True when a region stores background/opacity overrides (not border). */
+export function regionHasAppearanceOverride(overrides: VcRegionAppearanceState): boolean {
+  if (overrides.lockAppearanceToGrid) return false;
+  const effective = effectiveRegionAppearanceOverrides(overrides);
+  return (
+    effective.backgroundColor !== undefined ||
+    effective.backgroundOpacityPct !== undefined ||
+    effective.contentOpacityPct !== undefined
+  );
+}
+
+/**
+ * Floats that customize background/opacity without border fields should not inherit
+ * grid float-line thickness — only explicit border overrides or grid-locked floats do.
+ */
+function resolveFloatBorderThickness(
+  overrides: VcRegionBorderOverrides,
+  gridDesign: VcGridDesignSettings,
+  region: VcRegionAppearanceState,
+): number {
+  const merged = mergeRegionBorder(overrides, gridDesign);
+  if (regionHasAppearanceOverride(region) && !regionHasBorderOverride(region)) {
+    return 0;
+  }
+  return merged.thicknessPx;
+}
+
 /** Merge per-region border overrides with grid float line defaults (respects lock). */
 export function resolveRegionBorder(
   overrides: VcRegionAppearanceState,
   gridDesign: VcGridDesignSettings,
 ): VcGridLineSettings {
-  return mergeRegionBorder(effectiveRegionAppearanceOverrides(overrides), gridDesign);
+  const effective = effectiveRegionAppearanceOverrides(overrides);
+  const merged = mergeRegionBorder(effective, gridDesign);
+  return {
+    ...merged,
+    thicknessPx: resolveFloatBorderThickness(effective, gridDesign, overrides),
+  };
 }
 
 /** CSS border outline for a float or area region. */
@@ -520,6 +636,14 @@ export function floatOutlineCss(lines: VcGridLineSettings): GridDividerCss {
   };
 }
 
+/** True when a region's resolved border should render (thickness 0 = hidden). */
+export function isRegionBorderVisible(
+  overrides: VcRegionBorderOverrides,
+  gridDesign: VcGridDesignSettings,
+): boolean {
+  return resolveRegionBorder(overrides, gridDesign).thicknessPx > 0;
+}
+
 /** Convert #rrggbb + 0–100% opacity to rgba() for float backgrounds. */
 export function hexColorWithAlpha(hex: string, opacityPct: number): string {
   const normalized = hex.replace('#', '');
@@ -543,9 +667,17 @@ export function resolveFloatAppearance(
 ): ResolvedFloatAppearance {
   const effective = effectiveRegionAppearanceOverrides(float);
   const defaults = gridDesign.floatBackground ?? DEFAULT_VC_FLOAT_BACKGROUND;
+  const hasColorOverride = effective.backgroundColor !== undefined;
+  const hasOpacityOverride = effective.backgroundOpacityPct !== undefined;
+  // Picking a fill color without opacity should render solid — grid default opacity is often 0.
+  const backgroundOpacityPct = hasOpacityOverride
+    ? clampOpacityPct(effective.backgroundOpacityPct!)
+    : hasColorOverride
+      ? 100
+      : defaults.opacityPct;
   return {
     backgroundColor: effective.backgroundColor ?? defaults.color,
-    backgroundOpacityPct: effective.backgroundOpacityPct ?? defaults.opacityPct,
+    backgroundOpacityPct,
     contentOpacityPct:
       typeof effective.contentOpacityPct === 'number' && Number.isFinite(effective.contentOpacityPct)
         ? clampOpacityPct(effective.contentOpacityPct)
@@ -553,22 +685,12 @@ export function resolveFloatAppearance(
   };
 }
 
-/** Draft float appearance for the layout editor (saved snapshot while locked). */
+/** Values shown in the layout popover — matches live VC (grid defaults while locked). */
 export function resolveFloatAppearanceDraft(
   float: VcRegionAppearanceState,
   gridDesign: VcGridDesignSettings,
 ): ResolvedFloatAppearance {
-  if (float.lockAppearanceToGrid && float.savedRegionAppearance) {
-    const saved = float.savedRegionAppearance;
-    const defaults = gridDesign.floatBackground ?? DEFAULT_VC_FLOAT_BACKGROUND;
-    return {
-      backgroundColor: saved.backgroundColor,
-      backgroundOpacityPct: saved.backgroundOpacityPct ?? defaults.opacityPct,
-      contentOpacityPct: saved.contentOpacityPct ?? 100,
-    };
-  }
-  const { lockAppearanceToGrid: _lock, savedRegionAppearance: _saved, ...draft } = float;
-  return resolveFloatAppearance({ ...draft, lockAppearanceToGrid: false }, gridDesign);
+  return resolveFloatAppearance(float, gridDesign);
 }
 
 /** Background fill + optional content opacity for float regions. */

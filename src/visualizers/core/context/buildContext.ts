@@ -1,3 +1,5 @@
+import { normalizeSongRowAssets, resolveSongCoverUrl } from '@shared/listener/songResolution';
+
 import type { SongRow } from '../../../types/app';
 import type { VisualizerContext } from '../context/types';
 
@@ -7,13 +9,15 @@ export function buildVisualizerContext(song: SongRow | null | undefined): Visual
     return { song: null };
   }
 
+  const normalized = normalizeSongRowAssets(song);
+
   return {
     song: {
-      title: song.title,
-      artist: song.artist_name ?? '',
-      coverUrl: song.cover_url,
+      title: normalized.title,
+      artist: normalized.artist_name ?? '',
+      coverUrl: resolveSongCoverUrl(normalized),
     },
-    album: song.album ?? null,
-    year: song.year ?? null,
+    album: normalized.album ?? null,
+    year: normalized.year ?? null,
   };
 }

@@ -3,6 +3,8 @@
  * and the matching flag in electron/listener/sunoDemo/feature.js.
  */
 
+import { isUserPlaylistSongId } from '../listener/userPlaylists';
+
 /** Master switch — hide UI and reject IPC when false. */
 export const SUNO_DEMO_FEATURE_ENABLED = true;
 
@@ -38,11 +40,21 @@ export function sunoPlaylistIdFromArtistId(artistId: number | null | undefined):
 }
 
 export function isSunoDemoSongId(songId: number | null | undefined): boolean {
+  // Custom playlist entry ids (-3_000_001, …) are more negative than Suno ids and must not match.
+  if (isUserPlaylistSongId(songId)) return false;
   return typeof songId === 'number' && songId <= SUNO_DEMO_SONG_ID_BASE;
 }
 
-export function isSunoDemoSong(song: { id: number; playback_scope?: string | null }): boolean {
-  return isSunoDemoSongId(song.id) || song.playback_scope === SUNO_DEMO_PLAYBACK_SCOPE;
+export function isSunoDemoSong(song: {
+  id: number;
+  playback_scope?: string | null;
+  page_url?: string | null;
+}): boolean {
+  // Snapshot metadata survives custom-playlist virtual ids (-3_000_xxx).
+  if (song.playback_scope === SUNO_DEMO_PLAYBACK_SCOPE) return true;
+  if (String(song.page_url || '').startsWith('songpages-suno-demo:')) return true;
+  if (isUserPlaylistSongId(song.id)) return false;
+  return isSunoDemoSongId(song.id);
 }
 
 export function sunoDemoManifestUrl(songId: number): string {

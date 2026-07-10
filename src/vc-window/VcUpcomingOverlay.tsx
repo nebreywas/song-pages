@@ -36,7 +36,7 @@ export function VcUpcomingOverlay({ songs, settings }: VcUpcomingOverlayProps) {
         {songs.length ? (
           <ol className="vc-upcoming-list" tabIndex={0} aria-label="Upcoming song list">
             {songs.map((entry, index) => (
-              <li key={entry.id} className="vc-upcoming-row">
+              <li key={`${entry.id}-${index}`} className="vc-upcoming-row">
                 <span className="vc-upcoming-rank" aria-hidden="true">
                   {rankLabel(index)}
                 </span>

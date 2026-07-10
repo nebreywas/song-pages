@@ -7,6 +7,11 @@ const SUNO_DEMO_FEATURE_ENABLED = true;
 
 const SUNO_DEMO_ARTIST_ID = -1;
 const SUNO_DEMO_SONG_ID_BASE = -2_000_000;
+const USER_PLAYLIST_SONG_ID_BASE = -3_000_000;
+
+function isUserPlaylistSongId(songId) {
+  return typeof songId === 'number' && songId <= USER_PLAYLIST_SONG_ID_BASE;
+}
 const SUNO_DEMO_PLAYBACK_SCOPE = 'suno-demo';
 const SUNO_DEMO_MANIFEST_PREFIX = 'songpages-suno-demo:manifest/';
 const STUDIO_API_BASE = 'https://studio-api.prod.suno.com';
@@ -31,6 +36,7 @@ function sunoPlaylistIdFromArtistId(artistId) {
 }
 
 function isSunoDemoSongId(songId) {
+  if (isUserPlaylistSongId(songId)) return false;
   return typeof songId === 'number' && songId <= SUNO_DEMO_SONG_ID_BASE;
 }
 

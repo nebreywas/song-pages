@@ -1,5 +1,0 @@
-# Discourage bots from hammering HLS segment URLs. HTML pages remain crawlable.
-User-agent: *
-Disallow: /*.m3u8$
-Disallow: /*.ts$
-Crawl-delay: 5

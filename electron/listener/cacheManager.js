@@ -24,12 +24,18 @@ const {
 } = require('./cache/storage');
 const {
   fetchBuffer,
+  extractHtmlAssetReferences,
   extractHtmlAssetUrls,
+  isSameDocumentUrl,
   parseMediaPlaylist,
   rewriteHtmlForCache,
   rewritePlaylistForCache,
+  CACHE_HTML_REWRITE_REVISION,
 } = require('./cache/fetchAssets');
 const { recordCacheEvent, getCacheEvents, clearCacheEvents } = require('./cache/cacheAnalytics');
+const { readEntryFile, getCacheRoot } = require('./cache/storage');
+const fs = require('fs');
+const path = require('path');
 
 /** @type {Map<number, Promise<void>>} */
 const populateInflight = new Map();
@@ -46,8 +52,8 @@ function getMaxCacheEntries() {
 function getCacheRowBySongId(songId) {
   return getDatabase()
     .prepare(
-      `SELECT id, artist_id, song_id, manifest_revision, page_filename, playlist_filename,
-              total_bytes, created_at, last_accessed_at
+      `SELECT id, artist_id, song_id, manifest_revision, html_rewrite_revision, page_filename,
+              playlist_filename, total_bytes, created_at, last_accessed_at
        FROM song_cache WHERE song_id = ?`,
     )
     .get(songId);
@@ -56,8 +62,8 @@ function getCacheRowBySongId(songId) {
 function getCacheRowById(cacheId) {
   return getDatabase()
     .prepare(
-      `SELECT id, artist_id, song_id, manifest_revision, page_filename, playlist_filename,
-              total_bytes, created_at, last_accessed_at
+      `SELECT id, artist_id, song_id, manifest_revision, html_rewrite_revision, page_filename,
+              playlist_filename, total_bytes, created_at, last_accessed_at
        FROM song_cache WHERE id = ?`,
     )
     .get(cacheId);
@@ -126,6 +132,7 @@ async function evictLruEntries(maxEntries) {
 function isCacheRowValid(row, manifestRevision) {
   if (!row) return false;
   if (row.manifest_revision !== manifestRevision) return false;
+  if (row.html_rewrite_revision !== CACHE_HTML_REWRITE_REVISION) return false;
   return true;
 }
 
@@ -135,6 +142,16 @@ async function cacheFilesExist(row) {
     return false;
   }
   return true;
+}
+
+/** Cached pages must reference subresources via songpages-cache:// after HTML rewrite. */
+async function isCachedPageRewritten(row) {
+  try {
+    const html = (await readEntryFile(row.id, row.page_filename)).toString('utf8');
+    return html.includes('songpages-cache://');
+  } catch {
+    return false;
+  }
 }
 
 function buildResolvedUrls(row) {
@@ -182,7 +199,12 @@ async function populateSongCache(songId) {
 
   const manifestRevision = artist.build_version || 'unknown';
   const existing = getCacheRowBySongId(songId);
-  if (existing && existing.manifest_revision === manifestRevision && (await cacheFilesExist(existing))) {
+  if (
+    existing &&
+    isCacheRowValid(existing, manifestRevision) &&
+    (await cacheFilesExist(existing)) &&
+    (await isCachedPageRewritten(existing))
+  ) {
     touchCacheEntry(existing.id);
     recordCacheEvent('populate_skip', {
       ...songSummary(songId),
@@ -214,7 +236,25 @@ async function populateSongCache(songId) {
 
   const pageBuffer = await fetchBuffer(song.page_url);
   const pageHtml = pageBuffer.toString('utf8');
-  const htmlAssetUrls = extractHtmlAssetUrls(pageHtml, song.page_url);
+  const htmlReferences = new Map();
+  const htmlAssetUrls = [];
+
+  const noteHtmlReference = (resolvedUrl, reference) => {
+    if (!htmlReferences.has(resolvedUrl)) {
+      htmlReferences.set(resolvedUrl, new Set());
+    }
+    htmlReferences.get(resolvedUrl).add(reference);
+  };
+
+  for (const { reference, resolvedUrl } of extractHtmlAssetReferences(pageHtml, song.page_url)) {
+    noteHtmlReference(resolvedUrl, reference);
+    if (isSameDocumentUrl(resolvedUrl, song.page_url)) {
+      continue;
+    }
+    if (!htmlAssetUrls.includes(resolvedUrl)) {
+      htmlAssetUrls.push(resolvedUrl);
+    }
+  }
 
   for (const assetUrl of htmlAssetUrls) {
     const filename = assignLocalName(assetUrl);
@@ -224,7 +264,12 @@ async function populateSongCache(songId) {
 
   if (song.cover_url) {
     try {
-      const coverUrl = resolveRemoteUrl(song.page_url, song.cover_url) || song.cover_url;
+      const coverBase = song.song_manifest_url || song.page_url;
+      const coverUrl = resolveRemoteUrl(coverBase, song.cover_url) || song.cover_url;
+      const coverReference = String(song.cover_url).trim();
+      if (coverReference && !/^[a-z][a-z0-9+.-]*:/i.test(coverReference)) {
+        noteHtmlReference(coverUrl, coverReference);
+      }
       if (!remoteToLocal.has(coverUrl)) {
         const filename = assignLocalName(coverUrl, `artwork.${extensionFromUrl(coverUrl, 'jpg')}`);
         await writeEntryFile(cacheId, filename, await fetchBuffer(coverUrl));
@@ -254,7 +299,13 @@ async function populateSongCache(songId) {
     await writeEntryFile(cacheId, filename, await fetchBuffer(segmentUrl));
   }
 
-  const rewrittenHtml = rewriteHtmlForCache(pageHtml, song.page_url, cacheId, remoteToLocal);
+  const rewrittenHtml = rewriteHtmlForCache(
+    pageHtml,
+    song.page_url,
+    cacheId,
+    remoteToLocal,
+    htmlReferences,
+  );
   await writeEntryFile(cacheId, 'page.html', Buffer.from(rewrittenHtml, 'utf8'));
 
   const rewrittenPlaylist = rewritePlaylistForCache(
@@ -270,9 +321,17 @@ async function populateSongCache(songId) {
 
   db.prepare(
     `INSERT INTO song_cache (
-       id, artist_id, song_id, manifest_revision, page_filename, playlist_filename, total_bytes
-     ) VALUES (?, ?, ?, ?, 'page.html', 'playlist.m3u8', ?)`,
-  ).run(cacheId, song.artist_id, song.id, manifestRevision, totalBytes);
+       id, artist_id, song_id, manifest_revision, html_rewrite_revision, page_filename,
+       playlist_filename, total_bytes
+     ) VALUES (?, ?, ?, ?, ?, 'page.html', 'playlist.m3u8', ?)`,
+  ).run(
+    cacheId,
+    song.artist_id,
+    song.id,
+    manifestRevision,
+    CACHE_HTML_REWRITE_REVISION,
+    totalBytes,
+  );
 
   const insertAsset = db.prepare(
     `INSERT INTO song_cache_assets (cache_id, role, remote_url, local_filename, bytes)
@@ -340,7 +399,11 @@ async function resolveSongAccess(songId, source = 'unknown') {
   const manifestRevision = artist?.build_version || 'unknown';
   const row = getCacheRowBySongId(songId);
 
-  if (isCacheRowValid(row, manifestRevision) && (await cacheFilesExist(row))) {
+  if (
+    isCacheRowValid(row, manifestRevision) &&
+    (await cacheFilesExist(row)) &&
+    (await isCachedPageRewritten(row))
+  ) {
     touchCacheEntry(row.id);
     recordCacheEvent('resolve_hit', {
       source,
@@ -432,11 +495,76 @@ async function invalidateArtistIfRevisionChanged(artistId, previousRevision, nex
   return true;
 }
 
+/** Remove every cached song entry and on-disk cache directory. */
+async function clearAllSongCache(reason = 'manual') {
+  const rows = getDatabase().prepare('SELECT id FROM song_cache').all();
+  if (rows.length > 0) {
+    recordCacheEvent('cache_clear_all', { entryCount: rows.length, reason });
+  }
+  for (const row of rows) {
+    await deleteCacheEntry(row.id, reason);
+  }
+  await removeOrphanCacheDirs();
+}
+
+/** Delete on-disk cache folders that no longer have SQLite rows. */
+async function removeOrphanCacheDirs() {
+  const root = getCacheRoot();
+  if (!fs.existsSync(root)) return;
+
+  const db = getDatabase();
+  for (const name of fs.readdirSync(root)) {
+    const entryPath = path.join(root, name);
+    try {
+      if (!fs.statSync(entryPath).isDirectory()) continue;
+      const row = db.prepare('SELECT 1 AS ok FROM song_cache WHERE id = ?').get(name);
+      if (!row) {
+        fs.rmSync(entryPath, { recursive: true, force: true });
+      }
+    } catch {
+      /* ignore unreadable entries */
+    }
+  }
+}
+
+/** Drop cache rows from older HTML rewrite rules — runs once on app launch. */
+async function purgeStaleCacheEntriesOnLaunch() {
+  const { migrateSongCacheColumns } = require('./cache/schema');
+  const db = getDatabase();
+  migrateSongCacheColumns(db);
+
+  const stale = db
+    .prepare(
+      `SELECT id FROM song_cache
+       WHERE html_rewrite_revision IS NULL OR html_rewrite_revision != ?`,
+    )
+    .all(CACHE_HTML_REWRITE_REVISION);
+
+  if (stale.length > 0) {
+    recordCacheEvent('cache_purge_stale', {
+      entryCount: stale.length,
+      htmlRewriteRevision: CACHE_HTML_REWRITE_REVISION,
+    });
+    logger.info('Purging stale song cache entries', {
+      count: stale.length,
+      htmlRewriteRevision: CACHE_HTML_REWRITE_REVISION,
+    });
+  }
+
+  for (const row of stale) {
+    await deleteCacheEntry(row.id, 'stale_rewrite_revision');
+  }
+
+  await removeOrphanCacheDirs();
+}
+
 module.exports = {
   getMaxCacheEntries,
   getCacheStats,
   getCacheEvents,
   clearCacheEvents,
+  clearAllSongCache,
+  purgeStaleCacheEntriesOnLaunch,
   resolveSongAccess,
   populateSongCache,
   schedulePopulate,

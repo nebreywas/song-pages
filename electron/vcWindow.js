@@ -22,6 +22,123 @@ let mainWindowRef = null;
 
 const DEV_SERVER_URL = require('./devServer').devServerOrigin();
 
+const VC_MIN_WIDTH = 800;
+const VC_MIN_HEIGHT = 500;
+const PROJECTION_WINDOW_REPORT_DEBOUNCE_MS = 400;
+
+/** @type {ReturnType<typeof setTimeout> | null} */
+let projectionWindowReportTimer = null;
+
+/** Last non-fullscreen bounds — kept so fullscreen toggles do not lose windowed size. */
+let lastWindowedBounds = null;
+
+function normalizeProjectionWindow(bounds) {
+  if (!bounds || typeof bounds !== 'object') return null;
+  const width = Math.max(VC_MIN_WIDTH, Math.round(Number(bounds.width) || 0));
+  const height = Math.max(VC_MIN_HEIGHT, Math.round(Number(bounds.height) || 0));
+  const x = Math.round(Number(bounds.x) || 0);
+  const y = Math.round(Number(bounds.y) || 0);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+  return {
+    x,
+    y,
+    width,
+    height,
+    isFullScreen: bounds.isFullScreen === true,
+  };
+}
+
+function readWindowedBounds(win) {
+  if (!win || win.isDestroyed() || win.isFullScreen()) return lastWindowedBounds;
+  const [x, y] = win.getPosition();
+  const [width, height] = win.getSize();
+  const bounds = { x, y, width, height, isFullScreen: false };
+  lastWindowedBounds = bounds;
+  return bounds;
+}
+
+function emitProjectionWindowChanged(immediate = false) {
+  if (!vcWindow || vcWindow.isDestroyed() || !mainWindowRef || mainWindowRef.isDestroyed()) {
+    return;
+  }
+
+  const send = () => {
+    if (!vcWindow || vcWindow.isDestroyed() || !mainWindowRef || mainWindowRef.isDestroyed()) {
+      return;
+    }
+    if (vcWindow.isFullScreen()) {
+      const base = lastWindowedBounds ?? readWindowedBounds(vcWindow);
+      if (!base) return;
+      mainWindowRef.webContents.send('vc:projection-window-changed', {
+        ...base,
+        isFullScreen: true,
+      });
+      return;
+    }
+    const bounds = readWindowedBounds(vcWindow);
+    if (!bounds) return;
+    mainWindowRef.webContents.send('vc:projection-window-changed', bounds);
+  };
+
+  if (immediate) {
+    if (projectionWindowReportTimer != null) {
+      clearTimeout(projectionWindowReportTimer);
+      projectionWindowReportTimer = null;
+    }
+    send();
+    return;
+  }
+
+  if (projectionWindowReportTimer != null) {
+    clearTimeout(projectionWindowReportTimer);
+  }
+  projectionWindowReportTimer = setTimeout(() => {
+    projectionWindowReportTimer = null;
+    send();
+  }, PROJECTION_WINDOW_REPORT_DEBOUNCE_MS);
+}
+
+function attachProjectionWindowListeners(win) {
+  win.on('resize', () => emitProjectionWindowChanged());
+  win.on('move', () => emitProjectionWindowChanged());
+  win.on('enter-full-screen', () => emitProjectionWindowChanged(true));
+  win.on('leave-full-screen', () => emitProjectionWindowChanged(true));
+  win.on('close', () => emitProjectionWindowChanged(true));
+}
+
+function applyProjectionWindow(bounds) {
+  if (!vcWindow || vcWindow.isDestroyed() || !bounds) return;
+  if (bounds.isFullScreen) {
+    if (bounds.width && bounds.height) {
+      lastWindowedBounds = {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        isFullScreen: false,
+      };
+    }
+    vcWindow.setFullScreen(true);
+    return;
+  }
+  if (vcWindow.isFullScreen()) {
+    vcWindow.setFullScreen(false);
+  }
+  vcWindow.setBounds({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+  });
+  lastWindowedBounds = {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    isFullScreen: false,
+  };
+}
+
 function vcLoadTarget() {
   if (!require('electron').app.isPackaged) {
     return devServerUrl('/vc-window/vc.html');
@@ -102,12 +219,17 @@ function hostGraphicUrlFromPath(filePath) {
 
 /**
  * @param {import('electron').BrowserWindow} mainWindow
- * @param {{ fullscreen?: boolean }} [options]
+ * @param {{ fullscreen?: boolean; projectionWindow?: Record<string, unknown> }} [options]
  */
 function openVcWindow(mainWindow, options = {}) {
   mainWindowRef = mainWindow;
 
+  const savedBounds = normalizeProjectionWindow(options.projectionWindow);
+
   if (vcWindow && !vcWindow.isDestroyed()) {
+    if (savedBounds) {
+      applyProjectionWindow(savedBounds);
+    }
     vcWindow.focus();
     if (options.fullscreen) vcWindow.setFullScreen(true);
     return { ok: true };
@@ -120,12 +242,12 @@ function openVcWindow(mainWindow, options = {}) {
   const loadTarget = vcLoadTarget();
 
   vcWindow = new BrowserWindow({
-    x,
-    y,
-    width,
-    height,
-    minWidth: 800,
-    minHeight: 500,
+    x: savedBounds?.x ?? x,
+    y: savedBounds?.y ?? y,
+    width: savedBounds?.width ?? width,
+    height: savedBounds?.height ?? height,
+    minWidth: VC_MIN_WIDTH,
+    minHeight: VC_MIN_HEIGHT,
     title: 'Song Pages — VC Mode',
     backgroundColor: '#000000',
     show: false,
@@ -141,6 +263,18 @@ function openVcWindow(mainWindow, options = {}) {
       autoplayPolicy: 'no-user-gesture-required',
     },
   });
+
+  if (savedBounds && !savedBounds.isFullScreen) {
+    lastWindowedBounds = {
+      x: savedBounds.x,
+      y: savedBounds.y,
+      width: savedBounds.width,
+      height: savedBounds.height,
+      isFullScreen: false,
+    };
+  }
+
+  attachProjectionWindowListeners(vcWindow);
 
   installTrustedNavigationPolicy(vcWindow, {
     role: 'vc',
@@ -159,8 +293,14 @@ function openVcWindow(mainWindow, options = {}) {
   });
 
   vcWindow.once('ready-to-show', () => {
+    // macOS can reset bounds on first show — re-apply saved size before displaying.
+    if (savedBounds) {
+      applyProjectionWindow(savedBounds);
+    }
     vcWindow.show();
-    if (options.fullscreen) vcWindow.setFullScreen(true);
+    if (savedBounds?.isFullScreen || options.fullscreen) {
+      vcWindow.setFullScreen(true);
+    }
     commandService.setVcModeActive(true);
     syncCommandWindowRefs();
     commandService.registerActiveShortcuts();
@@ -213,6 +353,10 @@ function getVcWindow() {
   return vcWindow && !vcWindow.isDestroyed() ? vcWindow : null;
 }
 
+function getMainWindowRef() {
+  return mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null;
+}
+
 module.exports = {
   openVcWindow,
   closeVcWindow,
@@ -220,6 +364,7 @@ module.exports = {
   isVcWindowOpen,
   isVcFullScreen,
   getVcWindow,
+  getMainWindowRef,
   syncCommandWindowRefs,
   sendVcState,
   sendVcFrame,

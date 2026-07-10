@@ -15,4 +15,9 @@ export {
   reconcileLegacyDefaultDesign,
   sanitizeVcSurfaceDesignCatalogForSave,
 } from './migrate';
+export {
+  applyActiveDesignConfigUpdate,
+  applyDesignProjectionWindowUpdate,
+  resolveProjectionWindowForDesign,
+} from './catalogOps';
 export type { VcSurfaceDesign, VcSurfaceDesignCatalog } from './types';

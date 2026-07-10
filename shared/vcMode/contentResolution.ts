@@ -119,6 +119,19 @@ export type ResolvedLyrics = {
   songId?: string | null;
 };
 
+export type ResolvedMarqueeLyrics = {
+  kind: 'marquee-lyrics';
+  /** Normalized multiline lyrics — flattened to one marquee line at render time. */
+  text: string;
+  fontStyle?: HostFontStyleId;
+  fontSize?: HostFontSizeId;
+  color?: string;
+  textAlign?: VcTextAlign;
+  lyricTracking?: VcLyricTracking;
+  manifestDurationSeconds?: number | null;
+  songId?: string | null;
+};
+
 export type ResolvedAbout = {
   kind: 'about';
   coverUrl: string | null;
@@ -171,6 +184,7 @@ export type ResolvedVcContent =
   | ResolvedVideo
   | ResolvedText
   | ResolvedLyrics
+  | ResolvedMarqueeLyrics
   | ResolvedAbout
   | ResolvedArtistBioName
   | ResolvedSeekBar
@@ -182,6 +196,7 @@ const SONG_TO_FALLBACK: Partial<Record<VcCellContent, HostFallbackSlotId>> = {
   cover: 'cover',
   'video-cover': 'video-cover',
   lyrics: 'lyrics',
+  'marquee-lyrics': 'lyrics',
   about: 'about-song',
   'artist-name': 'artist-name',
   'artist-image': 'artist-image',
@@ -412,6 +427,10 @@ function resolveSongPrimary(content: VcCellContent, ctx: VcResolutionContext): R
     return { kind: 'lyrics', text: song.lyrics };
   }
 
+  if (content === 'marquee-lyrics' && song.lyrics.trim()) {
+    return { kind: 'marquee-lyrics', text: song.lyrics };
+  }
+
   if (content === 'about' && (song.about.trim() || song.caption || song.coverUrl)) {
     return {
       kind: 'about',
@@ -563,6 +582,27 @@ function applySongPresentation(
 
   if (rule === 'area-text') {
     const presentation = resolveSongAreaTextPresentation(overrides, typography);
+    const manifestDuration = songDurationSeconds(ctx);
+    const songId = ctx.song?.id != null ? String(ctx.song.id) : null;
+
+    if (resolved.kind === 'marquee-lyrics' || (content === 'marquee-lyrics' && resolved.kind === 'lyrics')) {
+      const rawText = resolved.text;
+      const tracking = resolveLyricTracking(overrides);
+      const normalizedText = normalizeAlareLyricsText(rawText);
+
+      return {
+        kind: 'marquee-lyrics',
+        text: normalizedText,
+        fontStyle: presentation.fontStyle,
+        fontSize: presentation.fontSize,
+        color: presentation.color,
+        textAlign: presentation.textAlign,
+        lyricTracking: tracking,
+        manifestDurationSeconds: manifestDuration,
+        songId,
+      };
+    }
+
     if (resolved.kind === 'lyrics') {
       const tracking = resolveLyricTracking(overrides);
       const manifestDuration = songDurationSeconds(ctx);

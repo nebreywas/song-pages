@@ -122,9 +122,24 @@ function registerIpcHandlers() {
     }
   });
 
-  ipcMain.handle('listener:resolveSongAccess', async (_event, songId, source) => {
+  ipcMain.handle('listener:resolveSongAccess', async (_event, songRef, source) => {
     try {
+      const { resolveLibrarySongIdForAccess } = require('./listener/librarySongLookup');
       const cacheManager = require('./listener/cacheManager');
+      const songId = resolveLibrarySongIdForAccess(songRef);
+      if (!songId) {
+        if (songRef && typeof songRef === 'object' && songRef.page_url && songRef.playback_url) {
+          return {
+            ok: true,
+            data: {
+              pageUrl: songRef.page_url,
+              playbackUrl: songRef.playback_url,
+              fromCache: false,
+            },
+          };
+        }
+        return { ok: false, error: 'Song not found.' };
+      }
       return await cacheManager.resolveSongAccess(songId, source);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -157,6 +172,17 @@ function registerIpcHandlers() {
       const cacheManager = require('./listener/cacheManager');
       cacheManager.clearCacheEvents();
       return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:cacheClearAll', async () => {
+    try {
+      const cacheManager = require('./listener/cacheManager');
+      await cacheManager.clearAllSongCache('developer');
+      return { ok: true, data: cacheManager.getCacheStats() };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message };
@@ -664,6 +690,13 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.on('vc:switchSurface', (_event, designId) => {
+    if (typeof designId !== 'string' || !designId.trim()) return;
+    const mainWindow = vcWindow.getMainWindowRef();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('vc:switch-surface', designId.trim());
+  });
+
   // --- Command input system ---
 
   const commandService = require('./commands/commandService');
@@ -713,8 +746,18 @@ function registerIpcHandlers() {
 
   ipcMain.handle('controller:status', () => ({
     ok: true,
-    data: { open: controllerWindow.isControllerWindowOpen() },
+    data: {
+      open: controllerWindow.isControllerWindowOpen(),
+      alwaysOnTop: controllerWindow.getControllerAlwaysOnTop(),
+    },
   }));
+
+  ipcMain.handle('controller:setAlwaysOnTop', (_event, enabled) => {
+    if (typeof enabled !== 'boolean') {
+      return { ok: false, error: 'enabled must be a boolean' };
+    }
+    return controllerWindow.setControllerAlwaysOnTop(enabled);
+  });
 }
 
 module.exports = { registerIpcHandlers };

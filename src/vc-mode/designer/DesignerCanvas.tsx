@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { applyDividerDrag, computeSurfaceLayout } from '@shared/vcSurface/geometry';
+import { surfaceRectStyle, surfaceFloatStyle, EDGE_BLEED_SEAMLESS_PX } from '@shared/vcSurface/surfaceRectStyle';
 import {
   arrowKeyToDirection,
   directionDelta,
@@ -15,13 +16,15 @@ import {
   nudgeFloat,
   onePixelNorm,
 } from '@shared/vcSurface/designerKeyboard';
-import { moveFloat, resizeFloat } from '@shared/vcSurface/floats';
+import { applyFloatPointerDrag, resetFloatRotation, resizeFloat } from '@shared/vcSurface/floats';
 import {
+  areGridLinesVisible,
   gridDividerCss,
   floatOutlineCssForFloat,
   floatAppearanceCss,
   hasActiveFullscreenGraphic,
   regionHasBorderOverride,
+  isRegionBorderVisible,
   regionOutlineCss,
   resolveAreaBackgroundColor,
   resolveLyricsFadeBackground,
@@ -61,7 +64,15 @@ type DesignerCanvasProps = {
 
 type DragState =
   | { type: 'divider'; key: string; pointerId: number }
-  | { type: 'float-move'; id: string; offsetX: number; offsetY: number; pointerId: number }
+  | {
+      type: 'float-move';
+      id: string;
+      offsetX: number;
+      offsetY: number;
+      pointerId: number;
+      startRotationDeg: number;
+      startNormY: number;
+    }
   | { type: 'float-resize'; id: string; pointerId: number }
   | null;
 
@@ -71,7 +82,26 @@ function activeContent(cell: VcCellAssignment) {
 
 /** Width × height as rounded whole percentages for designer badges. */
 function formatRegionSize(width: number, height: number): string {
-  return `${Math.round(width * 100)}% x ${Math.round(height * 100)}%`;
+  return `${Math.round(width * 100)}% × ${Math.round(height * 100)}%`;
+}
+
+/** Invisible grab strip in the designer when grid lines are hidden (no painted chrome). */
+const DESIGNER_DIVIDER_HIT_PX = 12;
+
+function designerDividerHitStyle(isVertical: boolean): React.CSSProperties {
+  const half = DESIGNER_DIVIDER_HIT_PX / 2;
+  if (isVertical) {
+    return {
+      width: `${DESIGNER_DIVIDER_HIT_PX}px`,
+      marginLeft: `-${half}px`,
+      transform: 'none',
+    };
+  }
+  return {
+    height: `${DESIGNER_DIVIDER_HIT_PX}px`,
+    marginTop: `-${half}px`,
+    transform: 'none',
+  };
 }
 
 function isEditableKeyTarget(target: EventTarget | null): boolean {
@@ -109,6 +139,14 @@ export function DesignerCanvas({
     () => computeSurfaceLayout(config.surface.templateId, config.surface.dividers),
     [config.surface.templateId, config.surface.dividers],
   );
+  const regionEdgeBleedPx = areGridLinesVisible(config.gridDesign.gridLines)
+    ? 2
+    : EDGE_BLEED_SEAMLESS_PX;
+  const gridLinesHiddenClass = areGridLinesVisible(config.gridDesign.gridLines)
+    ? ''
+    : ' vc-grid-lines-hidden';
+  const fullscreenGraphic = hasActiveFullscreenGraphic(config.gridDesign);
+  const surfaceBackground = fullscreenGraphic ? 'transparent' : config.gridDesign.backgroundColor;
 
   const floats = useMemo(
     () => [...config.surface.floats].sort((a, b) => a.zIndex - b.zIndex),
@@ -167,7 +205,7 @@ export function DesignerCanvas({
       if (drag.type === 'float-move') {
         const float = current.surface.floats.find((f) => f.id === drag.id);
         if (!float) return;
-        const next = moveFloat(float, norm.x - drag.offsetX, norm.y - drag.offsetY);
+        const next = applyFloatPointerDrag(float, norm, drag, event.shiftKey);
         onChangeSurfaceRef.current({
           floats: current.surface.floats.map((f) => (f.id === drag.id ? next : f)),
         });
@@ -281,12 +319,12 @@ export function DesignerCanvas({
     >
       <div
         ref={surfaceRef}
-        className={`vc-designer-canvas${
-          hasActiveFullscreenGraphic(config.gridDesign) ? ' vc-has-fullscreen-graphic' : ''
+        className={`vc-designer-canvas${gridLinesHiddenClass}${
+          fullscreenGraphic ? ' vc-has-fullscreen-graphic' : ''
         }`}
         style={
           {
-            background: config.gridDesign.backgroundColor,
+            background: surfaceBackground,
             '--vc-grid-bg': config.gridDesign.backgroundColor,
           } as React.CSSProperties
         }
@@ -306,16 +344,13 @@ export function DesignerCanvas({
               key={`area-${area.areaNumber}`}
               className={`vc-designer-region${selected ? ' is-selected' : ''}`}
               style={{
-                left: `${area.x * 100}%`,
-                top: `${area.y * 100}%`,
-                width: `${area.width * 100}%`,
-                height: `${area.height * 100}%`,
+                ...surfaceRectStyle(area, { edgeBleedPx: regionEdgeBleedPx }),
                 background: areaBackground,
                 '--vc-lyrics-fade-bg': resolveLyricsFadeBackground(
                   areaBackground,
                   config.gridDesign.backgroundColor,
                 ),
-                ...(regionHasBorderOverride(cell)
+                ...(regionHasBorderOverride(cell) && isRegionBorderVisible(cell, config.gridDesign)
                   ? regionOutlineCss(cell, config.gridDesign)
                   : {}),
               } as React.CSSProperties}
@@ -360,12 +395,11 @@ export function DesignerCanvas({
               key={float.id}
               className={`vc-designer-region vc-designer-float${selected ? ' is-selected' : ''}${drag?.type === 'float-move' && drag.id === float.id ? ' is-dragging' : ''}`}
               style={{
-                left: `${float.x * 100}%`,
-                top: `${float.y * 100}%`,
-                width: `${float.width * 100}%`,
-                height: `${float.height * 100}%`,
+                ...surfaceFloatStyle(float, { edgeBleedPx: regionEdgeBleedPx }),
                 zIndex: 40 + float.zIndex,
-                ...floatOutlineCssForFloat(float, config.gridDesign),
+                ...(isRegionBorderVisible(float, config.gridDesign)
+                  ? floatOutlineCssForFloat(float, config.gridDesign)
+                  : {}),
                 ...appearance.region,
                 '--vc-lyrics-fade-bg': resolveLyricsFadeBackground(
                   floatBackground,
@@ -383,7 +417,21 @@ export function DesignerCanvas({
                   offsetX: norm.x - float.x,
                   offsetY: norm.y - float.y,
                   pointerId: event.pointerId,
+                  startRotationDeg: float.rotationDeg ?? 0,
+                  startNormY: norm.y,
                 });
+              }}
+              onDoubleClick={(event) => {
+                if (!event.shiftKey || !selected) return;
+                event.preventDefault();
+                event.stopPropagation();
+                endDrag();
+                onChangeSurface({
+                  floats: config.surface.floats.map((f) =>
+                    f.id === float.id ? resetFloatRotation(f) : f,
+                  ),
+                });
+                onSurfaceLayoutCommit?.();
               }}
               onContextMenu={(event) =>
                 handleRegionContextMenu(
@@ -426,23 +474,37 @@ export function DesignerCanvas({
 
         {layout.dividers.map((handle) => {
           const isVertical = handle.axis === 'vertical';
+          const lines = config.gridDesign.gridLines;
+          const linesVisible = areGridLinesVisible(lines);
+          const positionStyle = isVertical
+            ? {
+                left: `${handle.position * 100}%`,
+                top: `${handle.region.y * 100}%`,
+                height: `${handle.region.height * 100}%`,
+              }
+            : {
+                top: `${handle.position * 100}%`,
+                left: `${handle.region.x * 100}%`,
+                width: `${handle.region.width * 100}%`,
+              };
+
           return (
             <div
               key={handle.key}
-              className={`vc-designer-divider ${isVertical ? 'is-vertical' : 'is-horizontal'}`}
+              className={`vc-designer-divider ${isVertical ? 'is-vertical' : 'is-horizontal'}${
+                linesVisible ? '' : ' vc-designer-divider-hit-only'
+              }`}
               style={{
-                ...(isVertical
-                  ? {
-                      left: `${handle.position * 100}%`,
-                      top: `${handle.region.y * 100}%`,
-                      height: `${handle.region.height * 100}%`,
-                    }
+                ...positionStyle,
+                ...(linesVisible
+                  ? gridDividerCss(isVertical ? 'vertical' : 'horizontal', lines)
                   : {
-                      top: `${handle.position * 100}%`,
-                      left: `${handle.region.x * 100}%`,
-                      width: `${handle.region.width * 100}%`,
+                      pointerEvents: 'auto',
+                      background: 'none',
+                      border: 'none',
+                      opacity: 0,
+                      ...designerDividerHitStyle(isVertical),
                     }),
-                ...gridDividerCss(isVertical ? 'vertical' : 'horizontal', config.gridDesign.gridLines),
               }}
               onPointerDown={(event) => {
                 beginPointerDrag(event, {

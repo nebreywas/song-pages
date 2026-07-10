@@ -15,7 +15,7 @@ import {
   nudgeFloat,
   onePixelNorm,
 } from '@shared/vcSurface/designerKeyboard';
-import { moveFloat, resizeFloat } from '@shared/vcSurface/floats';
+import { applyFloatPointerDrag, resizeFloat } from '@shared/vcSurface/floats';
 import type { VcModeConfig } from '@shared/vcModeTypes';
 
 import { clientToNorm } from '../vc-mode/designer/designerPointer';
@@ -27,7 +27,15 @@ export type VcLayoutSelection =
 
 type DragState =
   | { type: 'divider'; key: string; pointerId: number }
-  | { type: 'float-move'; id: string; offsetX: number; offsetY: number; pointerId: number }
+  | {
+      type: 'float-move';
+      id: string;
+      offsetX: number;
+      offsetY: number;
+      pointerId: number;
+      startRotationDeg: number;
+      startNormY: number;
+    }
   | { type: 'float-resize'; id: string; pointerId: number }
   | null;
 
@@ -104,7 +112,7 @@ export function useVcLayoutInteraction({
       if (drag.type === 'float-move') {
         const float = current.surface.floats.find((f) => f.id === drag.id);
         if (!float) return;
-        const next = moveFloat(float, norm.x - drag.offsetX, norm.y - drag.offsetY);
+        const next = applyFloatPointerDrag(float, norm, drag, event.shiftKey);
         onChangeSurfaceRef.current({
           floats: current.surface.floats.map((f) => (f.id === drag.id ? next : f)),
         });
@@ -206,6 +214,7 @@ export function useVcLayoutInteraction({
     setSelection,
     drag,
     beginPointerDrag,
+    cancelDrag: endDrag,
     handleArrowNudge,
   };
 }

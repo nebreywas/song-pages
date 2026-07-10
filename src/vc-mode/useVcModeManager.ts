@@ -1,20 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SongPagesSongManifest } from '@shared/manifests';
-import type { VcModeConfig, VcPlaybackEffectsMirror, VcSpecialPlayPauseState, VcStatePayload, VcSurfaceConfig, VcUpcomingSong } from '@shared/vcModeTypes';
+import type { VcModeConfig, VcPlaybackEffectsMirror, VcProjectionWindowBounds, VcSpecialPlayPauseState, VcStatePayload, VcSurfaceConfig, VcUpcomingSong } from '@shared/vcModeTypes';
 import { DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR } from '@shared/vcMode/playbackEffectsMirror';
 import { deriveCommandRuntimeContextFromVcState } from '@shared/commands';
 import { configUsesVisualizer, normalizeVcConfig } from '@shared/vcModeTypes';
 
+import { resolveSongAssetUrl, resolveSongCoverUrl, normalizeSongRowAssets } from '@shared/listener/songResolution';
+
 import { getApp } from '../lib/bridge';
 import { resolveAssetUrl } from '../lib/resolveAssetUrl';
 import { isVirtualPlaylistSong, vcArtistDisplayName } from '@shared/listener/playlistKinds';
+import { pickNextPlayableSongId, pickUpcomingPlayableSongIds } from '@shared/listener/playbackQueue';
 import type { ArtistRow, SongRow } from '../types/app';
 import { isButterchurnExperienceId } from '../visualizers/butterchurn/presets/approved/presetKeys';
 import { normalizeExperienceId } from '../visualizers/native/registry';
 import { useExperienceSettings } from '../visualizers/settings/useExperienceSettings';
 import { useAudioAnalyser } from '../visualizers/useAudioAnalyser';
+import { resolveProjectionWindowForDesign } from '@shared/vcSurfaceDesigns';
 import { createDefaultVcConfig, migrateVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
+import {
+  awaitVcPersistIdle,
+  getCachedVcSurfaceDesignCatalog,
+  getVcSurfaceDesignPickerState,
+  loadActiveVcModeConfig,
+  persistVcModeConfig,
+  persistVcProjectionWindow,
+  switchActiveVcSurfaceDesign,
+} from './vcSurfaceDesignStore';
 import { useHostGraphicPopupUrl } from './useHostGraphicPopupUrl';
 import { useKudoPresets } from '../kudos/useKudoPresets';
 import { loadHostContentCatalog } from '../host-content/loadHostContentCatalog';
@@ -36,7 +49,8 @@ type UseVcModeManagerOptions = {
   previewSong?: SongRow | null | undefined;
   sortedSongs: SongRow[];
   playingSongId: number | null;
-  pickNextSongId: (currentId: number) => number | null;
+  repeatMode: 'off' | 'one' | 'all';
+  shuffle: boolean;
   artists: ArtistRow[];
   isPlaying: boolean;
   currentTime: number;
@@ -55,21 +69,22 @@ function buildSongPayload(
   artist: ArtistRow | null,
 ): VcStatePayload['currentSong'] {
   if (!song) return null;
+  const normalized = normalizeSongRowAssets(song);
   const profileArtist = isVirtualPlaylistSong(song) ? null : artist;
   const trackArtist =
-    song.artist_name?.trim() || manifest?.artistName?.trim() || profileArtist?.artist_name?.trim() || '';
+    normalized.artist_name?.trim() || manifest?.artistName?.trim() || profileArtist?.artist_name?.trim() || '';
   return {
-    id: song.id,
-    title: song.title,
+    id: normalized.id,
+    title: normalized.title,
     artist: trackArtist,
-    year: song.year,
-    caption: song.caption,
-    coverUrl: resolveAssetUrl(song.page_url, song.cover_url ?? manifest?.coverUrl ?? null),
-    videoCoverUrl: resolveAssetUrl(song.page_url, manifest?.extraImageUrl ?? null),
+    year: normalized.year,
+    caption: normalized.caption,
+    coverUrl: resolveSongCoverUrl(normalized, manifest?.coverUrl ?? null),
+    videoCoverUrl: resolveSongAssetUrl(normalized, manifest?.extraImageUrl ?? null),
     about: manifest?.about ?? '',
     lyrics: manifest?.lyrics ?? '',
-    artistId: song.artist_id,
-    durationSeconds: song.duration_seconds,
+    artistId: normalized.artist_id,
+    durationSeconds: normalized.duration_seconds,
     mainGenre: null,
     additionalGenres: null,
   };
@@ -81,7 +96,8 @@ export function useVcModeManager({
   previewSong,
   sortedSongs,
   playingSongId,
-  pickNextSongId,
+  repeatMode,
+  shuffle,
   artists,
   isPlaying,
   currentTime,
@@ -104,6 +120,8 @@ export function useVcModeManager({
   const canvasMirrorFrameRef = useRef<string | null>(null);
   const activeConfigRef = useRef(activeConfig);
   const surfaceSaveTimerRef = useRef<number | null>(null);
+  /** Surface design that owns projection bounds for the current VC session. */
+  const vcSessionDesignIdRef = useRef<string | null>(null);
   /** Prevents a late settings hydrate from overwriting config passed to Start VC. */
   const activeConfigSourceRef = useRef<'default' | 'settings' | 'start'>('default');
 
@@ -116,11 +134,11 @@ export function useVcModeManager({
     if (!app?.getSettings) return;
 
     let cancelled = false;
-    void app.getSettings(VC_SETTINGS_KEY).then((saved) => {
-      if (cancelled || saved == null) return;
+    void loadActiveVcModeConfig().then((loaded) => {
+      if (cancelled) return;
       // Start VC passes an explicit config — never clobber it with an older async load.
       if (activeConfigSourceRef.current === 'start') return;
-      setActiveConfig(migrateVcConfig(saved));
+      setActiveConfig(migrateVcConfig(loaded));
       activeConfigSourceRef.current = 'settings';
     });
 
@@ -192,36 +210,50 @@ export function useVcModeManager({
   /** Queue overlays anchor on the playing track, or the selected song page when idle. */
   const queueAnchorSongId = playingSongId ?? previewSong?.id ?? null;
 
+  const queueOptions = useMemo(
+    (): { shuffle: boolean; repeatMode: 'off' | 'one' | 'all' } => ({ shuffle, repeatMode }),
+    [repeatMode, shuffle],
+  );
+
   const nextSongPreview = useMemo(() => {
     if (queueAnchorSongId == null) return null;
-    const nextId = pickNextSongId(queueAnchorSongId);
+    const nextId = pickNextPlayableSongId(sortedSongs, queueAnchorSongId, queueOptions);
     if (nextId == null) return null;
     const next = sortedSongs.find((song) => song.id === nextId);
     if (!next) return null;
     return { title: next.title, artist: next.artist_name ?? '' };
-  }, [pickNextSongId, queueAnchorSongId, sortedSongs]);
+  }, [queueAnchorSongId, queueOptions, sortedSongs]);
 
   const upcomingMax = activeConfig.upcomingOverlay.maxCount;
 
   const upcoming = useMemo((): VcUpcomingSong[] => {
     if (queueAnchorSongId == null) return [];
-    const currentIndex = sortedSongs.findIndex((song) => song.id === queueAnchorSongId);
-    if (currentIndex < 0) return [];
-    return sortedSongs.slice(currentIndex + 1, currentIndex + 1 + upcomingMax).map((song) => ({
-      id: song.id,
-      title: song.title,
-      artist: song.artist_name ?? '',
-      durationSeconds: song.duration_seconds,
-      coverUrl: resolveAssetUrl(song.page_url, song.cover_url ?? null),
-    }));
-  }, [queueAnchorSongId, sortedSongs, upcomingMax]);
+    const ids = pickUpcomingPlayableSongIds(
+      sortedSongs,
+      queueAnchorSongId,
+      upcomingMax,
+      queueOptions,
+    );
+    return ids.flatMap((id) => {
+      const song = sortedSongs.find((row) => row.id === id);
+      if (!song) return [];
+      return [{
+        id: song.id,
+        title: song.title,
+        artist: song.artist_name ?? '',
+        durationSeconds: song.duration_seconds,
+        coverUrl: resolveSongCoverUrl(normalizeSongRowAssets(song)),
+      }];
+    });
+  }, [queueAnchorSongId, queueOptions, sortedSongs, upcomingMax]);
 
   useEffect(() => {
-    if (!designerSong?.song_manifest_url) {
+    const song = designerSong ? normalizeSongRowAssets(designerSong) : null;
+    if (!song?.song_manifest_url) {
       setSongManifest(null);
       return;
     }
-    const url = designerSong.song_manifest_url;
+    const url = song.song_manifest_url;
     const cached = manifestCacheRef.current.get(url);
     if (cached) {
       setSongManifest(cached);
@@ -293,6 +325,7 @@ export function useVcModeManager({
       effectiveVisualizerId: vcVisualizerId,
       kudoPresets: kudos.presets,
       specialPlayPause,
+      surfaceDesigns: getVcSurfaceDesignPickerState(),
     };
   }, [
     activeConfig,
@@ -358,23 +391,31 @@ export function useVcModeManager({
     playbackEffects,
   ]);
 
+  const buildStatePayloadRef = useRef(buildStatePayload);
+  buildStatePayloadRef.current = buildStatePayload;
+
+  const flushPendingVcPersist = useCallback(() => {
+    if (surfaceSaveTimerRef.current != null) {
+      window.clearTimeout(surfaceSaveTimerRef.current);
+      surfaceSaveTimerRef.current = null;
+      void persistVcModeConfig(activeConfigRef.current);
+    }
+  }, []);
+  const flushPendingVcPersistRef = useRef(flushPendingVcPersist);
+  flushPendingVcPersistRef.current = flushPendingVcPersist;
+
+  // Layout-mode surface edits + projection window bounds — stable while VC is open.
   useEffect(() => {
     const app = getApp();
     if (!vcOpen || !app?.vc) return;
 
-    const pushState = () => {
-      const payload = buildStatePayload();
-      app.vc!.sendState(payload);
-      app.commands?.setRuntimeContext?.(
-        deriveCommandRuntimeContextFromVcState(payload, { vcModeActive: true }),
-      );
-    };
-    const scheduleSurfaceSave = (config: VcModeConfig) => {
-      if (surfaceSaveTimerRef.current != null) {
-        window.clearTimeout(surfaceSaveTimerRef.current);
+    const scheduleVcPersist = (config: VcModeConfig, timerRef: { current: number | null }) => {
+      if (timerRef.current != null) {
+        window.clearTimeout(timerRef.current);
       }
-      surfaceSaveTimerRef.current = window.setTimeout(() => {
-        void getApp()?.saveSettings?.(VC_SETTINGS_KEY, config);
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        void persistVcModeConfig(config);
       }, SURFACE_SAVE_DEBOUNCE_MS);
     };
     const persistSurfaceNow = (config: VcModeConfig) => {
@@ -382,7 +423,7 @@ export function useVcModeManager({
         window.clearTimeout(surfaceSaveTimerRef.current);
         surfaceSaveTimerRef.current = null;
       }
-      void getApp()?.saveSettings?.(VC_SETTINGS_KEY, config);
+      void persistVcModeConfig(config);
     };
     const applySurfaceConfig = (surface: VcSurfaceConfig, persist: 'debounced' | 'immediate') => {
       const prev = activeConfigRef.current;
@@ -395,15 +436,11 @@ export function useVcModeManager({
       if (persist === 'immediate') {
         persistSurfaceNow(next);
       } else {
-        scheduleSurfaceSave(next);
+        scheduleVcPersist(next, surfaceSaveTimerRef);
       }
-      app.vc!.sendState({ ...buildStatePayload(), config: next });
+      app.vc!.sendState({ ...buildStatePayloadRef.current(), config: next });
       return next;
     };
-
-    pushState();
-    const stateId = window.setInterval(pushState, STATE_INTERVAL_MS);
-    const offSync = app.vc.onRequestSync?.(() => pushState());
 
     const offSurfacePatch = app.vc.onSurfacePatch?.((patch: Partial<VcSurfaceConfig>) => {
       const prev = activeConfigRef.current;
@@ -422,20 +459,99 @@ export function useVcModeManager({
       applySurfaceConfig(surface, 'immediate');
     });
 
+    const offProjectionWindow = app.vc.onProjectionWindowChanged?.((bounds: VcProjectionWindowBounds) => {
+      const prev = activeConfigRef.current;
+      const next = normalizeVcConfig({
+        ...prev,
+        projectionWindow: bounds,
+      });
+      activeConfigRef.current = next;
+      setActiveConfig(next);
+      const designId = vcSessionDesignIdRef.current;
+      if (designId) {
+        void persistVcProjectionWindow(designId, bounds);
+      } else {
+        void persistVcModeConfig(next);
+      }
+    });
+
     const offActiveVisualizer = app.vc.onActiveVisualizerReport?.((id: string) => {
       setReportedVisualizerId(normalizeExperienceId(id));
     });
 
     return () => {
-      window.clearInterval(stateId);
-      offSync?.();
       offSurfacePatch?.();
       offSurfaceCommit?.();
+      offProjectionWindow?.();
       offActiveVisualizer?.();
-      if (surfaceSaveTimerRef.current != null) {
-        window.clearTimeout(surfaceSaveTimerRef.current);
-        surfaceSaveTimerRef.current = null;
-      }
+      flushPendingVcPersist();
+    };
+  }, [flushPendingVcPersist, vcOpen]);
+
+  const switchVcSurface = useCallback(async (designId: string) => {
+    const app = getApp();
+    if (!app?.vc || !vcOpen) return;
+
+    const catalog = getCachedVcSurfaceDesignCatalog();
+    if (!catalog || designId === catalog.activeDesignId) return;
+
+    flushPendingVcPersistRef.current();
+    await awaitVcPersistIdle();
+
+    const nextConfig = await switchActiveVcSurfaceDesign(designId, activeConfigRef.current);
+    if (!nextConfig) return;
+
+    const normalized = normalizeVcConfig(nextConfig);
+    vcSessionDesignIdRef.current = designId;
+    activeConfigRef.current = normalized;
+    setActiveConfig(normalized);
+    setReportedVisualizerId(normalizeExperienceId(normalized.visualizerId));
+
+    if (normalized.projectionWindow) {
+      await app.vc.open({ projectionWindow: normalized.projectionWindow });
+    }
+
+    app.vc.sendState({
+      ...buildStatePayloadRef.current(),
+      config: normalized,
+      effectiveVisualizerId: normalizeExperienceId(normalized.visualizerId),
+      surfaceDesigns: getVcSurfaceDesignPickerState(),
+    });
+  }, [vcOpen]);
+
+  // VC controller surface picker — only while VC is live.
+  useEffect(() => {
+    const app = getApp();
+    if (!vcOpen || !app?.vc?.onSwitchSurface) return;
+
+    const offSwitchSurface = app.vc.onSwitchSurface((designId) => {
+      void switchVcSurface(designId);
+    });
+
+    return () => {
+      offSwitchSurface();
+    };
+  }, [switchVcSurface, vcOpen]);
+
+  useEffect(() => {
+    const app = getApp();
+    if (!vcOpen || !app?.vc) return;
+
+    const pushState = () => {
+      const payload = buildStatePayload();
+      app.vc!.sendState(payload);
+      app.commands?.setRuntimeContext?.(
+        deriveCommandRuntimeContextFromVcState(payload, { vcModeActive: true }),
+      );
+    };
+
+    pushState();
+    const stateId = window.setInterval(pushState, STATE_INTERVAL_MS);
+    const offSync = app.vc.onRequestSync?.(() => pushState());
+
+    return () => {
+      window.clearInterval(stateId);
+      offSync?.();
     };
   }, [buildStatePayload, vcOpen]);
 
@@ -501,9 +617,13 @@ export function useVcModeManager({
 
     const offOpened = app.vc.onOpened(() => setVcOpen(true));
     const offClosed = app.vc.onClosed(() => {
-      setVcOpen(false);
-      // Return host to Surface designer after VC ends (window X or programmatic close).
-      setModalOpen(true);
+      void (async () => {
+        flushPendingVcPersistRef.current();
+        await awaitVcPersistIdle();
+        vcSessionDesignIdRef.current = null;
+        setVcOpen(false);
+        setModalOpen(true);
+      })();
     });
 
     return () => {
@@ -523,24 +643,32 @@ export function useVcModeManager({
       if (!app?.vc) return;
 
       await closeVisualizerSurfaces();
-      const [catalog, savedVc] = await Promise.all([
+      const [hostCatalogRaw, savedVc] = await Promise.all([
         loadHostContentCatalog(),
         app.getSettings?.(VC_SETTINGS_KEY) ?? Promise.resolve(null),
+        loadActiveVcModeConfig(),
       ]);
-      setHostCatalog(migrateHostContentCatalog(catalog));
+      setHostCatalog(migrateHostContentCatalog(hostCatalogRaw));
       const savedConfig = savedVc != null ? migrateVcConfig(savedVc) : null;
+      const surfaceCatalog = getCachedVcSurfaceDesignCatalog();
+      const projectionWindow = resolveProjectionWindowForDesign(config, surfaceCatalog);
       const normalized = normalizeVcConfig({
         ...config,
         hostGraphicPopupId:
           config.hostGraphicPopupId ?? savedConfig?.hostGraphicPopupId ?? null,
         upcomingOverlay: config.upcomingOverlay ?? savedConfig?.upcomingOverlay,
+        ...(projectionWindow ? { projectionWindow } : {}),
       });
+      vcSessionDesignIdRef.current = surfaceCatalog?.activeDesignId ?? null;
       activeConfigSourceRef.current = 'start';
       activeConfigRef.current = normalized;
       setActiveConfig(normalized);
+      await persistVcModeConfig(normalized);
       setModalOpen(false);
       setVcOpen(true);
-      await app.vc.open({});
+      await app.vc.open({
+        projectionWindow: normalized.projectionWindow,
+      });
     },
     [closeVisualizerSurfaces],
   );
@@ -548,11 +676,14 @@ export function useVcModeManager({
   const closeVcMode = useCallback(async () => {
     const app = getApp();
     if (!app?.vc) return;
+    flushPendingVcPersist();
     await app.vc.close();
+    await awaitVcPersistIdle();
+    vcSessionDesignIdRef.current = null;
     setVcOpen(false);
     setCanvasMirrorFrame(null);
     setModalOpen(true);
-  }, []);
+  }, [flushPendingVcPersist]);
 
   const openModal = useCallback(() => setModalOpen(true), []);
   const closeModal = useCallback(() => setModalOpen(false), []);

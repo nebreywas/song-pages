@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   pickNextPlayableSongId,
   pickPreviousPlayableSongId,
+  pickUpcomingPlayableSongIds,
   resolvePlayableSong,
 } from './playbackQueue.ts';
 
@@ -23,6 +24,32 @@ test('pickNextPlayableSongId skips marked rows', () => {
 
 test('pickNextPlayableSongId wraps on repeat all', () => {
   assert.equal(pickNextPlayableSongId(songs, 5, { shuffle: false, repeatMode: 'all' }), 1);
+});
+
+test('pickNextPlayableSongId returns current song on repeat one', () => {
+  assert.equal(pickNextPlayableSongId(songs, 3, { shuffle: false, repeatMode: 'one' }), 3);
+  assert.equal(pickNextPlayableSongId(songs, 5, { shuffle: false, repeatMode: 'one' }), 5);
+});
+
+test('pickUpcomingPlayableSongIds wraps on repeat all', () => {
+  assert.deepEqual(
+    pickUpcomingPlayableSongIds(songs, 5, 4, { shuffle: false, repeatMode: 'all' }),
+    [1, 3, 5, 1],
+  );
+});
+
+test('pickUpcomingPlayableSongIds repeats current song on repeat one', () => {
+  assert.deepEqual(
+    pickUpcomingPlayableSongIds(songs, 3, 3, { shuffle: false, repeatMode: 'one' }),
+    [3, 3, 3],
+  );
+});
+
+test('pickUpcomingPlayableSongIds stops at playlist end when repeat is off', () => {
+  assert.deepEqual(
+    pickUpcomingPlayableSongIds(songs, 3, 5, { shuffle: false, repeatMode: 'off' }),
+    [5],
+  );
 });
 
 test('pickPreviousPlayableSongId skips marked rows', () => {

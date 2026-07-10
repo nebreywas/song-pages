@@ -55,6 +55,23 @@
   transform: translateY(-50%);
 }
 
+/* Belt-and-suspenders — template dividers must not paint when grid line thickness is 0. */
+.vc-surface.vc-grid-lines-hidden .vc-surface-divider:not(.vc-layout-divider) {
+  display: none !important;
+  background: none !important;
+  border: none !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Seamless mode — overlap transparent regions so subpixel gaps do not show the surface bg. */
+.vc-surface.vc-grid-lines-hidden .vc-surface-region,
+.vc-designer-canvas.vc-grid-lines-hidden .vc-designer-region {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
 .vc-surface-region {
   overflow: hidden;
   min-width: 0;
@@ -151,6 +168,7 @@
 
 @import './vc-lyrics-feather.css';
 @import './vc-fullscreen-graphic.css';
+@import './vc-marquee-lyrics.css';
 
 .vc-cover-fit,
 .vc-host-fit {
@@ -1306,14 +1324,15 @@
   z-index: 45;
 }
 
-/* Faint center guides for layout positioning (50% vertical + horizontal). */
+/* Center guides for layout positioning (50% vertical + horizontal). */
 .vc-surface.vc-layout-mode::before,
 .vc-surface.vc-layout-mode::after {
   content: '';
   position: absolute;
   pointer-events: none;
-  z-index: 5;
-  background: rgba(220, 38, 38, 0.22);
+  /* Above regions, floats, and dividers; below the layout HUD (z-index 100). */
+  z-index: 90;
+  background: rgba(255, 96, 96, 0.72);
 }
 
 .vc-surface.vc-layout-mode::before {

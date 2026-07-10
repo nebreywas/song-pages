@@ -40,3 +40,8 @@ export function isRenamableSidebarPlaylist(type: SidebarEntryType): boolean {
 export function isSidebarPlaylistContextTarget(type: SidebarEntryType): boolean {
   return isRemovableSidebarPlaylist(type);
 }
+
+/** Liked Songs, Suno, and custom playlists — not subscribed artist catalogs. */
+export function isSidebarPlaylistEntry(type: SidebarEntryType): boolean {
+  return type !== 'artist';
+}

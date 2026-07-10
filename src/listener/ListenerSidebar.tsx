@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { IconAdd, IconRefresh } from './PlayerIcons';
+import { IconAdd, IconRefresh, IconSidebarOrder } from './PlayerIcons';
 import { artistInitials, resolveArtistPhotoUrl } from './artistDisplay';
 import { isLikedSongsArtist } from './likedSongs';
 import { isSunoDemoArtistId, SUNO_DEMO_FEATURE_ENABLED } from '@shared/demo/sunoDemoFeature';
 import { isUserPlaylistArtistId } from '@shared/listener/userPlaylists';
-import { sidebarEntryType, sidebarEntryTypeLabel, isSidebarPlaylistContextTarget } from './sidebarEntry';
+import type { SidebarLibrarySortColumn, SidebarLibrarySortDirection } from '@shared/listener/sidebarLibraryOrder';
+import {
+  sidebarEntryType,
+  sidebarEntryTypeLabel,
+  isSidebarPlaylistContextTarget,
+  isSidebarPlaylistEntry,
+} from './sidebarEntry';
+import { formatPlaylistDateAdded } from '@shared/listener/formatPlaylistDate';
+import { LibrarySortHeader } from './LibrarySortHeader';
+import { useSidebarLibraryDragReorder } from './useSidebarLibraryDragReorder';
 import type { ArtistRow } from '../types/app';
 
 const SIDEBAR_COLLAPSED_KEY = 'ui.listenerSidebarCollapsed';
@@ -16,11 +25,19 @@ const FULL_BRAND_TITLE = 'Song Pages';
 export const DEFAULT_SIDEBAR_WIDTH = 304;
 export const MIN_SIDEBAR_WIDTH = 220;
 export const MAX_SIDEBAR_WIDTH = 560;
+/** Sidebar must be at least this wide before the Added column is shown. */
+export const LIBRARY_ADDED_COLUMN_MIN_WIDTH = 360;
 
 export { SIDEBAR_COLLAPSED_KEY, SIDEBAR_WIDTH_KEY };
 
 type ListenerSidebarProps = {
   artists: ArtistRow[];
+  orderNumberById: Map<number, number>;
+  sortColumn: SidebarLibrarySortColumn;
+  sortDirection: SidebarLibrarySortDirection;
+  onSortColumn: (column: SidebarLibrarySortColumn) => void;
+  onSidebarReorder: (fromIndex: number, toIndex: number) => void;
+  onEnterReorderMode?: () => void;
   selectedArtistId: number | null;
   collapsed: boolean;
   busy: boolean;
@@ -31,6 +48,8 @@ type ListenerSidebarProps = {
   onAddCustomPlaylist?: () => void;
   onRefresh: () => void;
   onSelectArtist: (artistId: number) => void;
+  /** Double-click a playlist row — start playback from the first song on its list. */
+  onPlaylistDoubleClick?: (artistId: number) => void;
   onRowContextMenu?: (artist: ArtistRow, event: React.MouseEvent) => void;
 };
 
@@ -157,6 +176,12 @@ function SidebarAddMenu({
 /** Collapsible artist library — table rows when expanded, icon rail when collapsed. */
 export function ListenerSidebar({
   artists,
+  orderNumberById,
+  sortColumn,
+  sortDirection,
+  onSortColumn,
+  onSidebarReorder,
+  onEnterReorderMode,
   selectedArtistId,
   collapsed,
   busy,
@@ -167,21 +192,58 @@ export function ListenerSidebar({
   onAddCustomPlaylist,
   onRefresh,
   onSelectArtist,
+  onPlaylistDoubleClick,
   onRowContextMenu,
 }: ListenerSidebarProps) {
   const brandClickTimerRef = useRef<number | null>(null);
+  const rowClickTimerRef = useRef<number | null>(null);
   const brandAnimatingRef = useRef(false);
   const [titleRevealed, setTitleRevealed] = useState(!collapsed);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [reorderMode, setReorderMode] = useState(false);
+
+  const draggableRowCount = artists.filter((artist) => !isLikedSongsArtist(artist.id)).length;
+  const sidebarDrag = useSidebarLibraryDragReorder({
+    rowCount: draggableRowCount,
+    enabled: reorderMode,
+    onReorder: onSidebarReorder,
+  });
 
   useEffect(
     () => () => {
       if (brandClickTimerRef.current != null) {
         window.clearTimeout(brandClickTimerRef.current);
       }
+      if (rowClickTimerRef.current != null) {
+        window.clearTimeout(rowClickTimerRef.current);
+      }
     },
     [],
   );
+
+  const clearRowClickTimer = () => {
+    if (rowClickTimerRef.current != null) {
+      window.clearTimeout(rowClickTimerRef.current);
+      rowClickTimerRef.current = null;
+    }
+  };
+
+  const handleLibraryRowClick = (artistId: number) => {
+    clearRowClickTimer();
+    rowClickTimerRef.current = window.setTimeout(() => {
+      rowClickTimerRef.current = null;
+      onSelectArtist(artistId);
+    }, 250);
+  };
+
+  const handleLibraryRowDoubleClick = (artist: ArtistRow, entryType: ReturnType<typeof sidebarEntryType>) => {
+    clearRowClickTimer();
+    if (isSidebarPlaylistEntry(entryType)) {
+      onPlaylistDoubleClick?.(artist.id);
+      return;
+    }
+    onSelectArtist(artist.id);
+  };
 
   useEffect(() => {
     if (brandAnimatingRef.current) return;
@@ -189,8 +251,19 @@ export function ListenerSidebar({
   }, [collapsed]);
 
   useEffect(() => {
-    if (collapsed) setAddMenuOpen(false);
+    if (collapsed) {
+      setAddMenuOpen(false);
+      setReorderMode(false);
+    }
   }, [collapsed]);
+
+  const toggleReorderMode = () => {
+    setReorderMode((active) => {
+      const next = !active;
+      if (next) onEnterReorderMode?.();
+      return next;
+    });
+  };
 
   const clearBrandTimer = () => {
     if (brandClickTimerRef.current != null) {
@@ -300,6 +373,17 @@ export function ListenerSidebar({
                 </div>
                 <button
                   type="button"
+                  className={`btn icon-btn${reorderMode ? ' active' : ''}`}
+                  onClick={toggleReorderMode}
+                  disabled={busy || draggableRowCount < 2}
+                  aria-label="Reorder playlists"
+                  aria-pressed={reorderMode}
+                  title="Reorder playlists"
+                >
+                  <IconSidebarOrder />
+                </button>
+                <button
+                  type="button"
                   className="btn icon-btn"
                   onClick={onRefresh}
                   disabled={refreshDisabled}
@@ -336,19 +420,67 @@ export function ListenerSidebar({
           )}
 
           {!collapsed ? (
-            <div className="library-table-header" aria-hidden="true">
-              <span className="library-col-name">Name</span>
-              <span className="library-col-type">Type</span>
-              <span className="library-col-songs">Songs</span>
-            </div>
-          ) : null}
+            <>
+              <div
+                className={`library-table-header${reorderMode ? ' library-table-header--reorder-mode' : ''}`}
+                aria-hidden="true"
+              >
+                {reorderMode ? <span className="library-col-drag" aria-hidden="true" /> : null}
+                <LibrarySortHeader
+                  label="#"
+                  column="order"
+                  activeColumn={sortColumn}
+                  direction={sortDirection}
+                  onSort={onSortColumn}
+                  className="library-col-order"
+                />
+                <LibrarySortHeader
+                  label="Name"
+                  column="name"
+                  activeColumn={sortColumn}
+                  direction={sortDirection}
+                  onSort={onSortColumn}
+                  className="library-col-name"
+                />
+                <LibrarySortHeader
+                  label="Type"
+                  column="type"
+                  activeColumn={sortColumn}
+                  direction={sortDirection}
+                  onSort={onSortColumn}
+                  className="library-col-type"
+                  align="right"
+                />
+                <LibrarySortHeader
+                  label="Added"
+                  column="added"
+                  activeColumn={sortColumn}
+                  direction={sortDirection}
+                  onSort={onSortColumn}
+                  className="library-col-added"
+                  align="right"
+                />
+                <LibrarySortHeader
+                  label="Songs"
+                  column="songs"
+                  activeColumn={sortColumn}
+                  direction={sortDirection}
+                  onSort={onSortColumn}
+                  className="library-col-songs"
+                  align="right"
+                />
+              </div>
 
-          <ul className={`library-list${collapsed ? ' library-list-collapsed' : ''}`}>
-            {artists.map((artist) => {
+              <ul
+                className={`library-list${reorderMode ? ' library-list--reorder-mode' : ''}${sidebarDrag.isDragging ? ' is-dragging-library' : ''}`}
+              >
+              {(() => {
+              let draggableIndex = -1;
+              return artists.map((artist) => {
               const isLikedEntry = isLikedSongsArtist(artist.id);
               const isSunoEntry = SUNO_DEMO_FEATURE_ENABLED && isSunoDemoArtistId(artist.id);
               const isCustomEntry = isUserPlaylistArtistId(artist.id);
-              const photoUrl = isLikedEntry || isSunoEntry || isCustomEntry ? null : resolveArtistPhotoUrl(artist);
+              const rowDraggableIndex = isLikedEntry ? null : ++draggableIndex;
               const isActive = selectedArtistId === artist.id;
               const entryType = sidebarEntryType(artist);
               const typeLabel = sidebarEntryTypeLabel(entryType);
@@ -365,64 +497,139 @@ export function ListenerSidebar({
                 onRowContextMenu(artist, event);
               };
 
-              if (collapsed) {
-                return (
-                  <li key={artist.id}>
-                    <button
-                      type="button"
-                      className={`library-row library-row-compact${isActive ? ' active' : ''}${
-                        isLikedEntry ? ' library-row-liked' : ''
-                      }${isSunoEntry ? ' library-row-suno' : ''}${
-                        isCustomEntry ? ' library-row-custom' : ''
-                      }`}
-                      onClick={() => onSelectArtist(artist.id)}
-                      aria-label={label}
-                      title={label}
-                    >
-                      {isLikedEntry ? (
-                        <span className="library-row-avatar library-row-liked-icon" aria-hidden="true">
-                          ♥
-                        </span>
-                      ) : isSunoEntry ? (
-                        <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
-                          S
-                        </span>
-                      ) : isCustomEntry ? (
-                        <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
-                          {artistInitials(artist.artist_name)}
-                        </span>
-                      ) : photoUrl ? (
-                        <img className="library-row-avatar" src={photoUrl} alt="" />
-                      ) : (
-                        <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
-                          {artistInitials(artist.artist_name)}
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                );
-              }
-
               return (
-                <li key={artist.id}>
-                  <button
-                    type="button"
-                    className={`library-row${isActive ? ' active' : ''}${isLikedEntry ? ' library-row-liked' : ''}${isSunoEntry ? ' library-row-suno' : ''}${isCustomEntry ? ' library-row-custom' : ''}`}
-                    onClick={() => onSelectArtist(artist.id)}
+                <li
+                  key={artist.id}
+                  ref={
+                    rowDraggableIndex == null
+                      ? undefined
+                      : (node) => sidebarDrag.setRowRef(rowDraggableIndex, node)
+                  }
+                  className={
+                    rowDraggableIndex == null ? undefined : sidebarDrag.rowDragClassName(rowDraggableIndex)
+                  }
+                >
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className={`library-row${isActive ? ' active' : ''}${isLikedEntry ? ' library-row-liked' : ''}${isSunoEntry ? ' library-row-suno' : ''}${isCustomEntry ? ' library-row-custom' : ''}${reorderMode ? ' library-row--reorder-mode' : ''}`}
+                    onClick={() => handleLibraryRowClick(artist.id)}
+                    onDoubleClick={() => handleLibraryRowDoubleClick(artist, entryType)}
                     onContextMenu={handleContextMenu}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        handleLibraryRowClick(artist.id);
+                      }
+                    }}
                     title={label}
                   >
+                    {reorderMode && rowDraggableIndex != null ? (
+                      <span
+                        className="library-col-drag"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          className="playlist-drag-handle"
+                          aria-label={`Drag ${artist.artist_name}`}
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            sidebarDrag.startDrag(rowDraggableIndex, event.pointerId);
+                          }}
+                        >
+                          ⋮⋮
+                        </button>
+                      </span>
+                    ) : reorderMode ? (
+                      <span className="library-col-drag" aria-hidden="true" />
+                    ) : null}
+                    <span
+                      className="library-col-order"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {!isLikedEntry ? (
+                        <span className="library-order-index">{orderNumberById.get(artist.id) ?? ''}</span>
+                      ) : null}
+                    </span>
                     <span className="library-col-name">{artist.artist_name}</span>
                     <span className="library-col-type">{typeLabel}</span>
+                    <span className="library-col-added">
+                      {isLikedEntry ? '' : formatPlaylistDateAdded(artist.created_at)}
+                    </span>
                     <span className="library-col-songs">{songCount}</span>
-                  </button>
+                  </div>
                 </li>
               );
-            })}
+            });
+            })()}
             {!artists.length ? (
-              <li className="empty">{collapsed ? '—' : 'No artists or playlists yet.'}</li>
+              <li className="empty">No artists or playlists yet.</li>
             ) : null}
-          </ul>
+              </ul>
+            </>
+          ) : (
+            <ul className="library-list library-list-collapsed">
+              {(() =>
+                artists.map((artist) => {
+                  const isLikedEntry = isLikedSongsArtist(artist.id);
+                  const isSunoEntry = SUNO_DEMO_FEATURE_ENABLED && isSunoDemoArtistId(artist.id);
+                  const isCustomEntry = isUserPlaylistArtistId(artist.id);
+                  const entryType = sidebarEntryType(artist);
+                  const typeLabel = sidebarEntryTypeLabel(entryType);
+                  const songCount =
+                    typeof artist.song_count === 'number' && Number.isFinite(artist.song_count)
+                      ? Math.max(0, artist.song_count)
+                      : 0;
+                  const label = `${artist.artist_name} · ${typeLabel} · ${songCount}`;
+                  const photoUrl =
+                    isLikedEntry || isSunoEntry || isCustomEntry ? null : resolveArtistPhotoUrl(artist);
+                  const isActive = selectedArtistId === artist.id;
+
+                  return (
+                    <li key={artist.id}>
+                      <button
+                        type="button"
+                        className={`library-row library-row-compact${isActive ? ' active' : ''}${
+                          isLikedEntry ? ' library-row-liked' : ''
+                        }${isSunoEntry ? ' library-row-suno' : ''}${
+                          isCustomEntry ? ' library-row-custom' : ''
+                        }`}
+                        onClick={() => handleLibraryRowClick(artist.id)}
+                        onDoubleClick={() => handleLibraryRowDoubleClick(artist, entryType)}
+                        aria-label={label}
+                        title={label}
+                      >
+                        {isLikedEntry ? (
+                          <span className="library-row-avatar library-row-liked-icon" aria-hidden="true">
+                            ♥
+                          </span>
+                        ) : isSunoEntry ? (
+                          <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
+                            S
+                          </span>
+                        ) : isCustomEntry ? (
+                          <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
+                            {artistInitials(artist.artist_name)}
+                          </span>
+                        ) : photoUrl ? (
+                          <img className="library-row-avatar" src={photoUrl} alt="" />
+                        ) : (
+                          <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
+                            {artistInitials(artist.artist_name)}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })
+              )()}
+              {!artists.length ? <li className="empty">—</li> : null}
+            </ul>
+          )}
         </section>
       </div>
     </aside>

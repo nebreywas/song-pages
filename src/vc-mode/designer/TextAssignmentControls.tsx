@@ -49,6 +49,8 @@ type TextAssignmentControlsProps = {
   showLyricsRemoveBracketed?: boolean;
   /** Lyrics-only: Simple Scroll vs ALARE tracking mode. */
   showLyricsTracking?: boolean;
+  /** Vertical lyrics + ALARE only — fade profile and visible-line target. */
+  showAlareFineTuning?: boolean;
 };
 
 function patchOverrides(
@@ -76,6 +78,7 @@ export function TextAssignmentControls({
   showLyricsEdgeFade = false,
   showLyricsRemoveBracketed = false,
   showLyricsTracking = false,
+  showAlareFineTuning = false,
 }: TextAssignmentControlsProps) {
   const defaults = getAssignmentDefaults(content, item, catalog, gridTypography);
 
@@ -223,7 +226,7 @@ export function TextAssignmentControls({
         </AssignmentField>
       ) : null}
 
-      {showLyricsTracking && isAlare ? (
+      {showAlareFineTuning && isAlare ? (
         <>
           <AssignmentField label="ALARE fade">
             <label className="vc-field vc-field-inline">

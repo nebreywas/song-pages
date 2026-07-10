@@ -6,6 +6,21 @@
 
 const BRACKETED_SEGMENT = /\[[^\]]*\]/g;
 
+/** Collapse runs of three or more line breaks (including whitespace-only lines) to a single blank line. */
+export function collapseLyricsBlankLines(lyrics: string): string {
+  const normalized = lyrics.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return normalized.replace(/(?:\n[ \t]*){3,}/g, '\n\n');
+}
+
+/**
+ * Listener song-page lyrics — optional bracket strip, always capped at double newlines.
+ * Source lyrics data is unchanged; call at display/render time only.
+ */
+export function formatListenerLyricsDisplayText(lyrics: string, removeBrackets: boolean): string {
+  if (removeBrackets) return stripBracketedLyricsText(lyrics);
+  return collapseLyricsBlankLines(lyrics);
+}
+
 /**
  * Remove square-bracket annotations from lyrics (e.g. [Chorus], [Verse 2]).
  * Source lyrics data is unchanged; call this at display/render time only.
@@ -22,7 +37,7 @@ export function stripBracketedLyricsText(lyrics: string): string {
     .join('\n');
 
   // Removing annotation-only lines can leave runs of blank lines — cap at one empty line.
-  return stripped.replace(/\n{3,}/g, '\n\n');
+  return collapseLyricsBlankLines(stripped);
 }
 
 /**

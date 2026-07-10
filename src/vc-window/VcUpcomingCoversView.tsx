@@ -259,9 +259,9 @@ export function VcUpcomingCoversView({ songs, presentation }: VcUpcomingCoversVi
               : undefined),
           }}
         >
-          {visibleSongs.map((song) => (
+          {visibleSongs.map((song, index) => (
             <CoverTile
-              key={song.id}
+              key={`${song.id}-${index}`}
               song={song}
               presentation={presentation}
               coverSize={metrics.coverSize}

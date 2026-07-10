@@ -14,6 +14,7 @@ import { VcTitleLineText } from './VcTitleLineText';
 import { VcTransportBar } from './VcTransportBar';
 import { VcUpcomingCoversView } from './VcUpcomingCoversView';
 import { VcAlareLyricsView } from './VcAlareLyricsView';
+import { VcMarqueeLyricsView } from './VcMarqueeLyricsView';
 import { lyricsScrollClassName } from './lyricsScrollClassName';
 
 type VcResolvedContentViewProps = {
@@ -359,6 +360,19 @@ export function VcResolvedContentView({
           textAlign={resolved.textAlign}
           titleLine={resolved.titleLine}
           lineOverflow={resolved.lineOverflow}
+        />
+      );
+    case 'marquee-lyrics':
+      return (
+        <VcMarqueeLyricsView
+          text={resolved.text}
+          playback={playback}
+          fontStyle={resolved.fontStyle}
+          fontSize={resolved.fontSize}
+          color={resolved.color}
+          lyricTracking={resolved.lyricTracking}
+          manifestDurationSeconds={resolved.manifestDurationSeconds}
+          songId={resolved.songId}
         />
       );
     case 'lyrics':

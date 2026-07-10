@@ -99,8 +99,9 @@ export function SongAssignmentSettings({
           overrides={settings.overrides}
           onOverridesChange={(overrides) => onChange({ overrides })}
           showAllCaps={false}
-          showMarkdown
-          showLyricsTracking={content === 'lyrics'}
+          showMarkdown={content !== 'marquee-lyrics'}
+          showLyricsTracking={content === 'lyrics' || content === 'marquee-lyrics'}
+          showAlareFineTuning={content === 'lyrics'}
           showLyricsEdgeFade={content === 'lyrics'}
           showLyricsRemoveBracketed={content === 'lyrics'}
         />

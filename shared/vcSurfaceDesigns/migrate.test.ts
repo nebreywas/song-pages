@@ -8,6 +8,11 @@ import {
   migrateVcSurfaceDesignCatalog,
   sanitizeVcSurfaceDesignCatalogForSave,
 } from './migrate';
+import {
+  applyActiveDesignConfigUpdate,
+  applyDesignProjectionWindowUpdate,
+  resolveProjectionWindowForDesign,
+} from './catalogOps';
 
 test('migrateVcSurfaceDesignCatalog wraps legacy vc.lastConfig as Default', () => {
   const legacy = createDefaultVcConfig('quad');
@@ -70,4 +75,97 @@ test('sanitizeVcSurfaceDesignCatalogForSave preserves divider layout', () => {
   const catalog = migrateVcSurfaceDesignCatalog(null, config);
   const saved = sanitizeVcSurfaceDesignCatalogForSave(catalog);
   assert.equal(saved.designs[0]?.config.surface.dividers.primaryVertical, 0.35);
+});
+
+test('applyActiveDesignConfigUpdate writes config into active design only', () => {
+  const legacy = createDefaultVcConfig('quad');
+  const catalog = migrateVcSurfaceDesignCatalog(null, legacy);
+  const second = {
+    ...catalog.designs[0]!,
+    id: 'surface-b',
+    name: 'Wide',
+    config: createDefaultVcConfig('double-vertical'),
+  };
+  const multi = migrateVcSurfaceDesignCatalog(
+    {
+      version: 1,
+      activeDesignId: catalog.activeDesignId,
+      designs: [catalog.designs[0], second],
+    },
+    legacy,
+  );
+
+  const edited = createDefaultVcConfig('quad');
+  edited.surface.dividers.primaryVertical = 0.33;
+  const updated = applyActiveDesignConfigUpdate(multi, edited);
+  const active = updated.designs.find((design) => design.id === updated.activeDesignId);
+  const other = updated.designs.find((design) => design.id === second.id);
+
+  assert.equal(active?.config.surface.dividers.primaryVertical, 0.33);
+  assert.notEqual(other?.config.surface.templateId, 'quad');
+});
+
+test('applyDesignProjectionWindowUpdate stores bounds on one design only', () => {
+  const legacy = createDefaultVcConfig('quad');
+  const catalog = migrateVcSurfaceDesignCatalog(null, legacy);
+  const second = {
+    ...catalog.designs[0]!,
+    id: 'surface-b',
+    name: 'Wide',
+    config: createDefaultVcConfig('double-vertical'),
+  };
+  const multi = migrateVcSurfaceDesignCatalog(
+    {
+      version: 1,
+      activeDesignId: catalog.activeDesignId,
+      designs: [catalog.designs[0], second],
+    },
+    legacy,
+  );
+
+  const bounds = { x: 40, y: 60, width: 1280, height: 720 };
+  const updated = applyDesignProjectionWindowUpdate(multi, catalog.activeDesignId, bounds);
+  const active = updated.designs.find((design) => design.id === catalog.activeDesignId);
+  const other = updated.designs.find((design) => design.id === second.id);
+
+  assert.deepEqual(active?.config.projectionWindow, bounds);
+  assert.equal(other?.config.projectionWindow, undefined);
+});
+
+test('resolveProjectionWindowForDesign does not fall back across designs', () => {
+  const legacy = createDefaultVcConfig('quad');
+  const catalog = migrateVcSurfaceDesignCatalog(null, legacy);
+  const second = {
+    ...catalog.designs[0]!,
+    id: 'surface-b',
+    name: 'Wide',
+    config: createDefaultVcConfig('double-vertical'),
+  };
+  const multi = migrateVcSurfaceDesignCatalog(
+    {
+      version: 1,
+      activeDesignId: 'surface-b',
+      designs: [
+        {
+          ...catalog.designs[0]!,
+          config: {
+            ...catalog.designs[0]!.config,
+            projectionWindow: { x: 0, y: 0, width: 1600, height: 900 },
+          },
+        },
+        second,
+      ],
+    },
+    legacy,
+  );
+
+  const activeConfig = createDefaultVcConfig('double-vertical');
+  assert.equal(
+    resolveProjectionWindowForDesign(activeConfig, multi),
+    undefined,
+  );
+  assert.deepEqual(
+    resolveProjectionWindowForDesign(activeConfig, multi, catalog.designs[0]!.id),
+    { x: 0, y: 0, width: 1600, height: 900 },
+  );
 });

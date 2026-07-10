@@ -133,6 +133,16 @@ function DesignerSongResolvedPreview({
         </div>
       );
     }
+    case 'marquee-lyrics': {
+      if (resolved.fontStyle && resolved.fontSize && resolved.color) {
+        return (
+          <div className="vc-designer-preview-live">
+            <VcResolvedContentView resolved={resolved} playback={playback} animateGroup={false} />
+          </div>
+        );
+      }
+      return <div className="vc-designer-preview-empty" />;
+    }
     case 'lyrics': {
       if (resolved.lyricTracking === 'alare' && resolved.fontStyle && resolved.fontSize && resolved.color) {
         return (

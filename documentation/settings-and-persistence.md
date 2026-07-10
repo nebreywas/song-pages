@@ -19,6 +19,8 @@ Registry of where Song Pages stores configuration, library data, and media on di
 | `ui.theme` | `THEME_SETTING_KEY` in `src/lib/themes.ts` | `useAppTheme` | App light/dark theme |
 | `commands.mappings` | `COMMAND_MAPPINGS_SETTINGS_KEY` in `shared/commands/constants.ts` | `useCommandMappings`, `commandService` (main) | VC command bindings v2: configured action set, direct/gated/F13–F24, Kudo reserve placeholders |
 | `ui.listenerSidebarCollapsed` | `SIDEBAR_COLLAPSED_KEY` in `ListenerSidebar.tsx` | `ListenerMode` | Listener sidebar state |
+| `ui.listenerSidebarWidth` | `SIDEBAR_WIDTH_KEY` in `ListenerSidebar.tsx` | `ListenerMode` | Listener sidebar width |
+| `ui.listenerPlayer` | `LISTENER_PLAYER_SETTINGS_KEY` in `shared/listener/playerSettings.ts` | `useListenerPlayerSettings` | Listener player chrome (seek time label mode, future options) |
 | `artist:projects` | — | `electron/ipc.js` | Artist workspace (v2 multi-project) |
 | `artist:draft` | — | *(migration read only)* | Legacy single draft → migrated to projects |
 | `cache.maxSongEntries` | `CACHE_MAX_ENTRIES_KEY` in `electron/listener/cache/constants.js` | Cache settings UI | HLS/song cache size cap |
@@ -52,7 +54,6 @@ Listener library uses dedicated tables in the same SQLite database (`electron/li
 |----------|-----------------|---------|
 | Guest webview partition | `persist:songpages-guest` (`shared/appClient.ts`) | Isolated guest session for song pages |
 | Compiled site (browser) | `sessionStorage` `artist-site-player-v1` | Site footer player state — not used in Electron app mode |
-| Reference bundle only | `localStorage` draft | `artist-page-reference-bundle/` — not the live Electron app |
 
 ---
 

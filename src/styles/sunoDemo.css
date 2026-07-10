@@ -3,6 +3,7 @@
   height: 100%;
   overflow: auto;
   padding: 1.5rem 2rem 2rem;
+  position: relative;
 }
 
 .suno-demo-song-header {
@@ -19,6 +20,23 @@
   border-radius: 0.5rem;
   flex-shrink: 0;
   background: var(--panel-border, #333);
+  display: block;
+}
+
+.suno-demo-song-cover-btn {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 0.5rem;
+  flex-shrink: 0;
+}
+
+.suno-demo-song-cover-btn:hover .suno-demo-song-cover {
+  opacity: 0.92;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .suno-demo-song-cover-fallback {
@@ -45,7 +63,7 @@
   font-size: 1.05rem;
 }
 
-.suno-demo-song-lyrics h2 {
+.suno-demo-song-lyrics-heading {
   margin: 0 0 0.75rem;
   font-size: 1rem;
   text-transform: uppercase;

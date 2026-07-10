@@ -1,20 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getApp } from '../lib/bridge';
 import { renderMarkdownPreview } from '../lib/markdownPreview';
 import type { SongRow } from '../types/app';
+import type { ListenerLyricsDisplaySettings } from '@shared/listener/lyricsDisplaySettings';
+import { formatListenerLyricsDisplayText } from '@shared/lyricsText';
+import { LyricsHeadingButton } from './LyricsHeadingButton';
+import { SongCoverPopover } from './SongCoverPopover';
 
 type SunoDemoSongPageProps = {
   song: SongRow;
+  lyricsSettings: ListenerLyricsDisplaySettings;
+  onRemoveBracketsChange: (value: boolean) => void;
 };
 
 /**
  * In-app song page for Suno demo tracks — cover, artist, and lyrics without
  * loading suno.com in the guest webview.
  */
-export function SunoDemoSongPage({ song }: SunoDemoSongPageProps) {
+export function SunoDemoSongPage({
+  song,
+  lyricsSettings,
+  onRemoveBracketsChange,
+}: SunoDemoSongPageProps) {
   const [lyrics, setLyrics] = useState('');
   const [coverUrl, setCoverUrl] = useState<string | null>(song.cover_url);
+  const [coverPopoverOpen, setCoverPopoverOpen] = useState(false);
   const [loading, setLoading] = useState(Boolean(song.song_manifest_url));
+
+  useEffect(() => {
+    setCoverPopoverOpen(false);
+  }, [song.id, song.cover_url]);
 
   useEffect(() => {
     setCoverUrl(song.cover_url);
@@ -46,13 +61,26 @@ export function SunoDemoSongPage({ song }: SunoDemoSongPageProps) {
     };
   }, [song.id, song.cover_url, song.song_manifest_url]);
 
-  const lyricsHtml = lyrics.trim() ? renderMarkdownPreview(lyrics) : '';
+  const displayLyrics = useMemo(() => {
+    if (!lyrics.trim()) return '';
+    return formatListenerLyricsDisplayText(lyrics, lyricsSettings.removeBrackets);
+  }, [lyrics, lyricsSettings.removeBrackets]);
+
+  const lyricsHtml = displayLyrics.trim() ? renderMarkdownPreview(displayLyrics) : '';
 
   return (
     <article className="suno-demo-song-page">
       <header className="suno-demo-song-header">
         {coverUrl ? (
-          <img className="suno-demo-song-cover" src={coverUrl} alt="" />
+          <button
+            type="button"
+            className="suno-demo-song-cover-btn"
+            aria-label={`View ${song.title} cover art`}
+            aria-pressed={coverPopoverOpen}
+            onClick={() => setCoverPopoverOpen((open) => !open)}
+          >
+            <img className="suno-demo-song-cover" src={coverUrl} alt="" />
+          </button>
         ) : (
           <div className="suno-demo-song-cover suno-demo-song-cover-fallback" aria-hidden="true">
             ♪
@@ -65,7 +93,11 @@ export function SunoDemoSongPage({ song }: SunoDemoSongPageProps) {
       </header>
 
       <section className="suno-demo-song-lyrics" aria-busy={loading}>
-        <h2>Lyrics</h2>
+        <LyricsHeadingButton
+          className="lyrics-heading-btn suno-demo-song-lyrics-heading"
+          settings={lyricsSettings}
+          onRemoveBracketsChange={onRemoveBracketsChange}
+        />
         {loading ? (
           <p className="suno-demo-song-muted">Loading lyrics…</p>
         ) : lyricsHtml ? (
@@ -74,6 +106,13 @@ export function SunoDemoSongPage({ song }: SunoDemoSongPageProps) {
           <p className="suno-demo-song-muted">No lyrics available for this clip.</p>
         )}
       </section>
+      {coverPopoverOpen && coverUrl ? (
+        <SongCoverPopover
+          src={coverUrl}
+          alt={`${song.title} cover art`}
+          onClose={() => setCoverPopoverOpen(false)}
+        />
+      ) : null}
     </article>
   );
 }

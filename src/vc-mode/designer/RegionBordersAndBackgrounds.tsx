@@ -5,6 +5,7 @@
 import {
   buildRegionAppearanceLockPatch,
   patchRegionAppearanceField,
+  patchRegionBorderControls,
   resolveRegionBorderDraft,
   VC_GRID_LINE_STYLE_OPTIONS,
   type VcGridDesignSettings,
@@ -42,7 +43,35 @@ export function RegionBordersAndBackgrounds({
   const lockedToGrid = overrides.lockAppearanceToGrid === true;
 
   const patchAppearance = (patch: Partial<RegionAppearanceOverrides>) => {
-    onPatch(patchRegionAppearanceField(overrides, patch));
+    let working = overrides;
+    let effectivePatch = patch;
+    // Persist a visible fill when the user picks a custom color but leaves opacity at grid default (0).
+    if (
+      appearanceMode === 'float' &&
+      patch.backgroundColor !== undefined &&
+      patch.backgroundOpacityPct === undefined
+    ) {
+      effectivePatch = { backgroundOpacityPct: 100, ...patch };
+    }
+    // Edits while locked only touched savedRegionAppearance — unlock first so live values update.
+    if (lockedToGrid && !('lockAppearanceToGrid' in effectivePatch)) {
+      const unlock = buildRegionAppearanceLockPatch(overrides, gridDesign, false, appearanceMode);
+      working = { ...overrides, ...unlock };
+      effectivePatch = { ...unlock, ...effectivePatch };
+    }
+
+    const isBorderPatch =
+      effectivePatch.borderColor !== undefined ||
+      effectivePatch.borderStyle !== undefined ||
+      effectivePatch.borderThicknessPx !== undefined;
+    if (isBorderPatch) {
+      effectivePatch = {
+        ...effectivePatch,
+        ...patchRegionBorderControls(working, gridDesign, effectivePatch),
+      };
+    }
+
+    onPatch(patchRegionAppearanceField(overrides, effectivePatch));
   };
 
   return (

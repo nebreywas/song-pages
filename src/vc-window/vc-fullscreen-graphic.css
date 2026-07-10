@@ -2,7 +2,7 @@
 
 .vc-fullscreen-graphic-layer {
   position: absolute;
-  inset: 0;
+  inset: -8px;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
@@ -11,8 +11,14 @@
   background-position: center;
 }
 
-.vc-has-fullscreen-graphic .vc-surface-region,
-.vc-has-fullscreen-graphic .vc-designer-region {
+/* Base template areas only — floats keep their own fill (grid default or per-float overrides). */
+.vc-has-fullscreen-graphic .vc-surface-region:not(.vc-surface-float),
+.vc-has-fullscreen-graphic .vc-designer-region:not(.vc-designer-float) {
+  background: transparent !important;
+}
+
+.vc-has-fullscreen-graphic.vc-surface,
+.vc-has-fullscreen-graphic.vc-designer-canvas {
   background: transparent !important;
 }
 

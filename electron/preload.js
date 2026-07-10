@@ -43,8 +43,8 @@ contextBridge.exposeInMainWorld('app', {
       ipcRenderer.invoke('listener:setLikedSongAvailability', songId, unavailable),
     probeSongAvailability: (pageUrl, playbackUrl) =>
       ipcRenderer.invoke('listener:probeSongAvailability', pageUrl, playbackUrl),
-    resolveSongAccess: (songId, source) =>
-      ipcRenderer.invoke('listener:resolveSongAccess', songId, source),
+    resolveSongAccess: (songRef, source) =>
+      ipcRenderer.invoke('listener:resolveSongAccess', songRef, source),
     countSunoDemoSongs: (playlistId) => ipcRenderer.invoke('listener:countSunoDemoSongs', playlistId),
     listSunoDemoPlaylists: () => ipcRenderer.invoke('listener:listSunoDemoPlaylists'),
     createSunoDemoPlaylist: () => ipcRenderer.invoke('listener:createSunoDemoPlaylist'),
@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld('app', {
     cacheStats: () => ipcRenderer.invoke('listener:cacheStats'),
     cacheEvents: (limit) => ipcRenderer.invoke('listener:cacheEvents', limit),
     cacheClearEvents: () => ipcRenderer.invoke('listener:cacheClearEvents'),
+    cacheClearAll: () => ipcRenderer.invoke('listener:cacheClearAll'),
     onPlaybackCommand: (callback) => {
       const handler = (_event, payload) => callback(payload);
       ipcRenderer.on('listener:playback-command', handler);
@@ -148,6 +149,7 @@ contextBridge.exposeInMainWorld('app', {
     commitSurface: (surface) => ipcRenderer.send('vc:commitSurface', surface),
     requestVisualizerRotate: () => ipcRenderer.send('vc:requestVisualizerRotate'),
     reportActiveVisualizer: (id) => ipcRenderer.send('vc:reportActiveVisualizer', id),
+    switchSurface: (designId) => ipcRenderer.send('vc:switchSurface', designId),
     onState: (callback) => {
       const handler = (_event, payload) => callback(payload);
       ipcRenderer.on('vc:state', handler);
@@ -198,6 +200,11 @@ contextBridge.exposeInMainWorld('app', {
       ipcRenderer.on('vc:surface-commit', handler);
       return () => ipcRenderer.removeListener('vc:surface-commit', handler);
     },
+    onProjectionWindowChanged: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('vc:projection-window-changed', handler);
+      return () => ipcRenderer.removeListener('vc:projection-window-changed', handler);
+    },
     onVisualizerRotateRequest: (callback) => {
       const handler = () => callback();
       ipcRenderer.on('vc:visualizer-rotate-request', handler);
@@ -207,6 +214,11 @@ contextBridge.exposeInMainWorld('app', {
       const handler = (_event, id) => callback(id);
       ipcRenderer.on('vc:active-visualizer', handler);
       return () => ipcRenderer.removeListener('vc:active-visualizer', handler);
+    },
+    onSwitchSurface: (callback) => {
+      const handler = (_event, designId) => callback(designId);
+      ipcRenderer.on('vc:switch-surface', handler);
+      return () => ipcRenderer.removeListener('vc:switch-surface', handler);
     },
   },
 
@@ -259,5 +271,6 @@ contextBridge.exposeInMainWorld('app', {
     open: () => ipcRenderer.invoke('controller:open'),
     close: () => ipcRenderer.invoke('controller:close'),
     status: () => ipcRenderer.invoke('controller:status'),
+    setAlwaysOnTop: (enabled) => ipcRenderer.invoke('controller:setAlwaysOnTop', enabled),
   },
 });

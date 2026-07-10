@@ -84,6 +84,7 @@ function rowToSongRow(row) {
     sort_order: row.id,
     artist_name: row.artist_name,
     site_root_normalized: '',
+    added_at: row.added_at ?? null,
   };
 }
 

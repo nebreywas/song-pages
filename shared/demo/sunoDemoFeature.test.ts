@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isSunoDemoSong, sunoShareUrlFromClipUuid } from './sunoDemoFeature';
+import {
+  isSunoDemoSong,
+  isSunoDemoSongId,
+  SUNO_DEMO_SONG_ID_BASE,
+  sunoShareUrlFromClipUuid,
+} from './sunoDemoFeature';
+import { userPlaylistSongIdFromEntryId } from '../listener/userPlaylists';
 
 test('sunoShareUrlFromClipUuid builds canonical suno.com song links', () => {
   assert.equal(
@@ -13,4 +19,24 @@ test('sunoShareUrlFromClipUuid builds canonical suno.com song links', () => {
 
 test('isSunoDemoSong matches demo playback scope', () => {
   assert.equal(isSunoDemoSong({ id: 1, playback_scope: 'suno-demo' }), true);
+});
+
+test('isSunoDemoSongId excludes custom playlist entry ids', () => {
+  const customPlaylistSongId = userPlaylistSongIdFromEntryId(10);
+  assert.ok(customPlaylistSongId < SUNO_DEMO_SONG_ID_BASE);
+  assert.equal(isSunoDemoSongId(customPlaylistSongId), false);
+  assert.equal(isSunoDemoSong({ id: customPlaylistSongId, playback_scope: 'full' }), false);
+  assert.equal(isSunoDemoSongId(SUNO_DEMO_SONG_ID_BASE - 1), true);
+});
+
+test('isSunoDemoSong matches Suno snapshots copied into custom playlists', () => {
+  const customPlaylistSongId = userPlaylistSongIdFromEntryId(10);
+  assert.equal(
+    isSunoDemoSong({
+      id: customPlaylistSongId,
+      playback_scope: 'suno-demo',
+      page_url: 'songpages-suno-demo:page/-2000001',
+    }),
+    true,
+  );
 });

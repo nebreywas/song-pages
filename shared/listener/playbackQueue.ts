@@ -2,6 +2,11 @@ import { isSongSkipped } from './playlistKinds';
 
 type QueueSong = { id: number; skipped?: number | boolean | null };
 
+export type PlaybackQueueOptions = {
+  shuffle: boolean;
+  repeatMode: 'off' | 'one' | 'all';
+};
+
 /** Songs that auto-advance and shuffle may select. */
 export function playableQueueSongs<T extends QueueSong>(songs: T[]): T[] {
   return songs.filter((song) => !isSongSkipped(song));
@@ -10,12 +15,17 @@ export function playableQueueSongs<T extends QueueSong>(songs: T[]): T[] {
 export function pickNextPlayableSongId(
   sortedSongs: QueueSong[],
   currentSongId: number,
-  options: { shuffle: boolean; repeatMode: 'off' | 'one' | 'all' },
+  options: PlaybackQueueOptions,
 ): number | null {
   if (!sortedSongs.length) return null;
 
   const playable = playableQueueSongs(sortedSongs);
   if (!playable.length) return null;
+
+  const current = sortedSongs.find((song) => song.id === currentSongId);
+  if (options.repeatMode === 'one') {
+    return current && !isSongSkipped(current) ? currentSongId : null;
+  }
 
   const currentIndex = sortedSongs.findIndex((song) => song.id === currentSongId);
 
@@ -40,6 +50,46 @@ export function pickNextPlayableSongId(
   }
 
   return null;
+}
+
+/**
+ * Ordered upcoming song ids after the current track — respects repeat and skips.
+ * Repeat one fills with the current song; repeat all wraps to the playlist start.
+ */
+export function pickUpcomingPlayableSongIds(
+  sortedSongs: QueueSong[],
+  currentSongId: number,
+  maxCount: number,
+  options: PlaybackQueueOptions,
+): number[] {
+  if (maxCount <= 0 || !sortedSongs.length) return [];
+
+  const current = sortedSongs.find((song) => song.id === currentSongId);
+  if (!current || isSongSkipped(current)) return [];
+
+  if (options.repeatMode === 'one') {
+    return Array.from({ length: maxCount }, () => currentSongId);
+  }
+
+  if (options.shuffle) {
+    const result: number[] = [];
+    const currentIndex = sortedSongs.findIndex((song) => song.id === currentSongId);
+    for (let index = currentIndex + 1; index < sortedSongs.length && result.length < maxCount; index += 1) {
+      const song = sortedSongs[index];
+      if (song && !isSongSkipped(song)) result.push(song.id);
+    }
+    return result;
+  }
+
+  const result: number[] = [];
+  let cursorId = currentSongId;
+  while (result.length < maxCount) {
+    const nextId = pickNextPlayableSongId(sortedSongs, cursorId, options);
+    if (nextId == null) break;
+    result.push(nextId);
+    cursorId = nextId;
+  }
+  return result;
 }
 
 export function pickPreviousPlayableSongId(sortedSongs: QueueSong[], currentSongId: number): number | null {

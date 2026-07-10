@@ -6,11 +6,15 @@
 import { useMemo } from 'react';
 
 import { computeSurfaceLayout } from '@shared/vcSurface/geometry';
+import { resetFloatRotation } from '@shared/vcSurface/floats';
+import { surfaceRectStyle, surfaceFloatStyle, EDGE_BLEED_SEAMLESS_PX } from '@shared/vcSurface/surfaceRectStyle';
 import {
+  areGridLinesVisible,
   gridDividerCss,
   floatOutlineCssForFloat,
   floatAppearanceCss,
   hasActiveFullscreenGraphic,
+  isRegionBorderVisible,
   regionHasBorderOverride,
   regionOutlineCss,
   resolveAreaBackgroundColor,
@@ -39,14 +43,11 @@ type VcSurfaceProps = {
   onChangeSurface?: (patch: Partial<VcModeConfig['surface']>) => void;
 };
 
-function rectStyle(rect: { x: number; y: number; width: number; height: number }): React.CSSProperties {
-  return {
-    position: 'absolute',
-    left: `${rect.x * 100}%`,
-    top: `${rect.y * 100}%`,
-    width: `${rect.width * 100}%`,
-    height: `${rect.height * 100}%`,
-  };
+function rectStyle(
+  rect: { x: number; y: number; width: number; height: number; rotationDeg?: number },
+  edgeBleedPx: number,
+): React.CSSProperties {
+  return surfaceFloatStyle(rect, { edgeBleedPx });
 }
 
 /** Width × height as rounded whole percentages for layout badges. */
@@ -110,6 +111,7 @@ export function VcSurface({
     setSelection,
     drag,
     beginPointerDrag,
+    cancelDrag,
     handleArrowNudge,
   } = useVcLayoutInteraction({
     config,
@@ -119,6 +121,14 @@ export function VcSurface({
 
   const layoutClass = layoutMode ? ' vc-layout-mode' : '';
   const draggingClass = drag ? ' is-dragging' : '';
+  const gridLinesHiddenClass = areGridLinesVisible(config.gridDesign.gridLines)
+    ? ''
+    : ' vc-grid-lines-hidden';
+  const regionEdgeBleedPx = areGridLinesVisible(config.gridDesign.gridLines)
+    ? 2
+    : EDGE_BLEED_SEAMLESS_PX;
+  const fullscreenGraphic = hasActiveFullscreenGraphic(config.gridDesign);
+  const surfaceBackground = fullscreenGraphic ? 'transparent' : config.gridDesign.backgroundColor;
 
   const regionSelected = (target: VcLayoutSelection): boolean => {
     if (!selection || !target) return false;
@@ -142,12 +152,12 @@ export function VcSurface({
     >
       <div
         ref={surfaceRef}
-        className={`vc-surface${layoutClass}${
-          hasActiveFullscreenGraphic(config.gridDesign) ? ' vc-has-fullscreen-graphic' : ''
+        className={`vc-surface${layoutClass}${gridLinesHiddenClass}${
+          fullscreenGraphic ? ' vc-has-fullscreen-graphic' : ''
         }`}
         style={
           {
-            background: config.gridDesign.backgroundColor,
+            background: surfaceBackground,
             '--vc-grid-bg': config.gridDesign.backgroundColor,
           } as React.CSSProperties
         }
@@ -170,13 +180,15 @@ export function VcSurface({
               key={`area-${area.areaNumber}`}
               className={`vc-surface-region${layoutMode ? ' vc-layout-region' : ''}${selected ? ' is-layout-selected' : ''}`}
               style={{
-                ...rectStyle(area),
+                ...rectStyle(area, regionEdgeBleedPx),
                 background: areaBackground,
                 '--vc-lyrics-fade-bg': resolveLyricsFadeBackground(
                   areaBackground,
                   config.gridDesign.backgroundColor,
                 ),
-                ...(layoutMode || !regionHasBorderOverride(cell)
+                ...(layoutMode
+                  || !regionHasBorderOverride(cell)
+                  || !isRegionBorderVisible(cell, config.gridDesign)
                   ? {}
                   : regionOutlineCss(cell, config.gridDesign)),
               } as React.CSSProperties}
@@ -223,9 +235,11 @@ export function VcSurface({
               key={float.id}
               className={`vc-surface-region vc-surface-float${layoutMode ? ' vc-layout-region vc-layout-float' : ''}${selected ? ' is-layout-selected' : ''}${isDragging ? ' is-layout-dragging' : ''}`}
               style={{
-                ...rectStyle(float),
+                ...rectStyle(float, regionEdgeBleedPx),
                 zIndex: layoutMode ? 40 + float.zIndex : 10 + float.zIndex,
-                ...(layoutMode ? {} : floatOutlineCssForFloat(float, config.gridDesign)),
+                ...(layoutMode || !isRegionBorderVisible(float, config.gridDesign)
+                  ? {}
+                  : floatOutlineCssForFloat(float, config.gridDesign)),
                 ...appearance.region,
                 '--vc-lyrics-fade-bg': resolveLyricsFadeBackground(
                   floatBackground,
@@ -245,6 +259,23 @@ export function VcSurface({
                         offsetX: norm.x - float.x,
                         offsetY: norm.y - float.y,
                         pointerId: event.pointerId,
+                        startRotationDeg: float.rotationDeg ?? 0,
+                        startNormY: norm.y,
+                      });
+                    }
+                  : undefined
+              }
+              onDoubleClick={
+                layoutMode && selected
+                  ? (event) => {
+                      if (!event.shiftKey) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      cancelDrag();
+                      onChangeSurface?.({
+                        floats: config.surface.floats.map((f) =>
+                          f.id === float.id ? resetFloatRotation(f) : f,
+                        ),
                       });
                     }
                   : undefined
@@ -289,11 +320,14 @@ export function VcSurface({
           );
         })}
 
-        {layout.dividers.map((handle) => {
+        {areGridLinesVisible(config.gridDesign.gridLines) || layoutMode
+          ? layout.dividers.map((handle) => {
           const isVertical = handle.axis === 'vertical';
+          const lines = config.gridDesign.gridLines;
+          if (!layoutMode && !areGridLinesVisible(lines)) return null;
           const dividerStyle = layoutMode
             ? layoutDividerStyle(isVertical)
-            : gridDividerCss(isVertical ? 'vertical' : 'horizontal', config.gridDesign.gridLines);
+            : gridDividerCss(isVertical ? 'vertical' : 'horizontal', lines);
           return (
             <div
               key={handle.key}
@@ -326,7 +360,8 @@ export function VcSurface({
               }
             />
           );
-        })}
+        })
+          : null}
       </div>
     </div>
   );

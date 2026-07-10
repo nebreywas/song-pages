@@ -389,6 +389,29 @@ function FloatLayoutDetail({
       </div>
 
       {onUpdateFloat ? (
+        <div className="vc-field vc-region-field vc-float-layout-field">
+          <span className="vc-assignment-sublabel">Rotation</span>
+          <div className="vc-float-numeric vc-region-field-controls" role="group" aria-label="Float rotation">
+            <label className="vc-float-numeric-field">
+              <span className="vc-float-numeric-label">deg</span>
+              <input
+                type="number"
+                className="vc-float-numeric-input"
+                min={0}
+                max={359}
+                step={1}
+                value={float.rotationDeg ?? 0}
+                onChange={(e) => onUpdateFloat({ rotationDeg: Number(e.target.value) })}
+              />
+            </label>
+          </div>
+          <p className="vc-float-layout-hint">
+            Hold Shift while dragging — move up/down to rotate. Shift+double-click resets rotation to 0°.
+          </p>
+        </div>
+      ) : null}
+
+      {onUpdateFloat ? (
         <section className="vc-host-assignment-settings vc-float-appearance-settings">
           <RegionBordersAndBackgrounds
             appearanceMode="float"

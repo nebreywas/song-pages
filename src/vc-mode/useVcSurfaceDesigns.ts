@@ -2,68 +2,53 @@ import { useCallback, useRef, useState } from 'react';
 
 import {
   activeSurfaceDesign,
-  buildVcSurfaceDesignCatalog,
   createSurfaceDesign,
   migrateVcSurfaceDesignCatalog,
-  sanitizeVcSurfaceDesignCatalogForSave,
   VC_SURFACE_DESIGN_MIN_COUNT,
-  VC_SURFACE_DESIGNS_KEY,
   type VcSurfaceDesignCatalog,
 } from '@shared/vcSurfaceDesigns';
 import { normalizeVcConfig, type VcModeConfig } from '@shared/vcModeTypes';
 
-import { getApp } from '../lib/bridge';
 import { createDefaultVcConfig } from './vcModeDefaults';
-
-function catalogsEqual(a: VcSurfaceDesignCatalog, b: VcSurfaceDesignCatalog): boolean {
-  return JSON.stringify(sanitizeVcSurfaceDesignCatalogForSave(a))
-    === JSON.stringify(sanitizeVcSurfaceDesignCatalogForSave(b));
-}
+import {
+  getCachedVcSurfaceDesignCatalog,
+  hydrateVcSurfaceDesignCatalog,
+  persistVcModeConfig,
+  persistVcSurfaceDesignCatalog,
+  setCachedVcSurfaceDesignCatalog,
+} from './vcSurfaceDesignStore';
 
 export function useVcSurfaceDesigns() {
   const [catalog, setCatalog] = useState<VcSurfaceDesignCatalog>(() =>
-    migrateVcSurfaceDesignCatalog(null, createDefaultVcConfig()),
+    getCachedVcSurfaceDesignCatalog()
+      ?? migrateVcSurfaceDesignCatalog(null, createDefaultVcConfig()),
   );
-  // Ref mirrors catalog so back-to-back persists (flush + switch/create) never read stale React state.
   const catalogRef = useRef(catalog);
   catalogRef.current = catalog;
 
-  const persist = useCallback(async (updater: (prev: VcSurfaceDesignCatalog) => VcSurfaceDesignCatalog) => {
-    const normalized = sanitizeVcSurfaceDesignCatalogForSave(updater(catalogRef.current));
-    catalogRef.current = normalized;
-    setCatalog(normalized);
-    await getApp()?.saveSettings?.(VC_SURFACE_DESIGNS_KEY, normalized);
-    return normalized;
+  const syncCatalog = useCallback((next: VcSurfaceDesignCatalog) => {
+    catalogRef.current = next;
+    setCatalog(next);
+    setCachedVcSurfaceDesignCatalog(next);
   }, []);
+
+  const persist = useCallback(async (updater: (prev: VcSurfaceDesignCatalog) => VcSurfaceDesignCatalog) => {
+    const normalized = await persistVcSurfaceDesignCatalog((prev) =>
+      updater(catalogRef.current ?? prev),
+    );
+    syncCatalog(normalized);
+    return normalized;
+  }, [syncCatalog]);
 
   const hydrateCatalog = useCallback(async (raw: unknown, legacyConfig: unknown) => {
-    const before = raw ? buildVcSurfaceDesignCatalog(raw, legacyConfig) : null;
-    const normalized = migrateVcSurfaceDesignCatalog(raw, legacyConfig);
-    catalogRef.current = normalized;
-    setCatalog(normalized);
-    if (before && !catalogsEqual(before, normalized)) {
-      await getApp()?.saveSettings?.(
-        VC_SURFACE_DESIGNS_KEY,
-        sanitizeVcSurfaceDesignCatalogForSave(normalized),
-      );
-    }
+    const normalized = await hydrateVcSurfaceDesignCatalog(raw, legacyConfig);
+    syncCatalog(normalized);
     return normalized;
-  }, []);
+  }, [syncCatalog]);
 
   const updateActiveDesignConfig = useCallback(
-    async (config: VcModeConfig) => {
-      const normalized = normalizeVcConfig(config);
-      const now = Date.now();
-      return persist((prev) => ({
-        ...prev,
-        designs: prev.designs.map((design) =>
-          design.id === prev.activeDesignId
-            ? { ...design, config: normalized, updatedAt: now }
-            : design,
-        ),
-      }));
-    },
-    [persist],
+    async (config: VcModeConfig) => persistVcModeConfig(config),
+    [],
   );
 
   const switchDesign = useCallback(
@@ -117,7 +102,7 @@ export function useVcSurfaceDesigns() {
   const renameDesign = useCallback(
     async (designId: string, name: string) => {
       const trimmed = name.trim();
-      if (!trimmed) return catalog;
+      if (!trimmed) return catalogRef.current ?? catalog;
       const now = Date.now();
       return persist((prev) => ({
         ...prev,

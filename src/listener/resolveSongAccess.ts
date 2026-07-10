@@ -12,16 +12,20 @@ export async function resolveSongAccess(
   song: SongRow,
   source?: 'show_song_page' | 'play_song',
 ): Promise<ResolvedSongAccess> {
-  if (song.id <= 0) {
-    return { pageUrl: song.page_url, playbackUrl: song.playback_url, fromCache: false };
-  }
-
   const app = getApp();
   if (!app?.listener.resolveSongAccess) {
     return { pageUrl: song.page_url, playbackUrl: song.playback_url, fromCache: false };
   }
 
-  const result = await app.listener.resolveSongAccess(song.id, source);
+  const result = await app.listener.resolveSongAccess(
+    {
+      id: song.id,
+      library_song_id: song.library_song_id ?? null,
+      page_url: song.page_url,
+      playback_url: song.playback_url,
+    },
+    source,
+  );
   if (!result.ok || !result.data) {
     return { pageUrl: song.page_url, playbackUrl: song.playback_url, fromCache: false };
   }

@@ -1,8 +1,9 @@
 const path = require('path');
-const { protocol } = require('electron');
+const { protocol, session } = require('electron');
 const { CACHE_SCHEME } = require('./constants');
 const { parseCacheAssetUrl } = require('./urls');
 const { resolveEntryFilePath } = require('./storage');
+const { GUEST_PARTITION } = require('../guestSession');
 
 const MIME_BY_EXT = {
   '.html': 'text/html; charset=utf-8',
@@ -40,9 +41,9 @@ function registerCacheScheme() {
   ]);
 }
 
-/** Serve cached song assets from opaque on-disk directories. */
-function registerCacheProtocol() {
-  protocol.handle(CACHE_SCHEME, async (request) => {
+/** Shared handler — serve cached song assets from opaque on-disk directories. */
+function createCacheProtocolHandler() {
+  return async (request) => {
     const parsed = parseCacheAssetUrl(request.url);
     if (!parsed) {
       return new Response('Not found', { status: 404 });
@@ -66,10 +67,21 @@ function registerCacheProtocol() {
     } catch {
       return new Response('Not found', { status: 404 });
     }
-  });
+  };
+}
+
+/**
+ * Register songpages-cache:// on every session that loads cached assets.
+ * Main-window audio/HLS uses the default session; song page webviews use the guest partition.
+ */
+function registerCacheProtocol() {
+  const handler = createCacheProtocolHandler();
+  protocol.handle(CACHE_SCHEME, handler);
+  session.fromPartition(GUEST_PARTITION).protocol.handle(CACHE_SCHEME, handler);
 }
 
 module.exports = {
   registerCacheScheme,
   registerCacheProtocol,
+  createCacheProtocolHandler,
 };

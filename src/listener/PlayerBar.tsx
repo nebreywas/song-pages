@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatTime } from './formatTime';
+import type { SeekTimeDisplay } from '@shared/listener/playerSettings';
 import { ScrollingNowPlaying } from './ScrollingNowPlaying';
 import { usePressHold } from '../visualizers/settings/ui/usePressHold';
 import {
@@ -49,6 +50,8 @@ type PlayerBarProps = {
   onToggleLofi?: () => void;
   crossfades?: boolean;
   onToggleCrossfades?: () => void;
+  seekTimeDisplay?: SeekTimeDisplay;
+  onToggleSeekTimeDisplay?: () => void;
 };
 
 const MENU_IDLE_MS = 60_000;
@@ -94,6 +97,8 @@ export function PlayerBar({
   onToggleLofi,
   crossfades = false,
   onToggleCrossfades,
+  seekTimeDisplay = 'remaining',
+  onToggleSeekTimeDisplay,
 }: PlayerBarProps) {
   const progressRef = useRef<HTMLDivElement>(null);
   const menuIdleTimerRef = useRef<number | null>(null);
@@ -154,6 +159,12 @@ export function PlayerBar({
 
   const progressPct = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   const timeRemaining = duration > 0 ? Math.max(0, duration - currentTime) : 0;
+  const seekEndLabel =
+    seekTimeDisplay === 'duration' ? formatTime(duration) : `−${formatTime(timeRemaining)}`;
+  const seekEndAriaLabel =
+    seekTimeDisplay === 'duration'
+      ? `Total duration ${formatTime(duration)}. Click to show time remaining.`
+      : `Time remaining ${formatTime(timeRemaining)}. Click to show total duration.`;
   const repeatLabel =
     repeatMode === 'one' ? 'Repeat current song' : repeatMode === 'all' ? 'Repeat playlist' : 'Repeat off';
 
@@ -393,7 +404,16 @@ export function PlayerBar({
               >
                 <div className="progress-fill" style={{ width: `${progressPct}%` }} />
               </div>
-              <span className="player-time player-time-remaining">−{formatTime(timeRemaining)}</span>
+              <button
+                type="button"
+                className="player-time player-time-remaining player-time-toggle"
+                onClick={onToggleSeekTimeDisplay}
+                disabled={disabled || duration <= 0 || !onToggleSeekTimeDisplay}
+                aria-label={seekEndAriaLabel}
+                title={seekTimeDisplay === 'duration' ? 'Show time remaining' : 'Show total duration'}
+              >
+                {seekEndLabel}
+              </button>
             </div>
           )}
         </div>

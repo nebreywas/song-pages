@@ -10,6 +10,7 @@ import {
   bringFloatToFront,
   canAddFloat,
   clampFloat,
+  clampRotationDeg,
   createFloat,
   sendFloatToBack,
   type VcFloatGeometry,
@@ -227,13 +228,10 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
   const [error, setError] = useState<string | null>(null);
 
   const surfaceDesigns = useVcSurfaceDesigns();
-  const updateActiveDesignConfigRef = useRef(surfaceDesigns.updateActiveDesignConfig);
-  updateActiveDesignConfigRef.current = surfaceDesigns.updateActiveDesignConfig;
 
   const { saveStatus, isHydrated, markHydrated, resetHydration, flushSave } = useAutoSaveVcConfig({
     enabled: open,
     config,
-    onPersist: (next) => updateActiveDesignConfigRef.current(next),
   });
   const saveStatusLabel = isHydrated ? vcConfigSaveStatusLabel(saveStatus) : null;
   const flushSaveRef = useRef(flushSave);
@@ -916,6 +914,11 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                           if (patch.lockAppearanceToGrid === false) delete next.lockAppearanceToGrid;
                           if (patch.savedRegionAppearance === undefined && 'savedRegionAppearance' in patch) {
                             delete next.savedRegionAppearance;
+                          }
+                          if (patch.rotationDeg !== undefined) {
+                            const rotation = clampRotationDeg(patch.rotationDeg);
+                            if (rotation === 0) delete next.rotationDeg;
+                            else next.rotationDeg = rotation;
                           }
                           return clampFloat(next);
                         }),

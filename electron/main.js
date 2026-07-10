@@ -125,6 +125,8 @@ app.whenReady().then(async () => {
   registerCacheProtocol();
   configureSongPageGuestSession();
   database.initDatabase();
+  const cacheManager = require('./listener/cacheManager');
+  void cacheManager.purgeStaleCacheEntriesOnLaunch();
   require('./commands/commandService').initCommandService();
   registerIpcHandlers();
   createMainWindow();

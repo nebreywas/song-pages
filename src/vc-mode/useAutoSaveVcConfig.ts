@@ -6,8 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { normalizeVcConfig, type VcModeConfig } from '@shared/vcModeTypes';
 
-import { getApp } from '../lib/bridge';
-import { VC_SETTINGS_KEY } from './vcModeDefaults';
+import { persistVcModeConfig } from './vcSurfaceDesignStore';
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
 
@@ -16,19 +15,15 @@ export type VcConfigSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'erro
 type UseAutoSaveVcConfigOptions = {
   enabled: boolean;
   config: VcModeConfig;
-  /** Optional second persist path (e.g. surface design catalog). */
-  onPersist?: (config: VcModeConfig) => Promise<unknown>;
 };
 
-export function useAutoSaveVcConfig({ enabled, config, onPersist }: UseAutoSaveVcConfigOptions) {
+export function useAutoSaveVcConfig({ enabled, config }: UseAutoSaveVcConfigOptions) {
   const [saveStatus, setSaveStatus] = useState<VcConfigSaveStatus>('idle');
   const [isHydrated, setIsHydrated] = useState(false);
   const saveTimerRef = useRef<number | null>(null);
   const savedFadeTimerRef = useRef<number | null>(null);
   const configRef = useRef(config);
   configRef.current = config;
-  const onPersistRef = useRef(onPersist);
-  onPersistRef.current = onPersist;
 
   const clearSaveTimer = useCallback(() => {
     if (saveTimerRef.current != null) {
@@ -48,8 +43,8 @@ export function useAutoSaveVcConfig({ enabled, config, onPersist }: UseAutoSaveV
     const normalized = normalizeVcConfig(next);
     setSaveStatus('saving');
     try {
-      await getApp()?.saveSettings?.(VC_SETTINGS_KEY, normalized);
-      if (onPersistRef.current) await onPersistRef.current(normalized);
+      const saved = await persistVcModeConfig(normalized);
+      if (!saved) throw new Error('persist failed');
       setSaveStatus('saved');
       clearSavedFadeTimer();
       savedFadeTimerRef.current = window.setTimeout(() => {

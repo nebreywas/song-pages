@@ -17,6 +17,14 @@ let controllerWindow = null;
 /** @type {import('electron').BrowserWindow | null} */
 let mainWindowRef = null;
 
+/** Remember host preference across controller close/reopen during a session. */
+let controllerAlwaysOnTop = false;
+
+function applyControllerAlwaysOnTop() {
+  if (!controllerWindow || controllerWindow.isDestroyed()) return;
+  controllerWindow.setAlwaysOnTop(controllerAlwaysOnTop, 'floating');
+}
+
 function controllerLoadTarget() {
   if (!require('electron').app.isPackaged) {
     return devServerUrl('/controller-window/controller.html');
@@ -39,6 +47,7 @@ function openControllerWindow(mainWindow) {
   if (controllerWindow && !controllerWindow.isDestroyed()) {
     controllerWindow.show();
     controllerWindow.focus();
+    applyControllerAlwaysOnTop();
     syncWindowRefs();
     return { ok: true };
   }
@@ -77,6 +86,7 @@ function openControllerWindow(mainWindow) {
   });
 
   controllerWindow.once('ready-to-show', () => {
+    applyControllerAlwaysOnTop();
     controllerWindow.show();
     syncWindowRefs();
     commandService.broadcastMappingState();
@@ -113,10 +123,25 @@ function sendControllerVcState(payload) {
   controllerWindow.webContents.send('vc:state', payload);
 }
 
+function setControllerAlwaysOnTop(enabled) {
+  controllerAlwaysOnTop = Boolean(enabled);
+  applyControllerAlwaysOnTop();
+  return { ok: true, data: { alwaysOnTop: controllerAlwaysOnTop } };
+}
+
+function getControllerAlwaysOnTop() {
+  if (controllerWindow && !controllerWindow.isDestroyed()) {
+    return controllerWindow.isAlwaysOnTop();
+  }
+  return controllerAlwaysOnTop;
+}
+
 module.exports = {
   openControllerWindow,
   closeControllerWindow,
   isControllerWindowOpen,
   getControllerWindow,
   sendControllerVcState,
+  setControllerAlwaysOnTop,
+  getControllerAlwaysOnTop,
 };

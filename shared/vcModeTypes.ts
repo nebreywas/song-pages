@@ -21,6 +21,7 @@ export type VcCellContent =
   | 'cover'
   | 'video-cover'
   | 'lyrics'
+  | 'marquee-lyrics'
   | 'about'
   | 'artist-name'
   | 'artist-image'
@@ -51,7 +52,7 @@ export type {
   VcGridLineStyle,
 } from './vcMode/gridDesign';
 export { DEFAULT_VC_GRID_DESIGN, sanitizeGridDesign } from './vcMode/gridDesign';
-import { sanitizeGridDesign, type VcGridDesignSettings } from './vcMode/gridDesign';
+import { sanitizeGridDesign, DEFAULT_VC_FLOAT_BACKGROUND, type VcGridDesignSettings } from './vcMode/gridDesign';
 import {
   DEFAULT_VC_VISUALIZER_CHANGE_RULE,
   DEFAULT_VC_VISUALIZER_SEQUENCE,
@@ -95,6 +96,12 @@ import {
   sanitizeSavedRegionAppearance,
   type VcRegionAppearanceSnapshot,
 } from './vcMode/gridDesign';
+import { sanitizeProjectionWindow, type VcProjectionWindowBounds } from './vcMode/projectionWindow';
+export type { VcProjectionWindowBounds } from './vcMode/projectionWindow';
+export {
+  VC_PROJECTION_WINDOW_MIN_HEIGHT,
+  VC_PROJECTION_WINDOW_MIN_WIDTH,
+} from './vcMode/projectionWindow';
 
 export type VcHostSlotBinding = {
   itemId: string;
@@ -114,6 +121,7 @@ export const SONG_CONTENT_SETTINGS_RULE: Partial<Record<VcCellContent, SongConte
   'video-cover': 'video',
   'artist-image': 'graphic',
   lyrics: 'area-text',
+  'marquee-lyrics': 'area-text',
   about: 'title-text',
   'artist-name': 'title-text',
   'artist-bio': 'area-text',
@@ -208,6 +216,8 @@ export type VcModeConfig = {
   hostGraphicPopupId: string | null;
   /** Hotkey upcoming queue overlay — placement and list length. */
   upcomingOverlay: VcUpcomingOverlaySettings;
+  /** Last VC projection window bounds for this surface design. */
+  projectionWindow?: VcProjectionWindowBounds;
 };
 
 export type VcPlaybackState = {
@@ -264,6 +274,17 @@ export type VcUpcomingSong = {
 
 export type VcOverlayId = 'cover' | 'host' | 'next' | 'songInfo' | 'upcoming' | 'remaining';
 
+/** Lightweight surface list for the VC controller (host-only, not on broadcast). */
+export type VcSurfaceDesignPickerOption = {
+  id: string;
+  name: string;
+};
+
+export type VcSurfaceDesignPickerState = {
+  activeDesignId: string;
+  designs: VcSurfaceDesignPickerOption[];
+};
+
 export type VcStatePayload = {
   config: VcModeConfig;
   playback: VcPlaybackState;
@@ -282,6 +303,8 @@ export type VcStatePayload = {
   kudoPresets?: KudoPreset[];
   /** Active between-song pause while a special play style is engaged. */
   specialPlayPause?: VcSpecialPlayPauseState | null;
+  /** Saved surface designs — lets the host switch layouts from the VC controller. */
+  surfaceDesigns?: VcSurfaceDesignPickerState;
 };
 
 export const VC_SONG_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: string }> = [
@@ -300,6 +323,7 @@ export const VC_SONG_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: strin
   { value: 'main-genre', label: 'Main Genre' },
   { value: 'additional-genres', label: 'Additional Genres' },
   { value: 'lyrics', label: 'Lyrics' },
+  { value: 'marquee-lyrics', label: 'Lyrics (Marquee)' },
   { value: 'cover', label: 'Cover' },
   { value: 'video-cover', label: 'Video Cover' },
   { value: 'visualizer', label: 'Visualizer' },
@@ -319,6 +343,7 @@ export const VC_CONTENT_LABELS: Record<VcCellContent, string> = {
   cover: 'Cover',
   'video-cover': 'Video Cover',
   lyrics: 'Lyrics',
+  'marquee-lyrics': 'Lyrics (Marquee)',
   about: 'About song',
   'artist-name': 'Artist Name',
   'artist-image': 'Artist Image',
@@ -533,11 +558,32 @@ function sanitizeFloatContent(
   return result;
 }
 
+/** Drop per-float fields that match grid defaults so grid-level opacity/color edits apply. */
+function sparseFloatAppearanceOverrides(
+  floats: VcFloatGeometry[],
+  gridDesign: VcGridDesignSettings,
+): VcFloatGeometry[] {
+  const defaults = gridDesign.floatBackground ?? DEFAULT_VC_FLOAT_BACKGROUND;
+  return floats.map((float) => {
+    let next: VcFloatGeometry = float;
+    if (next.backgroundOpacityPct === defaults.opacityPct) {
+      const { backgroundOpacityPct: _opacity, ...rest } = next;
+      next = rest;
+    }
+    if (next.backgroundColor === defaults.color) {
+      const { backgroundColor: _color, ...rest } = next;
+      next = rest;
+    }
+    return next;
+  });
+}
+
 export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
   const templateId = isVcTemplateId(config.surface?.templateId)
     ? config.surface.templateId
     : VC_SAFE_TEMPLATE_ID;
-  const floats = sanitizeFloats(config.surface?.floats);
+  const gridDesign = sanitizeGridDesign(config.gridDesign);
+  const floats = sparseFloatAppearanceOverrides(sanitizeFloats(config.surface?.floats), gridDesign);
   const dividers = resolveDividers(templateId, config.surface?.dividers);
   const cells = sanitizeCells(config.cells);
   const floatContent = sanitizeFloatContent(config.floatContent, floats);
@@ -549,6 +595,8 @@ export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
     config.visualizerAlsoClickToChange,
   );
 
+  const projectionWindow = sanitizeProjectionWindow(config.projectionWindow);
+
   return {
     surface: { templateId, dividers, floats },
     cells,
@@ -558,13 +606,14 @@ export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
     visualizerSequence: sanitizeVisualizerSequence(config.visualizerSequence),
     visualizerAlsoClickToChange: migratedClick.visualizerAlsoClickToChange,
     useFallbacks: config.useFallbacks !== false,
-    gridDesign: sanitizeGridDesign(config.gridDesign),
+    gridDesign,
     specialPlayStyle: sanitizeSpecialPlayStyleSettings(config.specialPlayStyle),
     hostGraphicPopupId:
       typeof config.hostGraphicPopupId === 'string' && config.hostGraphicPopupId.trim()
         ? config.hostGraphicPopupId.trim()
         : null,
     upcomingOverlay: sanitizeUpcomingOverlaySettings(config.upcomingOverlay),
+    ...(projectionWindow ? { projectionWindow } : {}),
   };
 }
 

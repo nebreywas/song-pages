@@ -43,6 +43,8 @@ export type VcFloatGeometry = {
   /** When true, live rendering uses grid defaults; savedRegionAppearance holds the prior values. */
   lockAppearanceToGrid?: boolean;
   savedRegionAppearance?: VcRegionAppearanceSnapshot;
+  /** Clockwise rotation in degrees (0–359). Omitted when 0. */
+  rotationDeg?: number;
 };
 
 function clampOpacityPct(value: unknown): number | undefined {
@@ -72,6 +74,21 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** Normalize rotation to an integer degree 0–359. */
+export function clampRotationDeg(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  const rounded = Math.round(value) % 360;
+  return rounded < 0 ? rounded + 360 : rounded;
+}
+
+/** Degrees added per normalized surface-height of vertical pointer travel (Shift+drag). */
+export const FLOAT_ROTATE_DEG_PER_NORM_Y = 180;
+
+function sparseRotationDeg(rotationDeg: number): Pick<VcFloatGeometry, 'rotationDeg'> | Record<string, never> {
+  const clamped = clampRotationDeg(rotationDeg);
+  return clamped !== 0 ? { rotationDeg: clamped } : {};
+}
+
 /** Clamp float size and position so it stays fully inside the surface. */
 export function clampFloat(float: VcFloatGeometry): VcFloatGeometry {
   const width = clamp(float.width, VC_MIN_FLOAT, 1);
@@ -79,7 +96,15 @@ export function clampFloat(float: VcFloatGeometry): VcFloatGeometry {
   const x = clamp(float.x, 0, 1 - width);
   const y = clamp(float.y, 0, 1 - height);
   const zIndex = Number.isFinite(float.zIndex) ? float.zIndex : 1;
-  return preserveFloatAppearance(float, { id: float.id, width, height, x, y, zIndex });
+  return preserveFloatAppearance(float, {
+    id: float.id,
+    width,
+    height,
+    x,
+    y,
+    zIndex,
+    ...sparseRotationDeg(float.rotationDeg ?? 0),
+  });
 }
 
 export function canAddFloat(floats: VcFloatGeometry[]): boolean {
@@ -110,6 +135,38 @@ export function createFloat(existing: VcFloatGeometry[]): VcFloatGeometry | null
 
 export function moveFloat(float: VcFloatGeometry, x: number, y: number): VcFloatGeometry {
   return clampFloat({ ...float, x, y });
+}
+
+export function rotateFloat(float: VcFloatGeometry, rotationDeg: number): VcFloatGeometry {
+  return clampFloat({ ...float, rotationDeg: clampRotationDeg(rotationDeg) });
+}
+
+/** Clear rotation back to the default (0°, field omitted from config). */
+export function resetFloatRotation(float: VcFloatGeometry): VcFloatGeometry {
+  if (!float.rotationDeg) return float;
+  const { rotationDeg: _removed, ...rest } = float;
+  return clampFloat(rest);
+}
+
+export type FloatMoveDragState = {
+  offsetX: number;
+  offsetY: number;
+  startRotationDeg: number;
+  startNormY: number;
+};
+
+/** Move or rotate a float from layout-mode pointer drag (Shift = vertical rotate). */
+export function applyFloatPointerDrag(
+  float: VcFloatGeometry,
+  norm: { x: number; y: number },
+  drag: FloatMoveDragState,
+  shiftKey: boolean,
+): VcFloatGeometry {
+  if (shiftKey) {
+    const deltaY = norm.y - drag.startNormY;
+    return rotateFloat(float, drag.startRotationDeg + deltaY * FLOAT_ROTATE_DEG_PER_NORM_Y);
+  }
+  return moveFloat(float, norm.x - drag.offsetX, norm.y - drag.offsetY);
 }
 
 export function resizeFloat(
@@ -179,6 +236,7 @@ export function sanitizeFloats(raw: unknown): VcFloatGeometry[] {
         contentOpacityPct: clampOpacityPct(value.contentOpacityPct),
         lockAppearanceToGrid: value.lockAppearanceToGrid === true ? true : undefined,
         savedRegionAppearance: sanitizeSavedRegionAppearance(value.savedRegionAppearance, 'float'),
+        ...sparseRotationDeg(clampRotationDeg(value.rotationDeg)),
       }),
     );
     if (floats.length >= VC_MAX_FLOATS) break;

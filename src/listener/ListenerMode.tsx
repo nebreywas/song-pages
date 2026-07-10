@@ -26,9 +26,13 @@ import {
   DEFAULT_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
+  LIBRARY_ADDED_COLUMN_MIN_WIDTH,
 } from './ListenerSidebar';
 import { SubscribeArtistModal } from './SubscribeArtistModal';
 import { formatTime } from './formatTime';
+import { useListenerPlayerSettings } from './useListenerPlayerSettings';
+import { useListenerLyricsDisplaySettings } from './useListenerLyricsDisplaySettings';
+import { useListenerSidebarLibraryLayout } from './useListenerSidebarLibraryLayout';
 import { probeSongDurationSeconds, songNeedsDurationProbe } from './probeSongDuration';
 import { sortPlaylistSongs, type SortColumn, type SortDirection } from './sortPlaylist';
 import {
@@ -45,6 +49,7 @@ import {
 import {
   pickNextPlayableSongId,
   pickPreviousPlayableSongId,
+  playableQueueSongs,
   resolvePlayableSong,
 } from '@shared/listener/playbackQueue';
 import { usePlaylistDragReorder } from './usePlaylistDragReorder';
@@ -157,6 +162,10 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toasts, addToast, dismissToast } = useToasts();
+  const { settings: playerSettings, toggleSeekLabel } = useListenerPlayerSettings();
+  const { settings: lyricsDisplaySettings, setRemoveBrackets: setLyricsRemoveBrackets } =
+    useListenerLyricsDisplaySettings();
+  const sidebarLibrary = useListenerSidebarLibraryLayout(artists);
   const [busy, setBusy] = useState(false);
 
   const [playingSongId, setPlayingSongId] = useState<number | null>(null);
@@ -165,6 +174,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [pageUrl, setPageUrl] = useState<string | null>(null);
+  const [pageLoadKey, setPageLoadKey] = useState(0);
   const [pageLoadError, setPageLoadError] = useState<string | null>(null);
 
   const [shuffle, setShuffle] = useState(false);
@@ -215,6 +225,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const analyserAudioRef = useRef<HTMLAudioElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const playbackGenerationRef = useRef(0);
+  const pageAccessGenerationRef = useRef(0);
   const mainColumnRef = useRef<HTMLDivElement>(null);
   const rowClickTimerRef = useRef<number | null>(null);
   const durationProbeRef = useRef<Set<number>>(new Set());
@@ -637,7 +648,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     previewSong,
     sortedSongs,
     playingSongId,
-    pickNextSongId,
+    repeatMode,
+    shuffle,
     artists,
     isPlaying,
     currentTime,
@@ -811,11 +823,15 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   const showSongPage = useCallback(
     async (song: SongRow) => {
+      const accessGeneration = ++pageAccessGenerationRef.current;
       setPreviewSongId(song.id);
       setMainContentView('song');
       setPageLoadError(null);
 
       const access = await resolveSongAccess(song, 'show_song_page');
+      if (accessGeneration !== pageAccessGenerationRef.current) return;
+
+      setPageLoadKey((key) => key + 1);
       setPageUrl(access.pageUrl);
 
       void probeDurationForSong(song);
@@ -834,6 +850,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       }
 
       const generation = ++playbackGenerationRef.current;
+      const accessGeneration = ++pageAccessGenerationRef.current;
 
       setPlayingSongId(song.id);
       setPreviewSongId(song.id);
@@ -842,6 +859,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       setError(null);
 
       const access = await resolveSongAccess(song, 'play_song');
+      if (accessGeneration !== pageAccessGenerationRef.current) return;
+
+      setPageLoadKey((key) => key + 1);
       setPageUrl(access.pageUrl);
 
       void probeLikedSongAvailability(song);
@@ -1593,6 +1613,53 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     void playSong(song);
   };
 
+  const handlePlaylistDoubleClick = useCallback(
+    async (artistId: number) => {
+      const app = getApp();
+      if (!app) return;
+
+      const samePlaylist = selectedArtistId === artistId;
+      if (!samePlaylist) {
+        setSelectedArtistId(artistId);
+        setMainContentView('artist');
+      }
+
+      const songRows = samePlaylist ? songs : await app.listener.listSongs(artistId);
+      if (!samePlaylist) {
+        setSongs(songRows);
+      }
+      if (!songRows.length) return;
+
+      // Same playlist: respect the table sort the user sees; new playlist: catalog order.
+      let ordered: SongRow[];
+      if (samePlaylist) {
+        if (sortColumn === 'custom' && customOrderIds) {
+          ordered = applyCustomPlaylistOrder(songRows, customOrderIds);
+        } else {
+          const column = sortColumn === 'custom' ? 'order' : sortColumn;
+          ordered = sortPlaylistSongs(songRows, column, sortDirection, sortDurationsSnapshot);
+        }
+      } else {
+        ordered = sortPlaylistSongs(songRows, 'order', 'asc', {});
+      }
+
+      const firstPlayable = playableQueueSongs(ordered)[0];
+      if (!firstPlayable) return;
+
+      sortedSongsRef.current = ordered;
+      void playSong(firstPlayable);
+    },
+    [
+      customOrderIds,
+      playSong,
+      selectedArtistId,
+      songs,
+      sortColumn,
+      sortDirection,
+      sortDurationsSnapshot,
+    ],
+  );
+
   const playNext = () => {
     if (playingSongId == null) return;
     const nextSongId = pickNextSongId(playingSongId);
@@ -1712,14 +1779,24 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     }
 
     if (mainContentView === 'song' && showingSunoDemoPage && activeSongPage) {
-      return <SunoDemoSongPage song={activeSongPage} />;
+      return (
+        <SunoDemoSongPage
+          song={activeSongPage}
+          lyricsSettings={lyricsDisplaySettings}
+          onRemoveBracketsChange={setLyricsRemoveBrackets}
+        />
+      );
     }
 
     if (mainContentView === 'song' && pageUrl) {
       return (
         <>
           <SongPageWebview
+            key={pageLoadKey}
+            loadKey={pageLoadKey}
             url={pageUrl}
+            lyricsSettings={lyricsDisplaySettings}
+            onRemoveBracketsChange={setLyricsRemoveBrackets}
             onLoadError={handlePageLoadError}
             onCoverModalChange={setCoverModalOpen}
           />
@@ -1768,7 +1845,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   return (
     <div
-      className={`listener-layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}${sidebarResizing ? ' sidebar-resizing' : ''}`}
+      className={`listener-layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}${sidebarResizing ? ' sidebar-resizing' : ''}${!sidebarCollapsed && sidebarWidth >= LIBRARY_ADDED_COLUMN_MIN_WIDTH ? ' sidebar-library-added-visible' : ''}`}
       style={
         sidebarCollapsed
           ? undefined
@@ -1776,7 +1853,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       }
     >
       <ListenerSidebar
-        artists={artists}
+        artists={sidebarLibrary.displayArtists}
+        orderNumberById={sidebarLibrary.orderNumberById}
+        sortColumn={sidebarLibrary.sortColumn}
+        sortDirection={sidebarLibrary.sortDirection}
+        onSortColumn={sidebarLibrary.toggleSortColumn}
+        onSidebarReorder={sidebarLibrary.reorderSidebarRows}
+        onEnterReorderMode={sidebarLibrary.activateManualOrderSort}
         selectedArtistId={selectedArtistId}
         collapsed={sidebarCollapsed}
         busy={busy}
@@ -1787,6 +1870,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         onAddCustomPlaylist={() => void handleCreateCustomPlaylist()}
         onRefresh={() => void handleRefresh()}
         onSelectArtist={selectArtist}
+        onPlaylistDoubleClick={(artistId) => void handlePlaylistDoubleClick(artistId)}
         onRowContextMenu={handleLibrarySidebarContextMenu}
       />
       {!sidebarCollapsed ? (
@@ -1834,6 +1918,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             onToggleLofi={toggleLofi}
             crossfades={crossfades}
             onToggleCrossfades={() => setCrossfades((on) => !on)}
+            seekTimeDisplay={playerSettings.seekTimeDisplay}
+            onToggleSeekTimeDisplay={toggleSeekLabel}
           />
           <audio ref={audioRef} preload="metadata" />
           <audio

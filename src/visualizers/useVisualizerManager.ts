@@ -6,6 +6,8 @@ import {
   type VisualizerSongInfo,
 } from '@shared/visualizerMessages';
 
+import { normalizeSongRowAssets, resolveSongCoverUrl } from '@shared/listener/songResolution';
+
 import { getApp } from '../lib/bridge';
 import type { SongRow } from '../types/app';
 import { buildVisualizerContext } from './core/context/buildContext';
@@ -61,10 +63,11 @@ export function useVisualizerManager({
 
   const songInfo = useMemo<VisualizerSongInfo | null>(() => {
     if (!playingSong) return null;
+    const normalized = normalizeSongRowAssets(playingSong);
     return {
-      title: playingSong.title,
-      artist: playingSong.artist_name ?? '',
-      coverUrl: playingSong.cover_url,
+      title: normalized.title,
+      artist: normalized.artist_name ?? '',
+      coverUrl: resolveSongCoverUrl(normalized),
     };
   }, [playingSong]);
 

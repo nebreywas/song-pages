@@ -198,6 +198,7 @@ const OVERRIDE_KEYS_BY_CONTENT: Partial<Record<VcCellContent, Array<keyof VcAssi
     'alareFadeEnabled',
     'alareTargetVisibleLines',
   ],
+  'marquee-lyrics': ['fontStyle', 'fontSize', 'color', 'textAlign', 'lyricTracking'],
   about: ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
   'artist-name': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign'],
   'song-title': ['fontStyle', 'fontSize', 'color', 'allCaps', 'textAlign', 'overflow'],
@@ -442,6 +443,16 @@ export function getAssignmentDefaults(
       lyricsRemoveBracketed: false,
       lyricTracking: DEFAULT_VC_LYRIC_TRACKING,
       alareFadeEnabled: true,
+    };
+  }
+
+  if (content === 'marquee-lyrics') {
+    return {
+      fontStyle: gridTypography.fontStyle,
+      fontSize: gridTypography.fontSize,
+      color: gridTypography.color,
+      textAlign: DEFAULT_VC_TEXT_ALIGN,
+      lyricTracking: DEFAULT_VC_LYRIC_TRACKING,
     };
   }
 

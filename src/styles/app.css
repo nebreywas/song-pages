@@ -78,6 +78,11 @@ body {
   height: 1.1rem;
 }
 
+.btn.icon-btn.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+}
+
 .panel-actions-end {
   margin-left: auto;
 }
@@ -465,6 +470,14 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Same template for header + rows; Added slot stays in grid but collapses to 0fr when narrow. */
+  --library-col-added-width: 0fr;
+  --library-grid-cols: 1.35rem minmax(0, 1fr) 4.25rem var(--library-col-added-width) 2.35rem;
+  --library-grid-cols-reorder: 1.15rem 1.35rem minmax(0, 1fr) 4.25rem var(--library-col-added-width) 2.35rem;
+}
+
+.listener-layout.sidebar-library-added-visible .artists-panel {
+  --library-col-added-width: 5.25rem;
 }
 
 .artists-panel .panel-header,
@@ -633,10 +646,16 @@ body {
 .library-table-header,
 .library-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 3.25rem 2rem;
+  grid-template-columns: var(--library-grid-cols);
+  column-gap: 0.55rem;
   align-items: center;
-  gap: 0.25rem;
   width: 100%;
+  min-width: 0;
+}
+
+.library-table-header--reorder-mode,
+.library-row--reorder-mode {
+  grid-template-columns: var(--library-grid-cols-reorder);
 }
 
 .library-table-header {
@@ -650,8 +669,58 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.library-sort-header-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.library-sort-header-btn.align-right {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.library-sort-header-btn:hover,
+.library-sort-header-btn.active {
+  color: var(--accent);
+}
+
+.library-col-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.library-col-drag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.library-order-index {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  min-width: 0.85rem;
+  text-align: right;
+  font-size: 0.74rem;
+}
+
 .library-col-songs {
-  padding-left: 6px;
+  padding-left: .75rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -689,17 +758,74 @@ body {
 }
 
 .library-col-name {
-  font-weight: 600;
+  /* min-width: 0 lets the 1fr track shrink; stretch (default) keeps text inside the cell. */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.library-row .library-col-name {
+  font-weight: 600;
+}
+
+.library-sort-header-btn.library-col-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  justify-content: flex-start;
+}
+
 .library-col-type {
+  text-align: right;
+  min-width: 0;
+}
+
+.library-row .library-col-type {
   font-size: 0.74rem;
   color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-col-added {
+  visibility: hidden;
+  pointer-events: none;
   text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-row .library-col-added {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.library-table-header .library-col-added,
+.library-row .library-col-added {
+  text-align: right;
+}
+
+.listener-layout.sidebar-library-added-visible .library-col-added {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.library-list.is-dragging-library li.is-dragging .library-row {
+  opacity: 0.45;
+}
+
+.library-list li.library-insert-before .library-row {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.library-list li.library-insert-after .library-row {
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .library-list .empty {
@@ -709,6 +835,11 @@ body {
 }
 
 .library-list-collapsed {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 0.3rem;
 }
@@ -1260,6 +1391,49 @@ body {
   flex-direction: column;
 }
 
+.song-cover-popover {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.song-cover-popover-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: rgba(4, 6, 10, 0.88);
+  backdrop-filter: blur(6px);
+  cursor: zoom-out;
+}
+
+.song-cover-popover-image-btn {
+  position: relative;
+  z-index: 1;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: zoom-out;
+}
+
+.song-cover-popover-image {
+  display: block;
+  max-width: min(100%, 22rem);
+  max-height: min(100%, 32rem);
+  width: auto;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  object-fit: contain;
+}
+
 .song-webview-host {
   flex: 1;
   min-height: 240px;
@@ -1665,6 +1839,23 @@ body {
   text-align: right;
 }
 
+.player-time-toggle {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  /* Keep .player-time typography — font: inherit would reset font-size to the parent. */
+}
+
+.player-time-toggle:disabled {
+  cursor: default;
+}
+
+.player-time-toggle:not(:disabled):hover {
+  color: var(--text);
+}
+
 .progress-track {
   height: 6px;
   border-radius: 999px;
@@ -1789,6 +1980,47 @@ body {
 .playlist-context-item:hover {
   background: var(--surface-2);
   color: var(--accent);
+}
+
+/* Clickable Lyrics heading + contextual display settings (Listener mode). */
+.lyrics-heading-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.lyrics-settings-popover {
+  position: fixed;
+  z-index: 902;
+  min-width: 12rem;
+  padding: 0.5rem 0.55rem 0.6rem;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+.lyrics-settings-popover-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.lyrics-settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.lyrics-settings-toggle input {
+  margin: 0;
 }
 
 .song-table tr.selected-row td:nth-child(3),

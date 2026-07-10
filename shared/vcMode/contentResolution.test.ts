@@ -190,6 +190,26 @@ test('resolveVcCellContent resolves artist bio and combined bio-name', () => {
   }
 });
 
+test('resolveVcCellContent resolves marquee lyrics with lyric tracking', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: '[Verse]\nLine one\nLine two\n\n[Chorus]\nHook' },
+  });
+
+  const marquee = resolveVcCellContent('marquee-lyrics', null, ctx);
+  assert.equal(marquee?.kind, 'marquee-lyrics');
+  if (marquee?.kind === 'marquee-lyrics') {
+    assert.equal(marquee.lyricTracking, 'simple-scroll');
+    assert.match(marquee.text, /Line one/);
+    assert.equal(marquee.text.includes('['), false);
+  }
+
+  const alare = resolveVcCellContent('marquee-lyrics', null, ctx, { lyricTracking: 'alare' });
+  assert.equal(alare?.kind, 'marquee-lyrics');
+  if (alare?.kind === 'marquee-lyrics') {
+    assert.equal(alare.lyricTracking, 'alare');
+  }
+});
+
 test('resolveVcCellContent applies lyrics edge fade override', () => {
   const ctx = baseContext({ song: songPayload() });
 

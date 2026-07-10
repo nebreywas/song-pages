@@ -14,6 +14,8 @@ const CACHE_EVENT_TYPES = [
   'populate_complete',
   'populate_failed',
   'cache_remove',
+  'cache_clear_all',
+  'cache_purge_stale',
   'invalidate_artist',
 ] as const;
 
@@ -66,7 +68,7 @@ function eventTypeClass(type: string): string {
   if (type.endsWith('_failed')) {
     return 'cache-event-type cache-event-type--error';
   }
-  if (type.startsWith('invalidate') || type === 'cache_remove') {
+  if (type.startsWith('invalidate') || type === 'cache_remove' || type === 'cache_clear_all' || type === 'cache_purge_stale') {
     return 'cache-event-type cache-event-type--warn';
   }
   return 'cache-event-type';
@@ -147,6 +149,25 @@ export function DeveloperMode() {
     await refreshCacheDiagnostics();
   };
 
+  const clearCache = async () => {
+    const app = getApp();
+    if (!app?.listener.cacheClearAll) {
+      setRefreshError('Cache clear API unavailable — restart Electron after updating main process.');
+      return;
+    }
+
+    setRefreshError(null);
+    const result = await app.listener.cacheClearAll();
+    if (!result.ok) {
+      setRefreshError(result.error || 'Failed to clear song cache.');
+      return;
+    }
+    if (result.data) {
+      setStats(result.data);
+    }
+    await refreshCacheDiagnostics();
+  };
+
   return (
     <div className="simple-page panel developer-page">
       <h2>Developer</h2>
@@ -175,6 +196,9 @@ export function DeveloperMode() {
             </button>
             <button type="button" className="btn btn-secondary" onClick={() => void clearEvents()}>
               Clear log
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => void clearCache()}>
+              Clear cache
             </button>
           </div>
         </div>
@@ -234,7 +258,8 @@ export function DeveloperMode() {
 
         <p className="developer-cache-hint">
           Events are also written to the main process log file with a <code>cache:</code> prefix (use Export Logs
-          from settings).
+          from the app menu). Use <strong>Clear cache</strong> to delete all cached song pages and HLS segments;
+          the next play will fetch fresh copies from the network.
         </p>
       </section>
     </div>

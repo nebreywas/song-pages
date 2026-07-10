@@ -71,6 +71,8 @@ export type SongRow = {
   /** Custom playlist junction row id (main process only). */
   user_playlist_entry_id?: number;
   library_song_id?: number | null;
+  /** When the row was added to a virtual playlist (liked / custom / suno). */
+  added_at?: string | null;
 };
 
 export type SubscribeResult = {
@@ -116,7 +118,9 @@ declare global {
           playbackUrl: string,
         ) => Promise<{ ok: boolean; data?: { ok: boolean; pageAvailable: boolean; playbackAvailable: boolean }; error?: string }>;
         resolveSongAccess: (
-          songId: number,
+          songRef:
+            | number
+            | Pick<SongRow, 'id' | 'library_song_id' | 'page_url' | 'playback_url'>,
           source?: string,
         ) => Promise<{
           ok: boolean;
@@ -236,6 +240,11 @@ declare global {
           error?: string;
         }>;
         cacheClearEvents: () => Promise<{ ok: boolean; error?: string }>;
+        cacheClearAll: () => Promise<{
+          ok: boolean;
+          data?: { entryCount: number; totalBytes: number; maxEntries: number };
+          error?: string;
+        }>;
         onPlaybackCommand: (
           callback: (payload: import('@shared/listener/playbackCommands').ListenerPlaybackCommand) => void,
         ) => () => void;
@@ -281,7 +290,10 @@ declare global {
         onRequestSync?: (callback: () => void) => () => void;
       };
       vc: {
-        open: (options?: { fullscreen?: boolean }) => Promise<{ ok: boolean; error?: string }>;
+        open: (options?: {
+          fullscreen?: boolean;
+          projectionWindow?: import('@shared/vcModeTypes').VcProjectionWindowBounds;
+        }) => Promise<{ ok: boolean; error?: string }>;
         close: () => Promise<{ ok: boolean; error?: string }>;
         setFullScreen: (fullscreen: boolean) => Promise<{ ok: boolean; error?: string }>;
         status: () => Promise<{
@@ -297,6 +309,7 @@ declare global {
         commitSurface: (surface: import('@shared/vcModeTypes').VcSurfaceConfig) => void;
         requestVisualizerRotate: () => void;
         reportActiveVisualizer: (id: string) => void;
+        switchSurface: (designId: string) => void;
         onState: (callback: (payload: import('@shared/vcModeTypes').VcStatePayload) => void) => () => void;
         onFrame: (callback: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void) => () => void;
         onHotkey: (callback: (payload: { action: import('@shared/vcModeTypes').VcHotkeyAction }) => void) => () => void;
@@ -311,8 +324,12 @@ declare global {
         onSurfaceCommit: (
           callback: (surface: import('@shared/vcModeTypes').VcSurfaceConfig) => void,
         ) => () => void;
+        onProjectionWindowChanged: (
+          callback: (bounds: import('@shared/vcModeTypes').VcProjectionWindowBounds) => void,
+        ) => () => void;
         onVisualizerRotateRequest: (callback: () => void) => () => void;
         onActiveVisualizerReport: (callback: (id: string) => void) => () => void;
+        onSwitchSurface: (callback: (designId: string) => void) => () => void;
       };
       hostContent: {
         pickAndImportMedia: (payload: {
@@ -383,7 +400,16 @@ declare global {
       controller: {
         open: () => Promise<{ ok: boolean; error?: string }>;
         close: () => Promise<{ ok: boolean; error?: string }>;
-        status: () => Promise<{ ok: boolean; data?: { open: boolean }; error?: string }>;
+        status: () => Promise<{
+          ok: boolean;
+          data?: { open: boolean; alwaysOnTop?: boolean };
+          error?: string;
+        }>;
+        setAlwaysOnTop: (enabled: boolean) => Promise<{
+          ok: boolean;
+          data?: { alwaysOnTop: boolean };
+          error?: string;
+        }>;
       };
     };
   }

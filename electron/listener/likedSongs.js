@@ -114,6 +114,7 @@ function listLikedSongs() {
          s.playback_quality,
          COALESCE(s.duration_seconds, ls.duration_seconds) AS duration_seconds,
          ls.id AS sort_order,
+         ls.liked_at AS added_at,
          COALESCE(a.artist_name, ls.artist_name) AS artist_name,
          a.site_root_normalized
        FROM liked_songs ls

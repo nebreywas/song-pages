@@ -5,16 +5,40 @@ import {
   SONG_PAGES_GUEST_PARTITION,
   SONG_PAGES_GUEST_WEB_PREFERENCES,
 } from '@shared/appClient';
+import type { ListenerLyricsDisplaySettings } from '@shared/listener/lyricsDisplaySettings';
+import { formatListenerLyricsDisplayText } from '@shared/lyricsText';
+import { renderMarkdownPreview } from '../lib/markdownPreview';
+import { LyricsSettingsPopover } from './LyricsSettingsPopover';
+import { SongCoverPopover } from './SongCoverPopover';
+import {
+  INSTALL_COVER_CLICK_BRIDGE,
+  READ_COVER_ART_DATA,
+  READ_COVER_CLICK_TICK,
+  type GuestCoverArtData,
+} from './songPageCoverBridge';
+import {
+  buildApplyLyricsBodyHtmlScript,
+  INSTALL_LYRICS_HEADING_BRIDGE,
+  READ_LYRICS_BODY_TEXT,
+  READ_LYRICS_HEADING_RECT,
+  READ_LYRICS_HEADING_TICK,
+  type GuestLyricsHeadingRect,
+} from './songPageLyricsBridge';
 
 type SongPageWebviewProps = {
   url: string;
+  /** Bumps when the user re-opens a song so the guest webview remounts reliably. */
+  loadKey?: string | number;
+  lyricsSettings: ListenerLyricsDisplaySettings;
+  onRemoveBracketsChange: (value: boolean) => void;
   onLoadError?: (message: string) => void;
-  /** Fired when the guest cover lightbox opens or closes. */
+  /** Fired when the host cover popover opens or closes. */
   onCoverModalChange?: (open: boolean) => void;
 };
 
 type WebviewElement = HTMLElement & {
   src: string;
+  getBoundingClientRect: () => DOMRect;
   getWebContentsId?: () => number;
   executeJavaScript?: (code: string, userGesture?: boolean) => Promise<unknown>;
   addEventListener: (type: string, listener: (event: Event) => void) => void;
@@ -26,13 +50,8 @@ type DidFailLoadEvent = Event & {
   errorDescription: string;
 };
 
-/** Read-only probe — guest cover modal uses #cover-modal.hidden when collapsed. */
-const COVER_MODAL_OPEN_PROBE = `(function () {
-  var modal = document.getElementById('cover-modal');
-  return !!(modal && !modal.classList.contains('hidden'));
-})()`;
-
-const COVER_MODAL_POLL_MS = 200;
+const COVER_CLICK_POLL_MS = 200;
+const LYRICS_HEADING_POLL_MS = 250;
 
 /**
  * Sandboxed webview for untrusted remote Song Pages.
@@ -41,19 +60,45 @@ const COVER_MODAL_POLL_MS = 200;
  * bound in main process. Presentation: ?songpagesApp=1 — templates hide chrome;
  * the app does not inject CSS or JS into guest documents.
  */
-export function SongPageWebview({ url, onLoadError, onCoverModalChange }: SongPageWebviewProps) {
+export function SongPageWebview({
+  url,
+  loadKey,
+  lyricsSettings,
+  onRemoveBracketsChange,
+  onLoadError,
+  onCoverModalChange,
+}: SongPageWebviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onLoadErrorRef = useRef(onLoadError);
   onLoadErrorRef.current = onLoadError;
   const onCoverModalChangeRef = useRef(onCoverModalChange);
   onCoverModalChangeRef.current = onCoverModalChange;
+  const lyricsSettingsRef = useRef(lyricsSettings);
+  lyricsSettingsRef.current = lyricsSettings;
+  const onRemoveBracketsChangeRef = useRef(onRemoveBracketsChange);
+  onRemoveBracketsChangeRef.current = onRemoveBracketsChange;
+  const sourceLyricsTextRef = useRef('');
+  const coverPopoverRef = useRef<{ src: string; title: string } | null>(null);
 
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
+  const [lyricsPopoverAnchor, setLyricsPopoverAnchor] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const [coverPopover, setCoverPopover] = useState<{ src: string; title: string } | null>(null);
+  coverPopoverRef.current = coverPopover;
+
+  const closeCoverPopover = () => {
+    setCoverPopover(null);
+    onCoverModalChangeRef.current?.(false);
+  };
 
   useEffect(() => {
     onCoverModalChangeRef.current?.(false);
-  }, [url]);
+    setLyricsPopoverAnchor(null);
+    setCoverPopover(null);
+    sourceLyricsTextRef.current = '';
+  }, [url, loadKey]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -71,18 +116,87 @@ export function SongPageWebview({ url, onLoadError, onCoverModalChange }: SongPa
     webview.setAttribute('webpreferences', SONG_PAGES_GUEST_WEB_PREFERENCES);
     webview.setAttribute('allowpopups', 'false');
 
-    let coverModalPollId: number | null = null;
-    let lastCoverModalOpen = false;
+    let coverClickPollId: number | null = null;
+    let lyricsHeadingPollId: number | null = null;
+    let guestReady = false;
+    let disposed = false;
+    let lastLyricsMenuTick = 0;
+    let lastCoverClickTick = 0;
 
-    const syncCoverModalOpen = () => {
-      if (!webview.executeJavaScript) return;
+    const applyLyricsDisplay = async () => {
+      if (disposed || !guestReady || !webview.executeJavaScript) return;
+      const sourceLyricsText = sourceLyricsTextRef.current;
+      if (!sourceLyricsText.trim()) return;
+
+      const displayText = formatListenerLyricsDisplayText(
+        sourceLyricsText,
+        lyricsSettingsRef.current.removeBrackets,
+      );
+      const html = renderMarkdownPreview(displayText);
+
+      try {
+        await webview.executeJavaScript(buildApplyLyricsBodyHtmlScript(html), false);
+      } catch {
+        /* guest may be mid-navigation */
+      }
+    };
+
+    const pollCoverClick = () => {
+      if (disposed || !guestReady || !webview.executeJavaScript) return;
+
       void webview
-        .executeJavaScript(COVER_MODAL_OPEN_PROBE, false)
-        .then((result) => {
-          const open = Boolean(result);
-          if (open === lastCoverModalOpen) return;
-          lastCoverModalOpen = open;
-          onCoverModalChangeRef.current?.(open);
+        .executeJavaScript(READ_COVER_CLICK_TICK, false)
+        .then(async (tickValue) => {
+          if (disposed) return;
+          const tick = typeof tickValue === 'number' ? tickValue : Number(tickValue);
+          if (!Number.isFinite(tick) || tick === lastCoverClickTick) return;
+          lastCoverClickTick = tick;
+
+          if (coverPopoverRef.current) {
+            setCoverPopover(null);
+            onCoverModalChangeRef.current?.(false);
+            return;
+          }
+
+          const data = (await webview.executeJavaScript(
+            READ_COVER_ART_DATA,
+            false,
+          )) as GuestCoverArtData | null;
+          if (disposed || !data?.src) return;
+
+          setCoverPopover({
+            src: data.src,
+            title: typeof data.title === 'string' ? data.title : '',
+          });
+          onCoverModalChangeRef.current?.(true);
+        })
+        .catch(() => {
+          /* guest may be mid-navigation */
+        });
+    };
+
+    const pollLyricsHeading = () => {
+      if (disposed || !guestReady || !webview.executeJavaScript) return;
+
+      void webview
+        .executeJavaScript(READ_LYRICS_HEADING_TICK, false)
+        .then(async (tickValue) => {
+          if (disposed) return;
+          const tick = typeof tickValue === 'number' ? tickValue : Number(tickValue);
+          if (!Number.isFinite(tick) || tick === lastLyricsMenuTick) return;
+          lastLyricsMenuTick = tick;
+
+          const rect = (await webview.executeJavaScript(
+            READ_LYRICS_HEADING_RECT,
+            false,
+          )) as GuestLyricsHeadingRect | null;
+          if (disposed || !rect) return;
+
+          const webviewRect = webview.getBoundingClientRect();
+          setLyricsPopoverAnchor({
+            x: webviewRect.left + rect.left,
+            y: webviewRect.top + rect.bottom + 4,
+          });
         })
         .catch(() => {
           /* guest may be mid-navigation */
@@ -100,39 +214,103 @@ export function SongPageWebview({ url, onLoadError, onCoverModalChange }: SongPa
     };
 
     const onDomReady = () => {
+      if (disposed) return;
+      guestReady = true;
       setLoadState('ready');
 
       if (app?.listener.bindSongPageGuest) {
-        const guestId = webview.getWebContentsId?.();
-        if (guestId != null) {
-          void app.listener.bindSongPageGuest(guestId, appModeUrl).then((result) => {
-            if (!result.ok) {
-              onLoadErrorRef.current?.(result.error || 'Could not secure song page guest.');
-            }
-          });
+        try {
+          const guestId = webview.getWebContentsId?.();
+          if (guestId != null) {
+            void app.listener.bindSongPageGuest(guestId, appModeUrl).then((result) => {
+              if (!result.ok) {
+                onLoadErrorRef.current?.(result.error || 'Could not secure song page guest.');
+              }
+            });
+          }
+        } catch {
+          /* guest may be mid-teardown when dom-ready races a remount */
         }
       }
 
-      syncCoverModalOpen();
-      coverModalPollId = window.setInterval(syncCoverModalOpen, COVER_MODAL_POLL_MS);
+      void webview
+        .executeJavaScript(INSTALL_COVER_CLICK_BRIDGE, false)
+        .then((initialTick) => {
+          if (disposed) return;
+          const tick = typeof initialTick === 'number' ? initialTick : Number(initialTick);
+          if (Number.isFinite(tick)) lastCoverClickTick = tick;
+        })
+        .catch(() => {
+          /* optional bridge */
+        });
+
+      void webview
+        .executeJavaScript(INSTALL_LYRICS_HEADING_BRIDGE, false)
+        .then((initialTick) => {
+          if (disposed) return;
+          const tick = typeof initialTick === 'number' ? initialTick : Number(initialTick);
+          if (Number.isFinite(tick)) lastLyricsMenuTick = tick;
+        })
+        .catch(() => {
+          /* optional bridge */
+        });
+
+      void webview
+        .executeJavaScript(READ_LYRICS_BODY_TEXT, false)
+        .then((text) => {
+          if (disposed || typeof text !== 'string') return;
+          sourceLyricsTextRef.current = text;
+          void applyLyricsDisplay();
+        })
+        .catch(() => {
+          /* lyrics block may be absent */
+        });
+
+      coverClickPollId = window.setInterval(pollCoverClick, COVER_CLICK_POLL_MS);
+      lyricsHeadingPollId = window.setInterval(pollLyricsHeading, LYRICS_HEADING_POLL_MS);
     };
 
     webview.addEventListener('dom-ready', onDomReady);
     webview.addEventListener('did-fail-load', onFailLoad);
 
-    webview.src = appModeUrl;
     container.replaceChildren(webview);
+    webview.src = appModeUrl;
 
     return () => {
-      if (coverModalPollId != null) {
-        window.clearInterval(coverModalPollId);
+      disposed = true;
+      guestReady = false;
+      if (coverClickPollId != null) {
+        window.clearInterval(coverClickPollId);
+        coverClickPollId = null;
+      }
+      if (lyricsHeadingPollId != null) {
+        window.clearInterval(lyricsHeadingPollId);
+        lyricsHeadingPollId = null;
       }
       onCoverModalChangeRef.current?.(false);
       webview.removeEventListener('dom-ready', onDomReady);
       webview.removeEventListener('did-fail-load', onFailLoad);
       container.replaceChildren();
     };
-  }, [url]);
+  }, [url, loadKey]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || loadState !== 'ready') return;
+
+    const webview = container.querySelector('webview') as WebviewElement | null;
+    if (!webview?.executeJavaScript || !sourceLyricsTextRef.current.trim()) return;
+
+    const displayText = formatListenerLyricsDisplayText(
+      sourceLyricsTextRef.current,
+      lyricsSettings.removeBrackets,
+    );
+    const html = renderMarkdownPreview(displayText);
+
+    void webview.executeJavaScript(buildApplyLyricsBodyHtmlScript(html), false).catch(() => {
+      /* guest may be mid-navigation */
+    });
+  }, [lyricsSettings.removeBrackets, loadState, url, loadKey]);
 
   return (
     <div className="song-webview-wrap">
@@ -148,6 +326,21 @@ export function SongPageWebview({ url, onLoadError, onCoverModalChange }: SongPa
         </div>
       ) : null}
       <div ref={containerRef} className="song-webview-host" />
+      {coverPopover ? (
+        <SongCoverPopover
+          src={coverPopover.src}
+          alt={coverPopover.title ? `${coverPopover.title} cover art` : 'Cover art'}
+          onClose={closeCoverPopover}
+        />
+      ) : null}
+      {lyricsPopoverAnchor ? (
+        <LyricsSettingsPopover
+          anchor={lyricsPopoverAnchor}
+          settings={lyricsSettings}
+          onRemoveBracketsChange={onRemoveBracketsChange}
+          onClose={() => setLyricsPopoverAnchor(null)}
+        />
+      ) : null}
     </div>
   );
 }

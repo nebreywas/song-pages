@@ -34,6 +34,8 @@ export function ControllerWindowApp() {
   const [invokeFeedback, setInvokeFeedback] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [vcState, setVcState] = useState<VcStatePayload | null>(null);
+  const [surfaceSwitching, setSurfaceSwitching] = useState(false);
+  const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const feedbackTimeoutRef = useRef<number | null>(null);
 
   const showInvokeFeedback = (message: string) => {
@@ -72,6 +74,11 @@ export function ControllerWindowApp() {
       if (result?.ok && result.data) setRuntimeContext(result.data);
     });
     const offVcState = app?.vc?.onState?.((payload) => setVcState(payload));
+    void app?.controller?.status?.().then((result) => {
+      if (result?.ok && result.data?.alwaysOnTop != null) {
+        setAlwaysOnTop(result.data.alwaysOnTop);
+      }
+    });
 
     return () => {
       offMapping?.();
@@ -157,6 +164,26 @@ export function ControllerWindowApp() {
     });
   };
 
+  const surfaceDesigns = vcState?.surfaceDesigns;
+  const switchSurface = (designId: string) => {
+    if (!surfaceDesigns || designId === surfaceDesigns.activeDesignId || surfaceSwitching) return;
+    setSurfaceSwitching(true);
+    getApp()?.vc?.switchSurface?.(designId);
+    window.setTimeout(() => setSurfaceSwitching(false), 600);
+  };
+
+  const toggleAlwaysOnTop = () => {
+    const next = !alwaysOnTop;
+    setAlwaysOnTop(next);
+    void getApp()?.controller?.setAlwaysOnTop?.(next).then((result) => {
+      if (result?.ok && result.data?.alwaysOnTop != null) {
+        setAlwaysOnTop(result.data.alwaysOnTop);
+      } else if (!result?.ok) {
+        setAlwaysOnTop(!next);
+      }
+    });
+  };
+
   const specialPause = vcState?.specialPlayPause;
   const showSpecialPauseCountdown =
     specialPause?.active === true &&
@@ -165,8 +192,35 @@ export function ControllerWindowApp() {
   return (
     <div className={`controller-shell${gateState.open ? ' is-gate-open' : ''}`}>
       <header className="controller-header">
-        <h1>VC Controller</h1>
-        <p className="controller-lead">Host controls — not shown on the broadcast surface.</p>
+        <div className="controller-title-row">
+          <h1>VC Controller</h1>
+          <button
+            type="button"
+            className={`btn controller-always-top-btn${alwaysOnTop ? ' is-active' : ''}`}
+            onClick={toggleAlwaysOnTop}
+            aria-pressed={alwaysOnTop}
+          >
+            [always on top]
+          </button>
+        </div>
+        {surfaceDesigns && surfaceDesigns.designs.length > 0 ? (
+          <label className="controller-surface-field">
+            <span className="controller-surface-label">Surface</span>
+            <select
+              className="controller-surface-select"
+              value={surfaceDesigns.activeDesignId}
+              disabled={surfaceSwitching}
+              onChange={(event) => switchSurface(event.target.value)}
+              aria-label="Active surface design"
+            >
+              {surfaceDesigns.designs.map((design) => (
+                <option key={design.id} value={design.id}>
+                  {design.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </header>
 
       {gateState.open ? (

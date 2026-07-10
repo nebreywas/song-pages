@@ -401,7 +401,6 @@
   position: absolute;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -499,6 +498,20 @@
 .vc-designer-divider.is-horizontal {
   transform: translateY(-50%);
   cursor: row-resize;
+}
+
+/* Designer divider grab targets when grid lines are hidden — no painted chrome (avoids hairline seams). */
+.vc-designer-divider-hit-only {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  opacity: 0 !important;
+}
+
+.vc-designer-divider-hit-only.is-vertical,
+.vc-designer-divider-hit-only.is-horizontal {
+  transform: none !important;
 }
 
 .vc-designer-preview-empty {
@@ -763,6 +776,13 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
+}
+
+.vc-float-layout-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #8b95a8;
 }
 
 /* Region popover field rhythm — label above controls, uniform control row height. */

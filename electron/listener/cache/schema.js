@@ -2,6 +2,13 @@
  * SQLite metadata for on-disk song cache entries.
  * Binary assets live under userData/cache/{opaqueId}/ — not in the DB.
  */
+function migrateSongCacheColumns(db) {
+  const cols = db.prepare('PRAGMA table_info(song_cache)').all().map((col) => col.name);
+  if (!cols.includes('html_rewrite_revision')) {
+    db.exec(`ALTER TABLE song_cache ADD COLUMN html_rewrite_revision TEXT NOT NULL DEFAULT ''`);
+  }
+}
+
 function initSongCacheSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS song_cache (
@@ -12,6 +19,7 @@ function initSongCacheSchema(db) {
       page_filename       TEXT NOT NULL DEFAULT 'page.html',
       playlist_filename   TEXT,
       total_bytes         INTEGER NOT NULL DEFAULT 0,
+      html_rewrite_revision TEXT NOT NULL DEFAULT '',
       created_at          TEXT NOT NULL DEFAULT (datetime('now')),
       last_accessed_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -30,6 +38,8 @@ function initSongCacheSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_song_cache_assets_cache ON song_cache_assets(cache_id);
   `);
+
+  migrateSongCacheColumns(db);
 }
 
-module.exports = { initSongCacheSchema };
+module.exports = { initSongCacheSchema, migrateSongCacheColumns };
