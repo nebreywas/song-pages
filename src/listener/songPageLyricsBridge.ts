@@ -36,9 +36,17 @@ export const READ_LYRICS_BODY_HTML = `(function () {
   return body ? body.innerHTML : '';
 })()`;
 
+/** Plain text from compiled lyrics HTML — one line per block, <br> preserved within blocks. */
 export const READ_LYRICS_BODY_TEXT = `(function () {
   var body = document.querySelector('.lyrics-block .markdown-body');
-  return body ? body.textContent || '' : '';
+  if (!body) return '';
+  var blocks = body.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote');
+  if (blocks.length > 0) {
+    return Array.prototype.map.call(blocks, function (el) {
+      return (el.innerText || el.textContent || '').replace(/\\r\\n/g, '\\n');
+    }).join('\\n');
+  }
+  return (body.innerText || body.textContent || '').replace(/\\r\\n/g, '\\n');
 })()`;
 
 /** Replace lyrics body HTML in the guest page (display-only; source snapshot lives in host). */

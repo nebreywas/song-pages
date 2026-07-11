@@ -10,6 +10,9 @@ import {
   type VcVisualizerSequence,
 } from '@shared/vcMode/visualizerSettings';
 
+import { stepExperienceId } from '@shared/visualizers/experienceNavigation';
+
+import { listVisualizers } from '../visualizers/registry';
 import { listVcVisualizerPool } from '../visualizers/vcVisualizerPool';
 import { normalizeExperienceId } from '../visualizers/native/registry';
 import { getApp } from '../lib/bridge';
@@ -50,6 +53,7 @@ export function useVcVisualizerRotation({
   const prevSongIdRef = useRef<number | null>(null);
 
   const pool = useMemo(() => listVcVisualizerPool(sequence), [sequence]);
+  const catalogIds = useMemo(() => listVisualizers().map((plugin) => plugin.id), []);
 
   const pickRandom = useCallback(() => {
     setRotatingId((current) => {
@@ -66,6 +70,20 @@ export function useVcVisualizerRotation({
   const rotateVisualizerRandom = useCallback(() => {
     pickRandom();
   }, [pickRandom]);
+
+  const stepVisualizerBy = useCallback(
+    (direction: 1 | -1) => {
+      setRotatingId((current) =>
+        normalizeExperienceId(
+          stepExperienceId(catalogIds, current, direction, normalizeExperienceId),
+        ),
+      );
+    },
+    [catalogIds],
+  );
+
+  const stepVisualizerNext = useCallback(() => stepVisualizerBy(1), [stepVisualizerBy]);
+  const stepVisualizerPrevious = useCallback(() => stepVisualizerBy(-1), [stepVisualizerBy]);
 
   useEffect(() => {
     if (sessionKeyRef.current === sessionKey) return;
@@ -97,17 +115,29 @@ export function useVcVisualizerRotation({
   }, [changeRule, rotate, vcOpen]);
 
   const effectiveVisualizerId =
-    changeRule === 'never' && !alsoClickToChange ? configuredId : rotatingId;
+    changeRule === 'never' && !alsoClickToChange && rotatingId === configuredId
+      ? configuredId
+      : rotatingId;
 
   useEffect(() => {
     if (!vcOpen || !reportToMain) return;
     getApp()?.vc?.reportActiveVisualizer?.(effectiveVisualizerId);
   }, [effectiveVisualizerId, reportToMain, vcOpen]);
 
+  useEffect(() => {
+    if (!vcOpen) return;
+    const app = getApp();
+    return app?.vc?.onSyncActiveVisualizer?.((id) => {
+      setRotatingId(normalizeExperienceId(id));
+    });
+  }, [vcOpen]);
+
   return {
     effectiveVisualizerId,
     rotateVisualizer: rotate,
     rotateVisualizerRandom,
+    stepVisualizerNext,
+    stepVisualizerPrevious,
     visualizerClickEnabled: vcOpen && shouldRotateVisualizerOnClick(changeRule, alsoClickToChange),
   };
 }

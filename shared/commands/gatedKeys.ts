@@ -1,3 +1,5 @@
+import { normalizeExtendedFunctionKey } from './extendedKeys';
+
 /** Single-character keys allowed for gated command mapping. */
 export const GATED_KEY_POOL = [
   'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
@@ -19,7 +21,13 @@ export function normalizeGatedKey(key: string): string {
 }
 
 export function reservedBindingKey(source: 'gated' | 'direct' | 'extended-function', binding: string): string {
-  return `${source}:${binding}`;
+  const normalized =
+    source === 'gated'
+      ? normalizeGatedKey(binding)
+      : source === 'extended-function'
+        ? (normalizeExtendedFunctionKey(binding) ?? binding)
+        : binding;
+  return `${source}:${normalized}`;
 }
 
 export function parseReservedBindingKey(key: string): { source: 'gated' | 'direct' | 'extended-function'; binding: string } | null {

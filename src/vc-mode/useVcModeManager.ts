@@ -311,7 +311,10 @@ export function useVcModeManager({
       playback: { currentTime, duration, isPlaying },
       audioMirror: {
         songId: playingSong?.id ?? null,
-        playbackUrl: activePlaybackUrl ?? playingSong?.playback_url ?? null,
+        playbackUrl:
+          playingSong != null
+            ? (activePlaybackUrl ?? playingSong.playback_url ?? null)
+            : null,
         volume,
         playbackEffects,
       },

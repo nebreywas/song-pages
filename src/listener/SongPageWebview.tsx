@@ -6,8 +6,7 @@ import {
   SONG_PAGES_GUEST_WEB_PREFERENCES,
 } from '@shared/appClient';
 import type { ListenerLyricsDisplaySettings } from '@shared/listener/lyricsDisplaySettings';
-import { formatListenerLyricsDisplayText } from '@shared/lyricsText';
-import { renderMarkdownPreview } from '../lib/markdownPreview';
+import { renderLyricsMarkdownPreview } from '../lib/markdownPreview';
 import { LyricsSettingsPopover } from './LyricsSettingsPopover';
 import { SongCoverPopover } from './SongCoverPopover';
 import {
@@ -27,6 +26,8 @@ import {
 
 type SongPageWebviewProps = {
   url: string;
+  /** Raw lyrics from song manifest — preferred over scraping guest DOM. */
+  songManifestUrl?: string | null;
   /** Bumps when the user re-opens a song so the guest webview remounts reliably. */
   loadKey?: string | number;
   lyricsSettings: ListenerLyricsDisplaySettings;
@@ -62,6 +63,7 @@ const LYRICS_HEADING_POLL_MS = 250;
  */
 export function SongPageWebview({
   url,
+  songManifestUrl,
   loadKey,
   lyricsSettings,
   onRemoveBracketsChange,
@@ -78,10 +80,12 @@ export function SongPageWebview({
   const onRemoveBracketsChangeRef = useRef(onRemoveBracketsChange);
   onRemoveBracketsChangeRef.current = onRemoveBracketsChange;
   const sourceLyricsTextRef = useRef('');
+  const applyLyricsDisplayRef = useRef<(() => void) | null>(null);
   const coverPopoverRef = useRef<{ src: string; title: string } | null>(null);
 
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
+  const [lyricsSourceRevision, setLyricsSourceRevision] = useState(0);
   const [lyricsPopoverAnchor, setLyricsPopoverAnchor] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -98,7 +102,33 @@ export function SongPageWebview({
     setLyricsPopoverAnchor(null);
     setCoverPopover(null);
     sourceLyricsTextRef.current = '';
+    setLyricsSourceRevision((revision) => revision + 1);
   }, [url, loadKey]);
+
+  // Prefer manifest lyrics (raw markdown) over guest DOM scraping for display transforms.
+  useEffect(() => {
+    if (!songManifestUrl?.trim()) return;
+
+    const app = getApp();
+    if (!app?.listener.fetchSongManifest) return;
+
+    let cancelled = false;
+    void app.listener.fetchSongManifest(songManifestUrl).then((result) => {
+      if (cancelled) return;
+      if (!result.ok || !result.data || typeof result.data !== 'object') return;
+
+      const lyrics = (result.data as { lyrics?: unknown }).lyrics;
+      if (typeof lyrics !== 'string' || !lyrics.trim()) return;
+
+      sourceLyricsTextRef.current = lyrics;
+      setLyricsSourceRevision((revision) => revision + 1);
+      applyLyricsDisplayRef.current?.();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [songManifestUrl, url, loadKey]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -128,17 +158,37 @@ export function SongPageWebview({
       const sourceLyricsText = sourceLyricsTextRef.current;
       if (!sourceLyricsText.trim()) return;
 
-      const displayText = formatListenerLyricsDisplayText(
+      const html = renderLyricsMarkdownPreview(
         sourceLyricsText,
         lyricsSettingsRef.current.removeBrackets,
       );
-      const html = renderMarkdownPreview(displayText);
+      if (!html.trim()) return;
 
       try {
         await webview.executeJavaScript(buildApplyLyricsBodyHtmlScript(html), false);
       } catch {
         /* guest may be mid-navigation */
       }
+    };
+    applyLyricsDisplayRef.current = () => {
+      void applyLyricsDisplay();
+    };
+
+    const readGuestLyricsFallback = () => {
+      if (sourceLyricsTextRef.current.trim()) return;
+
+      void webview
+        .executeJavaScript(READ_LYRICS_BODY_TEXT, false)
+        .then((text) => {
+          if (disposed || typeof text !== 'string' || !text.trim()) return;
+          if (sourceLyricsTextRef.current.trim()) return;
+          sourceLyricsTextRef.current = text;
+          setLyricsSourceRevision((revision) => revision + 1);
+          void applyLyricsDisplay();
+        })
+        .catch(() => {
+          /* lyrics block may be absent */
+        });
     };
 
     const pollCoverClick = () => {
@@ -255,16 +305,12 @@ export function SongPageWebview({
           /* optional bridge */
         });
 
-      void webview
-        .executeJavaScript(READ_LYRICS_BODY_TEXT, false)
-        .then((text) => {
-          if (disposed || typeof text !== 'string') return;
-          sourceLyricsTextRef.current = text;
-          void applyLyricsDisplay();
-        })
-        .catch(() => {
-          /* lyrics block may be absent */
-        });
+      readGuestLyricsFallback();
+      window.setTimeout(readGuestLyricsFallback, 0);
+
+      if (sourceLyricsTextRef.current.trim()) {
+        void applyLyricsDisplay();
+      }
 
       coverClickPollId = window.setInterval(pollCoverClick, COVER_CLICK_POLL_MS);
       lyricsHeadingPollId = window.setInterval(pollLyricsHeading, LYRICS_HEADING_POLL_MS);
@@ -279,6 +325,7 @@ export function SongPageWebview({
     return () => {
       disposed = true;
       guestReady = false;
+      applyLyricsDisplayRef.current = null;
       if (coverClickPollId != null) {
         window.clearInterval(coverClickPollId);
         coverClickPollId = null;
@@ -301,16 +348,15 @@ export function SongPageWebview({
     const webview = container.querySelector('webview') as WebviewElement | null;
     if (!webview?.executeJavaScript || !sourceLyricsTextRef.current.trim()) return;
 
-    const displayText = formatListenerLyricsDisplayText(
+    const html = renderLyricsMarkdownPreview(
       sourceLyricsTextRef.current,
       lyricsSettings.removeBrackets,
     );
-    const html = renderMarkdownPreview(displayText);
 
     void webview.executeJavaScript(buildApplyLyricsBodyHtmlScript(html), false).catch(() => {
       /* guest may be mid-navigation */
     });
-  }, [lyricsSettings.removeBrackets, loadState, url, loadKey]);
+  }, [lyricsSettings.removeBrackets, loadState, url, loadKey, lyricsSourceRevision]);
 
   return (
     <div className="song-webview-wrap">

@@ -95,6 +95,15 @@ a:hover {
   margin: 0 0 0.85rem;
 }
 
+/* Lyrics — same paragraph gap as other markdown bodies; empty <p> cleanup prevents blowout. */
+.lyrics-block .markdown-body p {
+  margin: 0 0 0.85rem;
+}
+
+.lyrics-block .markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -199,6 +208,12 @@ a:hover {
   width: 1.45rem;
   height: 1.45rem;
   fill: currentColor;
+}
+
+/* SoundCloud mark uses a wider viewBox — scale up to match sibling icons. */
+.social-icon-btn[data-platform="soundcloud"] svg {
+  width: 1.6675rem;
+  height: 1.6675rem;
 }
 
 /* ── Songs section ── */

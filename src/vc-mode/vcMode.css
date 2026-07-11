@@ -445,6 +445,20 @@
   z-index: 40;
 }
 
+/* Designer floats match projection: scroll allowed, scrollbars hidden. */
+.vc-designer-float,
+.vc-designer-float * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.vc-designer-float::-webkit-scrollbar,
+.vc-designer-float *::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .vc-designer-float.is-dragging {
   cursor: grabbing;
 }
@@ -2311,7 +2325,7 @@
 .vc-kudos-editor-column {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: flex-start;
   min-height: 0;
   height: 100%;
   min-width: 0;
@@ -2479,6 +2493,9 @@
   flex-direction: column;
   gap: var(--vc-kudos-field-gap);
   flex-shrink: 0;
+  box-sizing: border-box;
+  /* Inset on content — not the scrollport — so the scrollbar track stays unpainted. */
+  padding: 0 20px 5rem 0;
 }
 
 .vc-kudos-editor .vc-field,

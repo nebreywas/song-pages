@@ -12,6 +12,13 @@ function isMirrorReady(audio: HTMLAudioElement, hls: Hls | null, directAudio: bo
   return directAudio ? audio.readyState >= HTMLMediaElement.HAVE_METADATA : hls != null || audio.readyState >= HTMLMediaElement.HAVE_METADATA;
 }
 
+/** Main listener owns queue advance — mirror must not loop after a natural `ended`. */
+function canMirrorResume(audio: HTMLAudioElement, isPlaying: boolean): boolean {
+  if (!isPlaying || !audio.paused) return false;
+  if (audio.ended) return false;
+  return true;
+}
+
 /**
  * Mirror HLS playback into the VC Electron window so Discord/Twitch/Zoom window
  * capture includes music. The main listener window stays the timing source via IPC.
@@ -20,7 +27,9 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
   const hlsRef = useRef<Hls | null>(null);
   const loadGenerationRef = useRef(0);
   const loadedSongIdRef = useRef<number | null>(null);
-  const playbackRef = useRef({ currentTime: 0, isPlaying: false });
+  const loadedPlaybackUrlRef = useRef<string | null>(null);
+  const playbackRef = useRef({ currentTime: 0, isPlaying: false, songId: null as number | null });
+  const suppressMirrorEndedRef = useRef(false);
   const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
 
   const audioRef = useCallback((node: HTMLAudioElement | null) => {
@@ -39,8 +48,9 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
     playbackRef.current = {
       currentTime: state.playback.currentTime,
       isPlaying: state.playback.isPlaying,
+      songId: state.audioMirror?.songId ?? null,
     };
-  }, [state?.playback.currentTime, state?.playback.isPlaying]);
+  }, [state?.playback.currentTime, state?.playback.isPlaying, state?.audioMirror?.songId]);
 
   useEffect(() => {
     return () => {
@@ -54,7 +64,8 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
 
   const tryPlay = useCallback(
     (audio: HTMLAudioElement) => {
-      if (!playbackRef.current.isPlaying || !audio.paused) return;
+      const timing = playbackRef.current;
+      if (!canMirrorResume(audio, timing.isPlaying)) return;
       void audio.play().then(() => reportPlaybackStatus(audio)).catch(() => {
         reportPlaybackStatus(audio);
       });
@@ -71,34 +82,44 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
         hlsRef.current = null;
       }
       loadedSongIdRef.current = null;
+      loadedPlaybackUrlRef.current = null;
       audio?.pause();
       if (audio) audio.removeAttribute('src');
       reportPlaybackStatus(null);
       return;
     }
 
-    if (loadedSongIdRef.current === mirror.songId && isMirrorReady(audio, hlsRef.current, shouldUseDirectAudioPlayback(mirror.playbackUrl))) {
+    if (
+      loadedSongIdRef.current === mirror.songId &&
+      loadedPlaybackUrlRef.current === mirror.playbackUrl &&
+      isMirrorReady(audio, hlsRef.current, shouldUseDirectAudioPlayback(mirror.playbackUrl))
+    ) {
       tryPlay(audio);
       return;
     }
 
     const generation = ++loadGenerationRef.current;
-    loadedSongIdRef.current = mirror.songId;
+    const requestedSongId = mirror.songId;
+    const requestedPlaybackUrl = mirror.playbackUrl;
+    loadedSongIdRef.current = null;
+    loadedPlaybackUrlRef.current = null;
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
+    suppressMirrorEndedRef.current = true;
     audio.pause();
     reportPlaybackStatus(audio);
 
-    const playbackUrl = mirror.playbackUrl;
+    const playbackUrl = requestedPlaybackUrl;
     const startPlayback = () => {
       if (generation !== loadGenerationRef.current) return;
-      const timing = playbackRef.current;
-      if (timing.currentTime > 0) {
-        audio.currentTime = timing.currentTime;
-      }
+      loadedSongIdRef.current = requestedSongId;
+      loadedPlaybackUrlRef.current = requestedPlaybackUrl;
+      suppressMirrorEndedRef.current = false;
+      // Fresh source load — always start at 0; drift sync catches up for mid-track VC attach.
+      audio.currentTime = 0;
       tryPlay(audio);
     };
 
@@ -156,24 +177,41 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
   useEffect(() => {
     if (!audioEl || !state?.audioMirror.playbackUrl) return;
 
-    if (state.playback.isPlaying && audioEl.paused) {
+    const timing = playbackRef.current;
+    if (timing.isPlaying && canMirrorResume(audioEl, timing.isPlaying)) {
       tryPlay(audioEl);
       return;
     }
-    if (!state.playback.isPlaying && !audioEl.paused) {
+    if (!timing.isPlaying && !audioEl.paused) {
       audioEl.pause();
       reportPlaybackStatus(audioEl);
     }
-  }, [audioEl, state?.audioMirror.playbackUrl, state?.playback.isPlaying, tryPlay, reportPlaybackStatus]);
+  }, [
+    audioEl,
+    state?.audioMirror?.playbackUrl,
+    state?.audioMirror?.songId,
+    state?.playback.isPlaying,
+    tryPlay,
+    reportPlaybackStatus,
+  ]);
 
   useEffect(() => {
-    if (!audioEl || !state?.audioMirror.playbackUrl || !state.playback.isPlaying) return;
+    if (!audioEl || !state?.audioMirror?.playbackUrl || !state.playback.isPlaying) return;
+    if (audioEl.ended || suppressMirrorEndedRef.current) return;
+    if (loadedSongIdRef.current !== state.audioMirror.songId) return;
+    if (loadedPlaybackUrlRef.current !== state.audioMirror.playbackUrl) return;
 
     const drift = Math.abs(audioEl.currentTime - state.playback.currentTime);
     if (drift > SEEK_DRIFT_SECONDS) {
       audioEl.currentTime = state.playback.currentTime;
     }
-  }, [audioEl, state?.audioMirror?.playbackUrl, state?.playback.currentTime, state?.playback.isPlaying]);
+  }, [
+    audioEl,
+    state?.audioMirror?.playbackUrl,
+    state?.audioMirror?.songId,
+    state?.playback.currentTime,
+    state?.playback.isPlaying,
+  ]);
 
   useEffect(() => {
     if (!audioEl) return;

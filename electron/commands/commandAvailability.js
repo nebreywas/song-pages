@@ -5,6 +5,23 @@
 
 /** @typedef {import('../../shared/commands/runtimeContext').CommandRuntimeContext} CommandRuntimeContext */
 
+/** Keep in sync with shared/commands/appWideCommands.ts */
+const APP_WIDE_COMMAND_IDS = new Set([
+  'volume-up',
+  'volume-down',
+  'visualizer-next',
+  'visualizer-previous',
+  'seek-back-500',
+  'seek-back-1s',
+  'seek-back-2s',
+  'seek-back-5s',
+  'stutter-500',
+  'stutter-1000',
+  'stutter-1500',
+  'stutter-2000',
+  'play-next-song',
+]);
+
 const CONTEXTUAL_RULES = {
   'seek-back-500': ['requiresCurrentSong'],
   'seek-back-1s': ['requiresCurrentSong'],
@@ -39,6 +56,16 @@ function isCommandAvailableForDispatch(commandId, context) {
   const presetPrefix = 'trigger-kudo-';
   if (commandId.startsWith(presetPrefix)) {
     return context.vcModeActive !== false;
+  }
+
+  if (APP_WIDE_COMMAND_IDS.has(commandId)) {
+    const rules = CONTEXTUAL_RULES[commandId];
+    if (!rules) return true;
+    for (const rule of rules) {
+      const flag = CONTEXT_FLAG_BY_RULE[rule];
+      if (flag && context[flag] === false) return false;
+    }
+    return true;
   }
 
   if (context.vcModeActive === false) return false;

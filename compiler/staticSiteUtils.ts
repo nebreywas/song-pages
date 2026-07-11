@@ -62,7 +62,7 @@ export function socialLinksHtml(social: Record<string, string>): string {
     if (!url) continue;
     const label = platform.charAt(0).toUpperCase() + platform.slice(1);
     parts.push(
-      `<a class="social-icon-btn" href="${escapeHtmlText(url)}" rel="noopener noreferrer" target="_blank" aria-label="${escapeHtmlText(label)}">${socialIconSvg(platform)}</a>`,
+      `<a class="social-icon-btn" data-platform="${platform}" href="${escapeHtmlText(url)}" rel="noopener noreferrer" target="_blank" aria-label="${escapeHtmlText(label)}">${socialIconSvg(platform)}</a>`,
     );
   }
 

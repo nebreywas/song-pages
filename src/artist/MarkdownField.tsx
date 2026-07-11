@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { renderMarkdownPreview } from '../lib/markdownPreview';
+import { renderLyricsMarkdownPreview, renderMarkdownPreview } from '../lib/markdownPreview';
 
 type MarkdownFieldProps = {
   label: string;
@@ -9,6 +9,8 @@ type MarkdownFieldProps = {
   maxLength?: number;
   rows?: number;
   placeholder?: string;
+  /** Use lyrics spacing rules in preview (tighter paragraph gaps). */
+  lyricsPreview?: boolean;
 };
 
 /** Markdown source editor with write / preview tabs — same renderer as compiled song pages. */
@@ -19,16 +21,19 @@ export function MarkdownField({
   maxLength,
   rows = 10,
   placeholder,
+  lyricsPreview = false,
 }: MarkdownFieldProps) {
   const [mode, setMode] = useState<'write' | 'preview'>('write');
 
   const previewHtml = useMemo(() => {
-    const html = renderMarkdownPreview(value);
+    const html = lyricsPreview
+      ? renderLyricsMarkdownPreview(value, false)
+      : renderMarkdownPreview(value);
     return html || '<p class="markdown-empty">Nothing to preview.</p>';
-  }, [value]);
+  }, [value, lyricsPreview]);
 
   return (
-    <div className="editor-field markdown-field">
+    <div className={`editor-field markdown-field${lyricsPreview ? ' markdown-field--lyrics' : ''}`}>
       <div className="markdown-field-header">
         <span>{label}</span>
         <div className="markdown-field-tabs" role="tablist" aria-label={`${label} mode`}>

@@ -9,7 +9,27 @@ const BRACKETED_SEGMENT = /\[[^\]]*\]/g;
 /** Collapse runs of three or more line breaks (including whitespace-only lines) to a single blank line. */
 export function collapseLyricsBlankLines(lyrics: string): string {
   const normalized = lyrics.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  return normalized.replace(/(?:\n[ \t]*){3,}/g, '\n\n');
+  // Whitespace-only lines count as blank lines before measuring runs.
+  const withoutWhitespaceLines = normalized.replace(/\n[ \t]+(?=\n)/g, '\n');
+  return withoutWhitespaceLines.replace(/\n{3,}/g, '\n\n');
+}
+
+/** Remove leading/trailing blank lines after bracket-only lines were dropped. */
+export function trimLyricsEdgeBlankLines(lyrics: string): string {
+  return lyrics.replace(/^\n+/, '').replace(/\n+$/, '');
+}
+
+/** Matches empty markdown paragraphs (whitespace, nbsp, or lone <br>). */
+const EMPTY_PARAGRAPH = /<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi;
+
+/**
+ * Trim excess vertical spacing in lyrics HTML (empty paragraphs, long <br> runs).
+ * Call after markdown render when displaying in the listener song page.
+ */
+export function collapseLyricsHtmlSpacing(html: string): string {
+  return html
+    .replace(EMPTY_PARAGRAPH, '')
+    .replace(/(?:<br\s*\/?>\s*){3,}/gi, '<br><br>');
 }
 
 /**
@@ -37,7 +57,7 @@ export function stripBracketedLyricsText(lyrics: string): string {
     .join('\n');
 
   // Removing annotation-only lines can leave runs of blank lines — cap at one empty line.
-  return collapseLyricsBlankLines(stripped);
+  return trimLyricsEdgeBlankLines(collapseLyricsBlankLines(stripped));
 }
 
 /**

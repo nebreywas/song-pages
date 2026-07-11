@@ -10,6 +10,23 @@ import { createDefaultCommandMappingState } from './defaults';
 import { migrateCommandMappingState, sanitizeCommandMappingStateForSave } from './migrate';
 import { resolveBindingToCommand } from './resolve';
 
+test('migrateCommandMappingState remaps volume bindings from OCAW+< / OCAW+> to OCAW+, / OCAW+.', () => {
+  const state = migrateCommandMappingState({
+    version: 2,
+    configuredCommandIds: ['volume-up', 'volume-down'],
+    configuredKudoPresetIds: [],
+    commands: {
+      'volume-up': { direct: 'OCAW+<' },
+      'volume-down': { direct: 'OCAW+>' },
+    },
+    reservedKudoKeys: [],
+    kudoPresetByReservedKey: {},
+    kudoPresetBindings: {},
+  });
+  assert.equal(state.commands['volume-up']?.direct, 'OCAW+,');
+  assert.equal(state.commands['volume-down']?.direct, 'OCAW+.');
+});
+
 test('migrateCommandMappingState remaps toggle-host from OCAW+H to OCAW+F', () => {
   const state = migrateCommandMappingState({
     version: 2,
@@ -69,6 +86,20 @@ test('normalizeUniqueBindings keeps first owner when duplicates exist', () => {
   const next = normalizeUniqueBindings(state);
   assert.equal(next.commands['toggle-cover']?.direct, 'OCAW+c');
   assert.equal(next.commands['toggle-host']?.direct, undefined);
+});
+
+test('sanitize + migrate roundtrip keeps navigation hardware bindings', () => {
+  let state = createDefaultCommandMappingState();
+  state = applyCommandBindingPatch(state, 'toggle-cover', { extendedFunction: 'Home' });
+  state = applyCommandBindingPatch(state, 'toggle-host', { extendedFunction: 'Shift+F9' });
+
+  const saved = sanitizeCommandMappingStateForSave(state);
+  assert.equal(saved.commands['toggle-cover']?.extendedFunction, 'Home');
+  assert.equal(saved.commands['toggle-host']?.extendedFunction, 'Shift+F9');
+
+  const reloaded = migrateCommandMappingState(saved);
+  assert.equal(reloaded.commands['toggle-cover']?.extendedFunction, 'Home');
+  assert.equal(reloaded.commands['toggle-host']?.extendedFunction, 'Shift+F9');
 });
 
 test('sanitize + migrate roundtrip keeps gated cover binding', () => {

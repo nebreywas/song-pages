@@ -1,9 +1,98 @@
 /**
  * Logical binding → Electron accelerator (main process).
- * Keep in sync with shared/commands/accelerators.ts
+ * Keep in sync with shared/commands/accelerators.ts and shared/commands/extendedKeys.ts
  */
 const MODIFIER_OCAW = 'OCAW';
 const MODIFIER_CS = 'CS';
+
+const LITERAL_ACCELERATOR_KEYS = new Set(['=', '-', '[', ']', '\\', '<', '>', ',', '.', '/', ';', "'"]);
+
+function literalLogicalKeyToElectronParts(key) {
+  if (LITERAL_ACCELERATOR_KEYS.has(key)) return [key];
+  if (/^F([1-9]|1[0-9]|2[0-4])$/i.test(key)) return [key.toUpperCase()];
+  if (key.length === 1) return [key.toUpperCase()];
+  return [key];
+}
+
+function buildFunctionKeys() {
+  return Array.from({ length: 24 }, (_, index) => `F${index + 1}`);
+}
+
+function buildShiftFunctionKeys() {
+  return Array.from({ length: 24 }, (_, index) => `Shift+F${index + 1}`);
+}
+
+const FUNCTION_KEYS = buildFunctionKeys();
+const SHIFT_FUNCTION_KEYS = buildShiftFunctionKeys();
+
+const NAVIGATION_BINDING_KEYS = [
+  'PrintScreen', 'ScrollLock', 'Insert', 'Home', 'End', 'PageUp', 'PageDown',
+];
+
+const EXTENDED_FUNCTION_KEYS = [...FUNCTION_KEYS, ...SHIFT_FUNCTION_KEYS, ...NAVIGATION_BINDING_KEYS];
+
+const EXTENDED_BINDING_LOOKUP = new Map(
+  EXTENDED_FUNCTION_KEYS.map((key) => [key.toLowerCase(), key]),
+);
+
+const EXTENDED_BINDING_ALIASES = {
+  prtsc: 'PrintScreen',
+  printscreen: 'PrintScreen',
+  scroll: 'ScrollLock',
+  scrolllock: 'ScrollLock',
+  scrlk: 'ScrollLock',
+  ins: 'Insert',
+  insert: 'Insert',
+  home: 'Home',
+  end: 'End',
+  pageup: 'PageUp',
+  pgup: 'PageUp',
+  pagedown: 'PageDown',
+  pgdn: 'PageDown',
+};
+
+function parseFunctionKeyToken(token) {
+  const match = /^f([1-9]|1[0-9]|2[0-4])$/i.exec(String(token ?? '').trim());
+  if (!match) return null;
+  return `F${match[1]}`;
+}
+
+function parseShiftFunctionKeyToken(binding) {
+  const match = /^shift\+f([1-9]|1[0-9]|2[0-4])$/i.exec(String(binding ?? '').trim());
+  if (!match) return null;
+  return `Shift+F${match[1]}`;
+}
+
+function normalizeExtendedFunctionKey(binding) {
+  const trimmed = String(binding ?? '').trim();
+  if (!trimmed) return null;
+
+  const alias = EXTENDED_BINDING_ALIASES[trimmed.toLowerCase()];
+  if (alias) return alias;
+
+  const fromPool = EXTENDED_BINDING_LOOKUP.get(trimmed.toLowerCase());
+  if (fromPool) return fromPool;
+
+  const shiftFunctionKey = parseShiftFunctionKeyToken(trimmed);
+  if (shiftFunctionKey) {
+    return EXTENDED_BINDING_LOOKUP.get(shiftFunctionKey.toLowerCase()) ?? null;
+  }
+
+  const functionKey = parseFunctionKeyToken(trimmed);
+  if (functionKey) {
+    return EXTENDED_BINDING_LOOKUP.get(functionKey.toLowerCase()) ?? null;
+  }
+
+  return null;
+}
+
+function extendedBindingToElectronAccelerator(binding) {
+  return normalizeExtendedFunctionKey(binding) ?? binding;
+}
+
+function isExtendedFunctionKey(binding) {
+  return normalizeExtendedFunctionKey(binding) != null;
+}
 
 function parseLogicalBinding(binding) {
   const parts = binding.split('+').map((part) => part.trim()).filter(Boolean);
@@ -30,14 +119,7 @@ function logicalBindingToElectronAccelerator(binding, platform = process.platfor
     return [...electronModifiers, key.toUpperCase()].join('+');
   }
 
-  const normalizedKey =
-    key === '=' || key === '-'
-      ? key
-      : key.length === 1
-        ? key.toUpperCase()
-        : key;
-
-  return [...electronModifiers, normalizedKey].join('+');
+  return [...electronModifiers, ...literalLogicalKeyToElectronParts(key)].join('+');
 }
 
 const LEGACY_ACTION_BY_COMMAND = {
@@ -69,6 +151,34 @@ function migrateToggleHostGraphicBinding(state) {
       },
     },
   };
+}
+
+function migrateVolumeDirectBindings(state) {
+  let next = state;
+
+  const volumeUp = state.commands['volume-up'];
+  if (volumeUp?.direct?.toLowerCase() === `${MODIFIER_OCAW}+<`.toLowerCase()) {
+    next = {
+      ...next,
+      commands: {
+        ...next.commands,
+        'volume-up': { ...volumeUp, direct: `${MODIFIER_OCAW}+,` },
+      },
+    };
+  }
+
+  const volumeDown = state.commands['volume-down'];
+  if (volumeDown?.direct?.toLowerCase() === `${MODIFIER_OCAW}+>`.toLowerCase()) {
+    next = {
+      ...next,
+      commands: {
+        ...next.commands,
+        'volume-down': { ...volumeDown, direct: `${MODIFIER_OCAW}+.` },
+      },
+    };
+  }
+
+  return next;
 }
 
 function createDefaultMappingState() {
@@ -125,7 +235,7 @@ function reservedBindingKey(source, binding) {
     source === 'gated'
       ? binding.toLowerCase()
       : source === 'extended-function'
-        ? binding.toUpperCase()
+        ? (normalizeExtendedFunctionKey(binding) ?? binding)
         : binding;
   return `${source}:${normalized}`;
 }
@@ -199,7 +309,13 @@ function normalizeUniqueBindings(state) {
       if (!binding) continue;
       const source =
         field === 'direct' ? 'direct' : field === 'gated' ? 'gated' : 'extended-function';
-      const key = `${source}:${field === 'gated' ? binding.toLowerCase() : field === 'extendedFunction' ? binding.toUpperCase() : binding}`;
+      const key = `${source}:${
+        field === 'gated'
+          ? binding.toLowerCase()
+          : field === 'extendedFunction'
+            ? (normalizeExtendedFunctionKey(binding) ?? binding)
+            : binding
+      }`;
       const owner = seen.get(key);
       if (owner && owner !== commandId) {
         delete slot[field];
@@ -232,7 +348,8 @@ function sanitizeBindingSlot(raw) {
   if (typeof raw.direct === 'string' && raw.direct.trim()) slot.direct = raw.direct.trim();
   if (typeof raw.gated === 'string' && raw.gated.trim()) slot.gated = raw.gated.trim().toLowerCase();
   if (typeof raw.extendedFunction === 'string' && raw.extendedFunction.trim()) {
-    slot.extendedFunction = raw.extendedFunction.trim().toUpperCase();
+    slot.extendedFunction =
+      normalizeExtendedFunctionKey(raw.extendedFunction.trim()) ?? raw.extendedFunction.trim();
   }
   return Object.keys(slot).length > 0 ? slot : null;
 }
@@ -288,7 +405,8 @@ function migrateMappingState(raw) {
   const synced = syncReservedKudoKeysFromSlots(migrated);
   const withReserveSlots = migrateOrphanReservedKeysToSlots(synced);
   const withHostBinding = migrateToggleHostGraphicBinding(withReserveSlots);
-  return normalizeUniqueBindings(withHostBinding);
+  const withVolumeBindings = migrateVolumeDirectBindings(withHostBinding);
+  return normalizeUniqueBindings(withVolumeBindings);
 }
 
 function resolveBindingToCommand(state, source, binding) {
@@ -296,7 +414,7 @@ function resolveBindingToCommand(state, source, binding) {
     source === 'gated'
       ? binding.toLowerCase()
       : source === 'extended-function'
-        ? binding.toUpperCase()
+        ? (normalizeExtendedFunctionKey(binding) ?? binding)
         : binding;
 
   for (const [commandId, slot] of Object.entries(state.commands)) {
@@ -338,6 +456,7 @@ module.exports = {
   LEGACY_ACTION_BY_COMMAND,
   createDefaultMappingState,
   logicalBindingToElectronAccelerator,
+  extendedBindingToElectronAccelerator,
   migrateMappingState,
   parseReservedBindingKey,
   resolveBindingToCommand,

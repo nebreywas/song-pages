@@ -65,23 +65,48 @@ function runStutter(
 type UseListenerPlaybackCommandsOptions = {
   mainAudioRef: RefObject<HTMLAudioElement | null>;
   onPlayNextSong?: () => void;
+  onVolumeDelta?: (delta: number) => void;
+  onVisualizerStep?: (direction: 1 | -1) => void;
 };
 
 /** Handle DJ-style playback commands dispatched from VC hotkeys / controller. */
 export function useListenerPlaybackCommands({
   mainAudioRef,
   onPlayNextSong,
+  onVolumeDelta,
+  onVisualizerStep,
 }: UseListenerPlaybackCommandsOptions) {
   const seekBackHistoryRef = useRef<number[]>([]);
   const stutterCancelRef = useRef<(() => void) | null>(null);
   const onPlayNextSongRef = useRef(onPlayNextSong);
   onPlayNextSongRef.current = onPlayNextSong;
 
+  const onVolumeDeltaRef = useRef(onVolumeDelta);
+  onVolumeDeltaRef.current = onVolumeDelta;
+
+  const onVisualizerStepRef = useRef(onVisualizerStep);
+  onVisualizerStepRef.current = onVisualizerStep;
+
   useEffect(() => {
     const app = getApp();
     if (!app?.listener?.onPlaybackCommand) return;
 
     const off = app.listener.onPlaybackCommand((command: ListenerPlaybackCommand) => {
+      if (command.type === 'volumeDelta') {
+        onVolumeDeltaRef.current?.(command.delta);
+        return;
+      }
+
+      if (command.type === 'visualizerStep') {
+        onVisualizerStepRef.current?.(command.direction);
+        return;
+      }
+
+      if (command.type === 'playNextSong') {
+        onPlayNextSongRef.current?.();
+        return;
+      }
+
       const audio = mainAudioRef.current;
       if (!audio) return;
 
@@ -95,10 +120,6 @@ export function useListenerPlaybackCommands({
       if (command.type === 'stutter') {
         runStutter(audio, command.durationMs, stutterCancelRef);
         return;
-      }
-
-      if (command.type === 'playNextSong') {
-        onPlayNextSongRef.current?.();
       }
     });
 

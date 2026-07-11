@@ -100,6 +100,7 @@ export function ArtistInfoPanel({ artist, busy, onRemove, onProfileUpdated }: Ar
             <a
               key={link.url}
               className="social-icon-btn"
+              data-platform={link.platform}
               href={link.url}
               target="_blank"
               rel="noopener noreferrer"

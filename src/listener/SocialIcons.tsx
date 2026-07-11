@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from 'react';
 import type { ArtistSocialIds } from '../types/app';
+import { SOUNDCLOUD_ICON_PATHS, SOUNDCLOUD_ICON_VIEW_BOX } from '@shared/social/soundcloudIcon';
 
 type SocialIconProps = {
   className?: string;
@@ -48,9 +49,11 @@ export function IconSocialSpotify({ className }: SocialIconProps) {
 
 export function IconSocialSoundcloud({ className }: SocialIconProps) {
   return (
-    <SocialIconSvg className={className}>
-      <path d="M1.175 13.5c-.645 0-1.175.53-1.175 1.175v2.65c0 .645.53 1.175 1.175 1.175H2.05v-5H1.175zm2.969 0c-.645 0-1.175.53-1.175 1.175v2.65c0 .645.53 1.175 1.175 1.175h.875v-5h-.875zm2.97 0c-.645 0-1.175.53-1.175 1.175v2.65c0 .645.53 1.175 1.175 1.175h.874v-5h-.874zm2.97 0v5h.874c.645 0 1.175-.53 1.175-1.175v-2.65c0-.645-.53-1.175-1.175-1.175h-.874zm2.97 0c-.645 0-1.175.53-1.175 1.175v2.65c0 .645.53 1.175 1.175 1.175h.875v-5h-.875zm2.97 0c-.645 0-1.175.53-1.175 1.175v2.65c0 .645.53 1.175 1.175 1.175h.875v-5h-.875zm2.97 0c-.645 0-1.175.53-1.175 1.175v2.65c0 .645.53 1.175 1.175 1.175h.875v-5h-.875zm2.97 0c-.645 0-1.175.53-1.175 1.175v2.65c0 .645.53 1.175 1.175 1.175H24v-5h-.016zM12.75 9.75c-1.654 0-3.075 1.014-3.68 2.438-.105-.008-.21-.013-.32-.013-1.654 0-3 1.346-3 3s1.346 3 3 3c.11 0 .215-.005.32-.013.605 1.424 2.026 2.438 3.68 2.438 2.21 0 4-1.79 4-4s-1.79-4-4-4z" />
-    </SocialIconSvg>
+    <svg className={className} viewBox={SOUNDCLOUD_ICON_VIEW_BOX} aria-hidden="true" fill="currentColor">
+      {SOUNDCLOUD_ICON_PATHS.map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
   );
 }
 

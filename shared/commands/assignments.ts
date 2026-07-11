@@ -1,7 +1,7 @@
 import { getBuiltinCommand, parseKudoPresetIdFromCommandId } from './catalog';
 import { addCommandToConfiguredSet } from './configuredSet';
 import { isReserveKudoSlotCommandId, syncReservedKudoKeysFromSlots } from './kudoReserve';
-import { isExtendedFunctionKey } from './extendedKeys';
+import { isExtendedFunctionKey, normalizeExtendedFunctionKey } from './extendedKeys';
 import { isGatedKeyAllowed, normalizeGatedKey, parseReservedBindingKey, reservedBindingKey } from './gatedKeys';
 import { isSafeDirectBinding } from './safeHotkeys';
 import type { CommandBindingSlot, CommandInputSource, CommandMappingState } from './types';
@@ -30,7 +30,9 @@ function bindingsMatch(
 ): boolean {
   if (source === 'direct') return left.toLowerCase() === right.toLowerCase();
   if (source === 'gated') return normalizeGatedKey(left) === normalizeGatedKey(right);
-  return left.toUpperCase() === right.toUpperCase();
+  const leftNorm = normalizeExtendedFunctionKey(left);
+  const rightNorm = normalizeExtendedFunctionKey(right);
+  return leftNorm != null && leftNorm === rightNorm;
 }
 
 /** Human label for conflict prompts — builtin catalog or Kudo preset id. */
@@ -192,7 +194,7 @@ export function applyCommandBindingPatch(
       field === 'gated'
         ? normalizeGatedKey(rawValue)
         : field === 'extendedFunction'
-          ? rawValue.toUpperCase()
+          ? (normalizeExtendedFunctionKey(rawValue) ?? rawValue)
           : rawValue;
 
     next = clearBindingEverywhere(next, source, normalizedValue, commandId);
@@ -224,7 +226,7 @@ export function normalizeUniqueBindings(state: CommandMappingState): CommandMapp
         ? binding.toLowerCase()
         : source === 'gated'
           ? normalizeGatedKey(binding)
-          : binding.toUpperCase();
+          : (normalizeExtendedFunctionKey(binding) ?? binding);
     const key = `${source}:${normalized}`;
     if (seen.has(key)) return false;
     seen.add(key);

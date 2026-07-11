@@ -3,7 +3,18 @@ import { MODIFIER_CS, MODIFIER_OCAW } from './constants';
 type Platform = 'darwin' | 'win32' | 'linux';
 
 /** Keys passed through literally to Electron — not uppercased like letters. */
-const LITERAL_ACCELERATOR_KEYS = new Set(['=', '-', '[', ']', ';', "'"]);
+const LITERAL_ACCELERATOR_KEYS = new Set(['=', '-', '[', ']', '\\', '<', '>', ',', '.', '/', ';', "'"]);
+
+/**
+ * Expand logical punctuation to Electron accelerator key tokens.
+ * Comma and period are literal (no Shift). Legacy `<` / `>` also register without Shift.
+ */
+function literalLogicalKeyToElectronParts(key: string): string[] {
+  if (LITERAL_ACCELERATOR_KEYS.has(key)) return [key];
+  if (/^F([1-9]|1[0-9]|2[0-4])$/i.test(key)) return [key.toUpperCase()];
+  if (key.length === 1) return [key.toUpperCase()];
+  return [key];
+}
 
 /** Logical binding token, e.g. OCAW+L or CS+N or F17. */
 export function parseLogicalBinding(binding: string): {
@@ -43,14 +54,7 @@ export function logicalBindingToElectronAccelerator(binding: string, platform: P
     return [...electronModifiers, key.toUpperCase()].join('+');
   }
 
-  // Electron documents Plus but not Minus; legacy VC shortcuts use literal punctuation.
-  const normalizedKey = LITERAL_ACCELERATOR_KEYS.has(key)
-    ? key
-    : key.length === 1
-      ? key.toUpperCase()
-      : key;
-
-  return [...electronModifiers, normalizedKey].join('+');
+  return [...electronModifiers, ...literalLogicalKeyToElectronParts(key)].join('+');
 }
 
 /** Electron accelerator → logical binding for persistence/display. */
@@ -82,7 +86,11 @@ export function electronAcceleratorToLogical(binding: string, platform: Platform
   }
 
   const logicalKey =
-    key === 'Plus' || key === '='
+    key === ','
+      ? ','
+      : key === '.'
+        ? '.'
+        : key === 'Plus' || key === '='
       ? '='
       : key === 'Minus' || key === '-'
         ? '-'
@@ -90,7 +98,15 @@ export function electronAcceleratorToLogical(binding: string, platform: Platform
           ? '['
           : key === 'BracketRight' || key === ']'
             ? ']'
-            : key === 'Semicolon' || key === ';'
+            : key === 'Backslash' || key === '\\'
+              ? '\\'
+              : key === 'Slash' || key === '/'
+                ? '/'
+                : key === '<'
+                  ? '<'
+                  : key === '>'
+                    ? '>'
+                    : key === 'Semicolon' || key === ';'
               ? ';'
               : key === 'Quote' || key === "'"
                 ? "'"

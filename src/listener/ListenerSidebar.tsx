@@ -21,6 +21,8 @@ const SIDEBAR_WIDTH_KEY = 'ui.listenerSidebarWidth';
 const SIDEBAR_WIDTH_MS = 220;
 const BRAND_TITLE_MS = 340;
 const FULL_BRAND_TITLE = 'Song Pages';
+/** Defer compact-rail single-click until after typical double-click interval. */
+const LIBRARY_COMPACT_DOUBLE_CLICK_MS = 450;
 
 export const DEFAULT_SIDEBAR_WIDTH = 304;
 export const MIN_SIDEBAR_WIDTH = 220;
@@ -48,7 +50,7 @@ type ListenerSidebarProps = {
   onAddCustomPlaylist?: () => void;
   onRefresh: () => void;
   onSelectArtist: (artistId: number) => void;
-  /** Double-click a playlist row — start playback from the first song on its list. */
+  /** Double-click any library row — start playback from the first song on its list. */
   onPlaylistDoubleClick?: (artistId: number) => void;
   onRowContextMenu?: (artist: ArtistRow, event: React.MouseEvent) => void;
 };
@@ -197,6 +199,7 @@ export function ListenerSidebar({
 }: ListenerSidebarProps) {
   const brandClickTimerRef = useRef<number | null>(null);
   const rowClickTimerRef = useRef<number | null>(null);
+  const lastCompactRowTapRef = useRef<{ artistId: number; at: number } | null>(null);
   const brandAnimatingRef = useRef(false);
   const [titleRevealed, setTitleRevealed] = useState(!collapsed);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -236,13 +239,33 @@ export function ListenerSidebar({
     }, 250);
   };
 
-  const handleLibraryRowDoubleClick = (artist: ArtistRow, entryType: ReturnType<typeof sidebarEntryType>) => {
+  const handleLibraryRowDoubleClick = (artist: ArtistRow) => {
     clearRowClickTimer();
-    if (isSidebarPlaylistEntry(entryType)) {
-      onPlaylistDoubleClick?.(artist.id);
+    if (onPlaylistDoubleClick) {
+      onPlaylistDoubleClick(artist.id);
       return;
     }
     onSelectArtist(artist.id);
+  };
+
+  /** Collapsed icon rail — count paired clicks; native dblclick is unreliable on nested avatars. */
+  const handleCompactRowActivate = (artist: ArtistRow, entryType: ReturnType<typeof sidebarEntryType>) => {
+    clearRowClickTimer();
+    const now = Date.now();
+    const last = lastCompactRowTapRef.current;
+
+    if (last?.artistId === artist.id && now - last.at <= LIBRARY_COMPACT_DOUBLE_CLICK_MS) {
+      lastCompactRowTapRef.current = null;
+      handleLibraryRowDoubleClick(artist);
+      return;
+    }
+
+    lastCompactRowTapRef.current = { artistId: artist.id, at: now };
+    rowClickTimerRef.current = window.setTimeout(() => {
+      rowClickTimerRef.current = null;
+      lastCompactRowTapRef.current = null;
+      onSelectArtist(artist.id);
+    }, LIBRARY_COMPACT_DOUBLE_CLICK_MS);
   };
 
   useEffect(() => {
@@ -514,7 +537,7 @@ export function ListenerSidebar({
                     tabIndex={0}
                     className={`library-row${isActive ? ' active' : ''}${isLikedEntry ? ' library-row-liked' : ''}${isSunoEntry ? ' library-row-suno' : ''}${isCustomEntry ? ' library-row-custom' : ''}${reorderMode ? ' library-row--reorder-mode' : ''}`}
                     onClick={() => handleLibraryRowClick(artist.id)}
-                    onDoubleClick={() => handleLibraryRowDoubleClick(artist, entryType)}
+                    onDoubleClick={() => handleLibraryRowDoubleClick(artist)}
                     onContextMenu={handleContextMenu}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
@@ -589,22 +612,41 @@ export function ListenerSidebar({
                     isLikedEntry || isSunoEntry || isCustomEntry ? null : resolveArtistPhotoUrl(artist);
                   const isActive = selectedArtistId === artist.id;
 
+                  const removable = isSidebarPlaylistContextTarget(entryType);
+
+                  const handleContextMenu = (event: React.MouseEvent) => {
+                    if (!removable || !onRowContextMenu) return;
+                    event.preventDefault();
+                    onRowContextMenu(artist, event);
+                  };
+
                   return (
                     <li key={artist.id}>
-                      <button
-                        type="button"
+                      <div
+                        role="button"
+                        tabIndex={0}
                         className={`library-row library-row-compact${isActive ? ' active' : ''}${
                           isLikedEntry ? ' library-row-liked' : ''
                         }${isSunoEntry ? ' library-row-suno' : ''}${
                           isCustomEntry ? ' library-row-custom' : ''
                         }`}
-                        onClick={() => handleLibraryRowClick(artist.id)}
-                        onDoubleClick={() => handleLibraryRowDoubleClick(artist, entryType)}
+                        onClick={() => handleCompactRowActivate(artist, entryType)}
+                        onContextMenu={handleContextMenu}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            handleCompactRowActivate(artist, entryType);
+                          }
+                        }}
                         aria-label={label}
+                        aria-current={isActive ? 'true' : undefined}
                         title={label}
                       >
                         {isLikedEntry ? (
-                          <span className="library-row-avatar library-row-liked-icon" aria-hidden="true">
+                          <span
+                            className="library-row-avatar library-row-avatar-fallback library-row-liked-icon"
+                            aria-hidden="true"
+                          >
                             ♥
                           </span>
                         ) : isSunoEntry ? (
@@ -622,7 +664,7 @@ export function ListenerSidebar({
                             {artistInitials(artist.artist_name)}
                           </span>
                         )}
-                      </button>
+                      </div>
                     </li>
                   );
                 })

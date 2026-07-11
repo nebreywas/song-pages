@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getApp } from '../lib/bridge';
-import { renderMarkdownPreview } from '../lib/markdownPreview';
+import { renderLyricsMarkdownPreview } from '../lib/markdownPreview';
 import type { SongRow } from '../types/app';
 import type { ListenerLyricsDisplaySettings } from '@shared/listener/lyricsDisplaySettings';
-import { formatListenerLyricsDisplayText } from '@shared/lyricsText';
 import { LyricsHeadingButton } from './LyricsHeadingButton';
 import { SongCoverPopover } from './SongCoverPopover';
 
@@ -61,12 +60,10 @@ export function SunoDemoSongPage({
     };
   }, [song.id, song.cover_url, song.song_manifest_url]);
 
-  const displayLyrics = useMemo(() => {
+  const lyricsHtml = useMemo(() => {
     if (!lyrics.trim()) return '';
-    return formatListenerLyricsDisplayText(lyrics, lyricsSettings.removeBrackets);
+    return renderLyricsMarkdownPreview(lyrics, lyricsSettings.removeBrackets);
   }, [lyrics, lyricsSettings.removeBrackets]);
-
-  const lyricsHtml = displayLyrics.trim() ? renderMarkdownPreview(displayLyrics) : '';
 
   return (
     <article className="suno-demo-song-page">

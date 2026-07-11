@@ -17,7 +17,7 @@ import {
   reserveKudoSlotDefinition,
   syncReservedKudoKeysFromSlots,
 } from './kudoReserve';
-import { EXTENDED_FUNCTION_KEYS } from './extendedKeys';
+import { EXTENDED_FUNCTION_KEYS, normalizeExtendedFunctionKey } from './extendedKeys';
 import { GATED_KEY_POOL, normalizeGatedKey, parseReservedBindingKey, reservedBindingKey } from './gatedKeys';
 import { listEnabledSafeDirectBindings } from './safeHotkeys';
 import type { CommandBindingSlot, CommandDefinition, CommandInputSource, CommandMappingState } from './types';
@@ -68,7 +68,9 @@ function bindingsMatchInPool(
 ): boolean {
   if (source === 'direct') return left.toLowerCase() === right.toLowerCase();
   if (source === 'gated') return normalizeGatedKey(left) === normalizeGatedKey(right);
-  return left.toUpperCase() === right.toUpperCase();
+  const leftNorm = normalizeExtendedFunctionKey(left);
+  const rightNorm = normalizeExtendedFunctionKey(right);
+  return leftNorm != null && leftNorm === rightNorm;
 }
 
 /** True when any command or Kudo reserve slot already owns this binding. */

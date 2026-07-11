@@ -24,6 +24,7 @@ import { buildSongShareMetaHtml,
   SHARE_CARD_WIDTH,
 } from "./songShareMeta";
 import { renderMarkdownToHtml } from "../shared/markdown";
+import { collapseLyricsBlankLines, collapseLyricsHtmlSpacing } from "../shared/lyricsText";
 import { assertReadableMediaFile } from "./localPathResolve";
 
 export type CompileSongManifest = {
@@ -356,7 +357,9 @@ export async function compileArtistPage(options: {
         PLAYLIST_JSON: JSON.stringify([playlist[i]]).replace(/</g, "\\u003c"),
         SONG_ABOUT: renderMarkdownToHtml(song.about),
         SONG_LYRICS: song.lyrics.trim()
-          ? renderMarkdownToHtml(song.lyrics)
+          ? collapseLyricsHtmlSpacing(
+              renderMarkdownToHtml(collapseLyricsBlankLines(song.lyrics)),
+            )
           : '<p class="markdown-empty">No lyrics provided.</p>',
       },
     );

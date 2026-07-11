@@ -1,6 +1,10 @@
 import { getBuiltinCommand, parseKudoPresetIdFromCommandId } from './catalog';
 import { isReserveKudoSlotCommandId, linkedPresetIdForReserveSlot, listReserveKudoSlotCommandIds } from './kudoReserve';
-import { isExtendedFunctionKey } from './extendedKeys';
+import {
+  EXTENDED_BINDING_POOL_LABEL,
+  isExtendedFunctionKey,
+  normalizeExtendedFunctionKey,
+} from './extendedKeys';
 import { isGatedKeyAllowed, normalizeGatedKey, parseReservedBindingKey } from './gatedKeys';
 import { isSafeDirectBinding } from './safeHotkeys';
 import type {
@@ -31,7 +35,7 @@ export function resolveBindingToCommand(
     source === 'gated'
       ? normalizeGatedKey(binding)
       : source === 'extended-function'
-        ? binding.toUpperCase()
+        ? (normalizeExtendedFunctionKey(binding) ?? binding)
         : binding;
 
   for (const [commandId, slot] of Object.entries(state.commands)) {
@@ -83,7 +87,7 @@ export function validateBindingAssignment(
     return 'Key is not allowed for gated commands.';
   }
   if (source === 'extended-function' && !isExtendedFunctionKey(binding)) {
-    return 'Extended function key must be F13–F24.';
+    return `Hardware key must be one of: ${EXTENDED_BINDING_POOL_LABEL}.`;
   }
   return null;
 }

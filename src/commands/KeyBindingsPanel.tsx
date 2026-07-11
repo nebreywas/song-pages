@@ -5,6 +5,8 @@ import {
   canRemoveCommandFromConfig,
   COMMAND_GATE_TIMEOUT_MS_DEFAULT,
   commandLabelForConflict,
+  EXTENDED_BINDING_POOL_LABEL,
+  formatExtendedBindingLabel,
   getBindingSlotForCommand,
   isBindingLayerLocked,
   listBindingOptionsForCommand,
@@ -214,7 +216,7 @@ export function KeyBindingsPanel() {
       ) : null}
 
       <p className="keybindings-lead">
-        Configure VC action key-bindings. F13-F24 work with Stream Deck and macro tools.
+        Configure VC action key-bindings. Hardware keys ({EXTENDED_BINDING_POOL_LABEL}) work with Stream Deck and macro tools.
       </p>
 
       <div className="keybindings-layout">
@@ -260,7 +262,7 @@ export function KeyBindingsPanel() {
                   <th>Action</th>
                   <th>Direct</th>
                   <th>Gated</th>
-                  <th>F13–F24</th>
+                  <th>Hardware keys</th>
                   <th aria-label="Remove" />
                 </tr>
               </thead>
@@ -321,6 +323,7 @@ export function KeyBindingsPanel() {
                           value={slot.extendedFunction}
                           disabled={isBindingLayerLocked(row.commandId, 'extendedFunction', kudoPresets)}
                           state={state}
+                          formatLabel={formatExtendedBindingLabel}
                           onChange={(patch) => void persistBinding(row.commandId, patch)}
                         />
                       </td>

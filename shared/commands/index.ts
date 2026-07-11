@@ -3,6 +3,7 @@ export {
   logicalBindingToElectronAccelerator,
   parseLogicalBinding,
 } from './accelerators';
+export { APP_WIDE_COMMAND_IDS, isAppWideCommand } from './appWideCommands';
 export { BUILTIN_COMMAND_CATALOG, getBuiltinCommand, getCommandDefinition, kudoCommandDefinition, kudoCommandIdForPreset, listCommandsWithKudos, parseKudoPresetIdFromCommandId } from './catalog';
 export {
   COMMAND_GATE_INPUT_GRACE_MS,
@@ -38,7 +39,19 @@ export {
   type ConfiguredActionRow,
 } from './configuredSet';
 export { createDefaultCommandMappingState, listFactoryConfiguredCommandIds } from './defaults';
-export { EXTENDED_FUNCTION_KEYS, isExtendedFunctionKey, normalizeExtendedFunctionKey } from './extendedKeys';
+export {
+  EXTENDED_BINDING_POOL_LABEL,
+  EXTENDED_FUNCTION_KEYS,
+  extendedBindingToElectronAccelerator,
+  formatExtendedBindingLabel,
+  FUNCTION_KEY_POOL_LABEL,
+  FUNCTION_KEYS,
+  isExtendedFunctionKey,
+  NAVIGATION_BINDING_KEYS,
+  NAVIGATION_KEY_POOL_LABEL,
+  normalizeExtendedFunctionKey,
+  SHIFT_FUNCTION_KEYS,
+} from './extendedKeys';
 export {
   GATED_KEY_POOL,
   GATED_RESERVED_KEYS,

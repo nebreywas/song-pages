@@ -2,8 +2,39 @@ import { COMMAND_MAPPINGS_STATE_VERSION, MODIFIER_OCAW } from './constants';
 import { normalizeUniqueBindings } from './assignments';
 import { createDefaultCommandMappingState, listFactoryConfiguredCommandIds } from './defaults';
 import { inferLegacyConfiguredCommandIds, pruneConfiguredState } from './configuredSet';
+import { normalizeExtendedFunctionKey } from './extendedKeys';
 import { migrateOrphanReservedKeysToSlots, syncReservedKudoKeysFromSlots } from './kudoReserve';
 import type { CommandBindingSlot, CommandMappingState } from './types';
+
+/** Remap volume chords from broken OCAW+< / OCAW+> to registerable OCAW+, / OCAW+. */
+export function migrateVolumeDirectBindings(state: CommandMappingState): CommandMappingState {
+  const O = MODIFIER_OCAW;
+  let next = state;
+
+  const volumeUp = state.commands['volume-up'];
+  if (volumeUp?.direct?.toLowerCase() === `${O}+<`.toLowerCase()) {
+    next = {
+      ...next,
+      commands: {
+        ...next.commands,
+        'volume-up': { ...volumeUp, direct: `${O}+,` },
+      },
+    };
+  }
+
+  const volumeDown = state.commands['volume-down'];
+  if (volumeDown?.direct?.toLowerCase() === `${O}+>`.toLowerCase()) {
+    next = {
+      ...next,
+      commands: {
+        ...next.commands,
+        'volume-down': { ...volumeDown, direct: `${O}+.` },
+      },
+    };
+  }
+
+  return next;
+}
 
 /** OCAW+H conflicts with macOS Hide Others — remap the host overlay to OCAW+F. */
 export function migrateToggleHostGraphicBinding(state: CommandMappingState): CommandMappingState {
@@ -30,7 +61,8 @@ function sanitizeBindingSlot(raw: unknown): CommandBindingSlot | null {
   if (typeof row.direct === 'string' && row.direct.trim()) slot.direct = row.direct.trim();
   if (typeof row.gated === 'string' && row.gated.trim()) slot.gated = row.gated.trim().toLowerCase();
   if (typeof row.extendedFunction === 'string' && row.extendedFunction.trim()) {
-    slot.extendedFunction = row.extendedFunction.trim().toUpperCase();
+    slot.extendedFunction =
+      normalizeExtendedFunctionKey(row.extendedFunction.trim()) ?? row.extendedFunction.trim();
   }
   return Object.keys(slot).length > 0 ? slot : null;
 }
@@ -99,7 +131,8 @@ export function migrateCommandMappingState(raw: unknown): CommandMappingState {
   const synced = syncReservedKudoKeysFromSlots(migrated);
   const withReserveSlots = migrateOrphanReservedKeysToSlots(synced);
   const withHostBinding = migrateToggleHostGraphicBinding(withReserveSlots);
-  return pruneConfiguredState(normalizeUniqueBindings(withHostBinding));
+  const withVolumeBindings = migrateVolumeDirectBindings(withHostBinding);
+  return pruneConfiguredState(normalizeUniqueBindings(withVolumeBindings));
 }
 
 export function sanitizeCommandMappingStateForSave(state: CommandMappingState): CommandMappingState {

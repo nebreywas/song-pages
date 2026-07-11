@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import {
+  EXTENDED_BINDING_POOL_LABEL,
   listAvailableKeysForSource,
   listCatalogCommands,
   listUnassignedCatalogActions,
@@ -23,7 +24,7 @@ type AddKeybindingDialogProps = {
 const LAYER_OPTIONS: Array<{ id: BindingLayer; label: string }> = [
   { id: 'direct', label: 'Direct' },
   { id: 'gated', label: 'Gated' },
-  { id: 'extended-function', label: 'F13–F24' },
+  { id: 'extended-function', label: EXTENDED_BINDING_POOL_LABEL },
 ];
 
 /**

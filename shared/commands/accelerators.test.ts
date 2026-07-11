@@ -21,6 +21,12 @@ test('logicalBindingToElectronAccelerator maps OCAW punctuation on macOS and Win
     const mod = platform === 'darwin' ? 'Alt+Command' : 'Alt+Super';
     assert.equal(logicalBindingToElectronAccelerator('OCAW+[', platform), `${mod}+[`);
     assert.equal(logicalBindingToElectronAccelerator('OCAW+]', platform), `${mod}+]`);
+    assert.equal(logicalBindingToElectronAccelerator('OCAW+\\', platform), `${mod}+\\`);
+    assert.equal(logicalBindingToElectronAccelerator('OCAW+,', platform), `${mod}+,`);
+    assert.equal(logicalBindingToElectronAccelerator('OCAW+.', platform), `${mod}+.`);
+    assert.equal(logicalBindingToElectronAccelerator('OCAW+<', platform), `${mod}+<`);
+    assert.equal(logicalBindingToElectronAccelerator('OCAW+>', platform), `${mod}+>`);
+    assert.equal(logicalBindingToElectronAccelerator('OCAW+/', platform), `${mod}+/`);
     assert.equal(logicalBindingToElectronAccelerator('OCAW+;', platform), `${mod}+;`);
     assert.equal(logicalBindingToElectronAccelerator("OCAW+'", platform), `${mod}+'`);
   }
@@ -29,13 +35,23 @@ test('logicalBindingToElectronAccelerator maps OCAW punctuation on macOS and Win
 test('electronAcceleratorToLogical round-trips OCAW punctuation', () => {
   assert.equal(electronAcceleratorToLogical('Alt+Command+[', 'darwin'), 'OCAW+[');
   assert.equal(electronAcceleratorToLogical('Alt+Super+]', 'win32'), 'OCAW+]');
+  assert.equal(electronAcceleratorToLogical('Alt+Command+,', 'darwin'), 'OCAW+,');
+  assert.equal(electronAcceleratorToLogical('Alt+Super+.', 'win32'), 'OCAW+.');
   assert.equal(electronAcceleratorToLogical('Alt+Command+Semicolon', 'darwin'), 'OCAW+;');
   assert.equal(electronAcceleratorToLogical("Alt+Super+'", 'win32'), "OCAW+'");
 });
 
-test('isSafeDirectBinding includes new OCAW punctuation chords', () => {
+test('isSafeDirectBinding includes requested OCAW punctuation chords', () => {
   assert.equal(isSafeDirectBinding('OCAW+['), true);
   assert.equal(isSafeDirectBinding('OCAW+]'), true);
+  assert.equal(isSafeDirectBinding('OCAW+\\'), true);
+  assert.equal(isSafeDirectBinding('OCAW+-'), true);
+  assert.equal(isSafeDirectBinding('OCAW+='), true);
+  assert.equal(isSafeDirectBinding('OCAW+,'), true);
+  assert.equal(isSafeDirectBinding('OCAW+.'), true);
+  assert.equal(isSafeDirectBinding('OCAW+<'), false);
+  assert.equal(isSafeDirectBinding('OCAW+>'), false);
+  assert.equal(isSafeDirectBinding('OCAW+/'), true);
   assert.equal(isSafeDirectBinding('OCAW+;'), true);
   assert.equal(isSafeDirectBinding("OCAW+'"), true);
 });

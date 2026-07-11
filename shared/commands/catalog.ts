@@ -88,6 +88,28 @@ export const BUILTIN_COMMAND_CATALOG: CommandDefinition[] = [
     legacyAction: 'changeVisualizer',
   },
   {
+    id: 'visualizer-next',
+    label: 'Visualizer +1',
+    description: 'Select the next visualizer in the catalog list.',
+    category: 'vc-surface',
+  },
+  {
+    id: 'visualizer-previous',
+    label: 'Visualizer -1',
+    description: 'Select the previous visualizer in the catalog list.',
+    category: 'vc-surface',
+  },
+  {
+    id: 'volume-up',
+    label: 'Volume Up',
+    category: 'playback',
+  },
+  {
+    id: 'volume-down',
+    label: 'Volume Down',
+    category: 'playback',
+  },
+  {
     id: 'seek-back-500',
     label: 'Back up 500ms',
     category: 'playback',

@@ -18,14 +18,15 @@ type VcFullscreenGraphicLayerProps = {
 
 export function VcFullscreenGraphicLayer({ gridDesign, catalog }: VcFullscreenGraphicLayerProps) {
   const settings = getFullscreenGraphic(gridDesign);
+  const active = hasActiveFullscreenGraphic(gridDesign);
+  const item = active ? findHostContentItem(catalog, settings.itemId) : null;
+  const mediaPath = item?.type === 'graphic' ? item.mediaPath : null;
+  // Hooks must run unconditionally — pass null mediaPath when the layer is inactive.
+  const { url, status } = useResolvedMediaUrl(null, active ? mediaPath : null);
 
-  if (!hasActiveFullscreenGraphic(gridDesign)) {
+  if (!active) {
     return null;
   }
-
-  const item = findHostContentItem(catalog, settings.itemId);
-  const mediaPath = item?.type === 'graphic' ? item.mediaPath : null;
-  const { url, status } = useResolvedMediaUrl(null, mediaPath);
 
   if (!url) {
     if (status === 'loading' && mediaPath) {

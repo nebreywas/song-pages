@@ -309,6 +309,7 @@ declare global {
         commitSurface: (surface: import('@shared/vcModeTypes').VcSurfaceConfig) => void;
         requestVisualizerRotate: () => void;
         reportActiveVisualizer: (id: string) => void;
+        syncActiveVisualizer: (id: string) => void;
         switchSurface: (designId: string) => void;
         onState: (callback: (payload: import('@shared/vcModeTypes').VcStatePayload) => void) => () => void;
         onFrame: (callback: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void) => () => void;
@@ -329,6 +330,7 @@ declare global {
         ) => () => void;
         onVisualizerRotateRequest: (callback: () => void) => () => void;
         onActiveVisualizerReport: (callback: (id: string) => void) => () => void;
+        onSyncActiveVisualizer: (callback: (id: string) => void) => () => void;
         onSwitchSurface: (callback: (designId: string) => void) => () => void;
       };
       hostContent: {

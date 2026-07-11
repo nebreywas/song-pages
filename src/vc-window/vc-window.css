@@ -94,6 +94,20 @@
   min-width: 0;
 }
 
+/* Floats may scroll overflow content but never show scrollbar chrome on the projection surface. */
+.vc-surface-float,
+.vc-surface-float * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.vc-surface-float::-webkit-scrollbar,
+.vc-surface-float *::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .vc-cell.vc-cell-float,
 .vc-surface-float .vc-cell-blank {
   background: transparent;
@@ -650,6 +664,11 @@
 
 .vc-upcoming-list::-webkit-scrollbar {
   width: 8px;
+}
+
+.vc-upcoming-list::-webkit-scrollbar-track,
+.vc-upcoming-list::-webkit-scrollbar-track-piece {
+  background: transparent;
 }
 
 .vc-upcoming-list::-webkit-scrollbar-thumb {

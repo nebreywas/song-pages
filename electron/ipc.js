@@ -694,6 +694,12 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.on('vc:syncActiveVisualizer', (_event, id) => {
+    if (typeof id === 'string') {
+      vcWindow.forwardVcSyncActiveVisualizer(id);
+    }
+  });
+
   ipcMain.on('vc:switchSurface', (_event, designId) => {
     if (typeof designId !== 'string' || !designId.trim()) return;
     const mainWindow = vcWindow.getMainWindowRef();

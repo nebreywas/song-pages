@@ -10,6 +10,7 @@ const {
   LEGACY_ACTION_BY_COMMAND,
   createDefaultMappingState,
   logicalBindingToElectronAccelerator,
+  extendedBindingToElectronAccelerator,
   migrateMappingState,
   parseReservedBindingKey,
   resolveBindingToCommand,
@@ -56,7 +57,14 @@ const MAIN_PLAYBACK_BY_COMMAND = {
   'stutter-1500': { type: 'stutter', durationMs: 1500 },
   'stutter-2000': { type: 'stutter', durationMs: 2000 },
   'play-next-song': { type: 'playNextSong' },
+  'volume-up': { type: 'volumeDelta', delta: 0.05 },
+  'volume-down': { type: 'volumeDelta', delta: -0.05 },
+  'visualizer-next': { type: 'visualizerStep', direction: 1 },
+  'visualizer-previous': { type: 'visualizerStep', direction: -1 },
 };
+
+/** Player commands that work without VC Mode — keep in sync with shared/commands/appWideCommands.ts */
+const APP_WIDE_COMMAND_IDS = new Set(Object.keys(MAIN_PLAYBACK_BY_COMMAND));
 
 function loadMappingState() {
   try {
@@ -94,7 +102,7 @@ function saveMappingState(next) {
     logger.error('Command mapping save failed', { error: String(error) });
     throw error;
   }
-  if (vcModeActive) registerActiveShortcuts();
+  registerActiveShortcuts();
   broadcastMappingState();
   return mappingState;
 }
@@ -108,6 +116,7 @@ function setWindowRefs({ mainWindow, vcWindow, controllerWindow }) {
   vcWindowRef = vcWindow ?? null;
   controllerWindowRef = controllerWindow ?? null;
   syncGateCapture();
+  if (mainWindowRef) registerActiveShortcuts();
 }
 
 function sendToWindow(windowRef, channel, payload) {
@@ -249,15 +258,13 @@ function dispatchCommand(invocation) {
     return { ok: true, result: 'executed' };
   }
 
-  if (!vcModeActive) return { ok: false, result: 'vc-inactive' };
-
-  if (!isCommandAvailableForDispatch(commandId, runtimeContext)) {
-    broadcastUnavailable(commandId, source, binding);
-    return { ok: false, result: 'unavailable' };
-  }
-
   const playbackCommand = MAIN_PLAYBACK_BY_COMMAND[commandId];
   if (playbackCommand) {
+    const available = isCommandAvailableForDispatch(commandId, runtimeContext);
+    if (!available) {
+      broadcastUnavailable(commandId, source, binding);
+      return { ok: false, result: 'unavailable' };
+    }
     sendToWindow(mainWindowRef, 'listener:playback-command', playbackCommand);
     broadcast('command:invoke', {
       commandId,
@@ -267,6 +274,13 @@ function dispatchCommand(invocation) {
       timestamp: Date.now(),
     });
     return { ok: true, result: 'executed' };
+  }
+
+  if (!vcModeActive) return { ok: false, result: 'vc-inactive' };
+
+  if (!isCommandAvailableForDispatch(commandId, runtimeContext)) {
+    broadcastUnavailable(commandId, source, binding);
+    return { ok: false, result: 'unavailable' };
   }
 
   const legacyAction = LEGACY_ACTION_BY_COMMAND[commandId];
@@ -301,7 +315,7 @@ function unregisterAllShortcuts() {
 
 function registerActiveShortcuts() {
   unregisterAllShortcuts();
-  if (!vcModeActive) return;
+  if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
 
   /** @type {Array<{ commandId: string; source: string; binding: string }>} */
   const bindings = [];
@@ -340,7 +354,7 @@ function registerActiveShortcuts() {
   for (const row of bindings) {
     const accelerator =
       row.source === 'extended-function'
-        ? row.binding.toUpperCase()
+        ? extendedBindingToElectronAccelerator(row.binding)
         : logicalBindingToElectronAccelerator(row.binding);
 
     if (acceleratorToBinding.has(accelerator)) {
@@ -378,13 +392,13 @@ function registerActiveShortcuts() {
 function setVcModeActive(active) {
   vcModeActive = Boolean(active);
   if (!vcModeActive) {
-    runtimeContext = { vcModeActive: false };
+    runtimeContext = { ...runtimeContext, vcModeActive: false };
     broadcast('commands:runtime-context', runtimeContext);
     closeGate('vc-inactive');
-    unregisterAllShortcuts();
+    registerActiveShortcuts();
     return;
   }
-  runtimeContext = { vcModeActive: true };
+  runtimeContext = { ...runtimeContext, vcModeActive: true };
   broadcast('commands:runtime-context', runtimeContext);
   registerActiveShortcuts();
 }

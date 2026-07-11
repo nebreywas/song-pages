@@ -323,6 +323,14 @@
   margin: 0 0 0.75rem;
 }
 
+.markdown-field--lyrics .markdown-body p {
+  margin: 0 0 0.85rem;
+}
+
+.markdown-field--lyrics .markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
 .markdown-field .markdown-body > :first-child {
   margin-top: 0;
 }

@@ -149,6 +149,7 @@ contextBridge.exposeInMainWorld('app', {
     commitSurface: (surface) => ipcRenderer.send('vc:commitSurface', surface),
     requestVisualizerRotate: () => ipcRenderer.send('vc:requestVisualizerRotate'),
     reportActiveVisualizer: (id) => ipcRenderer.send('vc:reportActiveVisualizer', id),
+    syncActiveVisualizer: (id) => ipcRenderer.send('vc:syncActiveVisualizer', id),
     switchSurface: (designId) => ipcRenderer.send('vc:switchSurface', designId),
     onState: (callback) => {
       const handler = (_event, payload) => callback(payload);
@@ -214,6 +215,11 @@ contextBridge.exposeInMainWorld('app', {
       const handler = (_event, id) => callback(id);
       ipcRenderer.on('vc:active-visualizer', handler);
       return () => ipcRenderer.removeListener('vc:active-visualizer', handler);
+    },
+    onSyncActiveVisualizer: (callback) => {
+      const handler = (_event, id) => callback(id);
+      ipcRenderer.on('vc:sync-active-visualizer', handler);
+      return () => ipcRenderer.removeListener('vc:sync-active-visualizer', handler);
     },
     onSwitchSurface: (callback) => {
       const handler = (_event, designId) => callback(designId);

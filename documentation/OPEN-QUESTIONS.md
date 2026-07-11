@@ -7,6 +7,23 @@ Use with [persistence-philosophy.md](./persistence-philosophy.md) and [README.md
 
 ---
 
+## Source complexity (`src/`)
+
+**Assessment (2026-07-10):** No project-wide `src/` refactor warranted. One concentration point — `ListenerMode.tsx` (~2.2k lines) — but playback, sidebar, player, and hooks are already partially extracted. VC Mode is large (~10k lines) but **distributed across many files**, not a single god module.
+
+**Principle:** When a mode or area feels **feature-complete**, consider splitting remaining inline logic into imported modules/hooks — not preemptively while the UX is still moving.
+
+| Area | Revisit when |
+|------|----------------|
+| `ListenerMode.tsx` | Playback polish done + profiling shows jank, or transport/state extraction is clearly stable |
+| `ListenerSidebar.tsx` | Sidebar UX feature-complete |
+| `VcModeModal` / designer popovers | VC designer feature-complete |
+| CSS (`app.css`, `vcMode.css`) | Subsystem styling stabilizes — split by domain, not by line count alone |
+
+See frozen application audit (archive) for ListenerMode transport/virtualization items — **profile first**, same deferral posture.
+
+---
+
 ## Current product focus
 
 - Playback polish

@@ -208,6 +208,11 @@ function forwardVcActiveVisualizerReport(id) {
   }
 }
 
+/** Main player stepped visualizer — keep VC projection surface in sync. */
+function forwardVcSyncActiveVisualizer(id) {
+  sendToVc('vc:sync-active-visualizer', id);
+}
+
 function hostGraphicUrlFromPath(filePath) {
   if (!filePath || typeof filePath !== 'string') return null;
   try {
@@ -375,4 +380,5 @@ module.exports = {
   forwardVcSurfaceCommit,
   forwardVcVisualizerRotateRequest,
   forwardVcActiveVisualizerReport,
+  forwardVcSyncActiveVisualizer,
 };

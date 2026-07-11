@@ -419,6 +419,7 @@ export function ArtistPageEditor() {
                       value={song.lyrics}
                       onChange={(lyrics) => updateSong(song.id, { lyrics })}
                       placeholder="Lyrics with optional Markdown formatting…"
+                      lyricsPreview
                     />
 
                     <div className="editor-grid-2">

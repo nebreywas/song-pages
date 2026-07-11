@@ -395,7 +395,11 @@ export type VcHotkeyAction =
   /** Reset ALARE lyric scroll trim to default (⌘⌥0). */
   | 'alareSpeedReset'
   /** Randomize the active visualizer plugin (host override). */
-  | 'changeVisualizer';
+  | 'changeVisualizer'
+  /** Next visualizer in the catalog list. */
+  | 'visualizerNext'
+  /** Previous visualizer in the catalog list. */
+  | 'visualizerPrevious';
 
 export const VC_SETTINGS_KEY = 'vc.lastConfig';
 

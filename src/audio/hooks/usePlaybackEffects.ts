@@ -20,8 +20,7 @@ type UsePlaybackEffectsOptions = {
   /** Optional discovery lab — takes mirror path when enabled (legacy toggles win if both on). */
   effectsLab?: EffectsLabState;
   /**
-   * VC projection window is audibly mirroring the same track — silence mirror graph speakers
-   * and let VC window own the FX chain (no duplicate audible stream).
+   * VC Mode is open — main speakers stay silent; the VC window carries audible output.
    */
   vcMirrorPlaybackActive?: boolean;
 };

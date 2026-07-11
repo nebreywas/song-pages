@@ -58,7 +58,6 @@ import { SongLikeButton } from './SongLikeButton';
 import { LikedSongsPanel } from './LikedSongsPanel';
 import { SunoOnlyPanel } from './SunoOnlyPanel';
 import { SunoDemoSongPage } from './SunoDemoSongPage';
-import { SunoDemoAddDialog } from './SunoDemoAddDialog';
 import { shouldUseDirectAudioPlayback, loadDirectAudioPlayback } from './directAudioPlayback';
 import { LikedSongIndicator } from './LikedSongIndicator';
 import { PlaylistRowContextMenu } from './PlaylistRowContextMenu';
@@ -66,6 +65,7 @@ import { LibrarySidebarContextMenu } from './LibrarySidebarContextMenu';
 import { LibraryPlaylistRemoveConfirm } from './LibraryPlaylistRemoveConfirm';
 import { LibraryPlaylistRenameDialog } from './LibraryPlaylistRenameDialog';
 import { SongToPlaylistModal } from './SongToPlaylistModal';
+import { SharePlaylistModal } from './SharePlaylistModal';
 import { CustomPlaylistPanel } from './CustomPlaylistPanel';
 import { sidebarEntryType, isRenamableSidebarPlaylist, isSidebarPlaylistContextTarget } from './sidebarEntry';
 import { SkippedSongMarker } from './SkippedSongMarker';
@@ -97,6 +97,8 @@ import { VisualizerSettingsDialog } from '../visualizers/settings/ui/VisualizerS
 import { ButterchurnMirrorHost } from '../visualizers/butterchurn/adapter/ButterchurnMirrorHost';
 import { useExperienceSettings } from '../visualizers/settings/useExperienceSettings';
 import { useVisualizerManager } from '../visualizers/useVisualizerManager';
+import { listVisualizers, normalizeExperienceId } from '../visualizers/registry';
+import { stepExperienceId } from '@shared/visualizers/experienceNavigation';
 import { AudioDebugPanel } from '../audio/debug/AudioDebugPanel';
 import { useAudioDebugReporter } from '../audio/debug/useAudioDebugReporter';
 import { VcModeModal } from '../vc-mode/VcModeModal';
@@ -156,6 +158,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [siteUrl, setSiteUrl] = useState('');
   const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
   const [sunoDemoAddOpen, setSunoDemoAddOpen] = useState(false);
+  const [sharePlaylistOpen, setSharePlaylistOpen] = useState(false);
   const [vcCloseConfirmOpen, setVcCloseConfirmOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
@@ -217,20 +220,24 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     song: SongRow;
     sourceArtistId: number;
   } | null>(null);
-  /** VC window mirror is playing — main speaker ducks so hosts do not hear doubled audio. */
-  const [vcMirrorPlaybackActive, setVcMirrorPlaybackActive] = useState(false);
-
   const audioRef = useRef<HTMLAudioElement>(null);
   /** Muted HLS mirror for visualizer FFT — keeps main playback on native output for stream capture. */
   const analyserAudioRef = useRef<HTMLAudioElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const playbackGenerationRef = useRef(0);
+  /** Ignore spurious `ended` while tearing down HLS / swapping tracks (double-advance). */
+  const suppressPlaybackEndedRef = useRef(false);
+  /** Serialize natural track-end auto-advance — stale `ended` must not call playSong twice. */
+  const advancingFromEndedRef = useRef(false);
+  const playingSongIdRef = useRef<number | null>(null);
   const pageAccessGenerationRef = useRef(0);
   const mainColumnRef = useRef<HTMLDivElement>(null);
   const rowClickTimerRef = useRef<number | null>(null);
   const durationProbeRef = useRef<Set<number>>(new Set());
   const playSongRef = useRef<(song: SongRow) => Promise<void>>(async () => {});
   const playNextRef = useRef<() => void>(() => {});
+  /** Last row passed to playSong — visualizer must not depend on the selected playlist's song list. */
+  const playingSongRowRef = useRef<SongRow | null>(null);
   /** Latest transport handlers for VC window IPC — avoids hook-order / TDZ issues. */
   const vcTransportHandlersRef = useRef({
     togglePlayPause: () => {},
@@ -258,7 +265,15 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       })
       .filter((row): row is PlaylistPickerRow => row != null);
   }, [artists]);
-  const playingSong = songs.find((song) => song.id === playingSongId) ?? null;
+  const playingSong = useMemo(() => {
+    if (playingSongId == null) return null;
+    const fromPlaylist = songs.find((song) => song.id === playingSongId);
+    if (fromPlaylist) {
+      playingSongRowRef.current = fromPlaylist;
+      return fromPlaylist;
+    }
+    return playingSongRowRef.current?.id === playingSongId ? playingSongRowRef.current : null;
+  }, [playingSongId, songs]);
   const previewSong = songs.find((song) => song.id === previewSongId) ?? playingSong;
   const isLikedPlaylist = isLikedSongsArtist(selectedArtistId);
   const isSunoPlaylist = isSunoDemoArtistId(selectedArtistId);
@@ -291,6 +306,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   const sortedSongsRef = useRef(sortedSongs);
   sortedSongsRef.current = sortedSongs;
+
+  playingSongIdRef.current = playingSongId;
 
   const visualizer = useVisualizerManager({
     analyserAudioRef,
@@ -663,7 +680,31 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   useListenerPlaybackCommands({
     mainAudioRef: audioRef,
     onPlayNextSong: specialPlay.playNextAfterPause,
+    onVolumeDelta: (delta) => {
+      setVolume((current) => Math.min(1, Math.max(0, current + delta)));
+    },
+    onVisualizerStep: (direction) => {
+      const catalogIds = listVisualizers().map((plugin) => plugin.id);
+      const nextId = stepExperienceId(
+        catalogIds,
+        visualizer.activeExperienceId,
+        direction,
+        normalizeExperienceId,
+      );
+      visualizer.selectExperience(nextId);
+      if (vc.vcOpen) {
+        getApp()?.vc?.syncActiveVisualizer?.(nextId);
+      }
+    },
   });
+
+  useEffect(() => {
+    if (!vc.vcOpen) return;
+    const app = getApp();
+    return app?.vc?.onActiveVisualizerReport?.((id) => {
+      visualizer.selectExperience(id);
+    });
+  }, [vc.vcOpen, visualizer.selectExperience]);
 
   useEffect(() => {
     if (!vc.vcOpen) specialPlay.clearPause();
@@ -703,19 +744,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   useEffect(() => {
     if (!vc.vcOpen) {
       setVcCloseConfirmOpen(false);
-      setVcMirrorPlaybackActive(false);
     }
   }, [vc.vcOpen]);
-
-  useEffect(() => {
-    const app = getApp();
-    if (!app?.vc?.onPlaybackStatus) return;
-
-    const off = app.vc.onPlaybackStatus((payload) => {
-      setVcMirrorPlaybackActive(Boolean(payload.active));
-    });
-    return () => off();
-  }, []);
 
   usePlaybackEffects({
     mainAudioRef: audioRef,
@@ -725,7 +755,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     bassBoost,
     lofi,
     effectsLab,
-    vcMirrorPlaybackActive: vc.vcOpen && vcMirrorPlaybackActive,
+    // VC window owns audible output — main stays timing-only while VC is open.
+    vcMirrorPlaybackActive: vc.vcOpen,
   });
 
   useEffect(() => {
@@ -767,14 +798,14 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     const audio = audioRef.current;
     if (!audio) return;
 
-    // VC window owns audible playback while mirroring — always duck main (FX path included).
-    if (vc.vcOpen && vcMirrorPlaybackActive) {
+    // VC window owns audible playback while open — always duck main (FX path included).
+    if (vc.vcOpen) {
       audio.volume = 0;
       return;
     }
     if (bassBoost || lofi || isEffectsLabAudible(effectsLab)) return;
     audio.volume = volume;
-  }, [volume, bassBoost, lofi, effectsLab, vc.vcOpen, vcMirrorPlaybackActive]);
+  }, [volume, bassBoost, lofi, effectsLab, vc.vcOpen]);
 
   const markSongAvailability = useCallback(
     async (song: SongRow, unavailable: boolean) => {
@@ -853,6 +884,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       const accessGeneration = ++pageAccessGenerationRef.current;
 
       setPlayingSongId(song.id);
+      playingSongRowRef.current = song;
+      // Keep VC mirror URL in sync with songId — stale activePlaybackUrl caused previous track audio after skip/next.
+      setActivePlaybackUrl(song.playback_url ?? null);
+      setCurrentTime(0);
+      setDuration(song.duration_seconds ?? 0);
+      setIsPlaying(false);
       setPreviewSongId(song.id);
       setMainContentView('song');
       setPageLoadError(null);
@@ -869,6 +906,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       const audio = audioRef.current;
       if (!audio) return;
 
+      // pause/destroyHls can emit spurious `ended` — ignore until the new source is ready.
+      suppressPlaybackEndedRef.current = true;
       destroyHls();
       audio.pause();
 
@@ -882,6 +921,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
       const startPlayback = () => {
         if (generation !== playbackGenerationRef.current) return;
+        suppressPlaybackEndedRef.current = false;
         void audio.play().then(
           () => {
             if (generation === playbackGenerationRef.current) {
@@ -901,6 +941,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
       const onAudioError = () => {
         if (generation !== playbackGenerationRef.current) return;
+        suppressPlaybackEndedRef.current = false;
         setError('Could not load audio stream.');
         setIsPlaying(false);
         setActivePlaybackUrl(null);
@@ -929,6 +970,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (generation !== playbackGenerationRef.current) return;
           if (data.fatal) {
+            suppressPlaybackEndedRef.current = false;
             const detail = data.details ? `${data.type}: ${data.details}` : data.type;
             setError(`HLS error — ${detail}`);
             setIsPlaying(false);
@@ -948,6 +990,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         );
         audio.addEventListener('error', onAudioError, { once: true });
       } else {
+        suppressPlaybackEndedRef.current = false;
         setError('HLS playback is not supported in this environment.');
       }
     },
@@ -973,6 +1016,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     };
 
     const onEnded = () => {
+      if (suppressPlaybackEndedRef.current || advancingFromEndedRef.current) return;
+      if (!audio.ended) return;
+
       setIsPlaying(false);
       if (repeatMode === 'one') {
         audio.currentTime = 0;
@@ -980,17 +1026,25 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         setIsPlaying(true);
         return;
       }
-      if (playingSongId == null) return;
+
+      const currentSongId = playingSongIdRef.current;
+      if (currentSongId == null) return;
       if (
         vc.vcOpen &&
         specialPlay.beginPauseAfterSong(vc.activeConfig.specialPlayStyle)
       ) {
         return;
       }
-      const nextSongId = pickNextSongId(playingSongId);
-      if (nextSongId == null) return;
-      const nextSong = sortedSongs.find((song) => song.id === nextSongId);
-      if (nextSong) void playSong(nextSong);
+
+      advancingFromEndedRef.current = true;
+      const nextSongId = pickNextSongId(currentSongId);
+      if (nextSongId == null) {
+        advancingFromEndedRef.current = false;
+        return;
+      }
+      const nextSong = sortedSongsRef.current.find((song) => song.id === nextSongId);
+      if (nextSong) void playSongRef.current(nextSong);
+      advancingFromEndedRef.current = false;
     };
 
     const onPlay = () => setIsPlaying(true);
@@ -1009,7 +1063,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       audio.removeEventListener('play', onPlay);
       audio.removeEventListener('pause', onPause);
     };
-  }, [persistSongDuration, pickNextSongId, playSong, playingSongId, repeatMode, sortedSongs, specialPlay.beginPauseAfterSong, vc.activeConfig.specialPlayStyle, vc.vcOpen]);
+  }, [persistSongDuration, pickNextSongId, playingSongId, repeatMode, specialPlay.beginPauseAfterSong, vc.activeConfig.specialPlayStyle, vc.vcOpen]);
 
   useEffect(() => () => destroyHls(), []);
 
@@ -1090,6 +1144,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     setMainContentView('welcome');
     setPageUrl(null);
     setPlayingSongId(null);
+    playingSongRowRef.current = null;
     setPreviewSongId(null);
     setActivePlaybackUrl(null);
     destroyHls();
@@ -1103,14 +1158,16 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 's') {
+        if (!isSunoDemoArtistId(selectedArtistId)) return;
         event.preventDefault();
+        setMainContentView('artist');
         setSunoDemoAddOpen(true);
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [selectedArtistId]);
 
   const handleSunoDemoAdded = useCallback(async () => {
     // Refresh sidebar count and the Suno playlist if it is already open — do not interrupt playback.
@@ -1243,6 +1300,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         setCurrentTime(0);
         setDuration(0);
         setPlayingSongId(null);
+        playingSongRowRef.current = null;
         setPreviewSongId(null);
         setPageUrl(null);
       }
@@ -1367,6 +1425,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           }
         }
         setPlayingSongId(null);
+        playingSongRowRef.current = null;
       }
 
       if (previewSongId === songId) {
@@ -1795,6 +1854,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             key={pageLoadKey}
             loadKey={pageLoadKey}
             url={pageUrl}
+            songManifestUrl={activeSongPage?.song_manifest_url}
             lyricsSettings={lyricsDisplaySettings}
             onRemoveBracketsChange={setLyricsRemoveBrackets}
             onLoadError={handlePageLoadError}
@@ -1814,8 +1874,14 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         return (
           <SunoOnlyPanel
             playlistName={selectedArtist.artist_name}
+            dateAdded={selectedArtist.created_at}
             songCount={selectedArtist.song_count ?? songs.length}
-            onAddSong={() => setSunoDemoAddOpen(true)}
+            addTrackOpen={sunoDemoAddOpen}
+            busy={busy}
+            playlistId={selectedSunoPlaylistId}
+            onAddTrackOpenChange={setSunoDemoAddOpen}
+            onTrackAdded={() => void handleSunoDemoAdded()}
+            onSharePlaylist={() => setSharePlaylistOpen(true)}
           />
         );
       }
@@ -1825,6 +1891,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           <CustomPlaylistPanel
             playlistName={selectedArtist.artist_name}
             songCount={selectedArtist.song_count ?? songs.length}
+            onSharePlaylist={() => setSharePlaylistOpen(true)}
           />
         );
       }
@@ -2080,7 +2147,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
                     {isLikedPlaylist
                       ? 'No liked songs yet.'
                       : isSunoPlaylist
-                        ? 'No Suno tracks yet. Press Ctrl+Shift+S to add one.'
+                        ? 'No Suno tracks yet. Open the playlist home and choose Add Suno Track.'
                         : 'No songs in library.'}
                   </td>
                 </tr>
@@ -2105,17 +2172,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           setSiteUrl('');
         }}
       />
-
-      {SUNO_DEMO_FEATURE_ENABLED ? (
-        <SunoDemoAddDialog
-          open={sunoDemoAddOpen}
-          busy={busy}
-          playlistId={selectedSunoPlaylistId}
-          playlistName={selectedArtist?.artist_name}
-          onClose={() => setSunoDemoAddOpen(false)}
-          onAdded={() => void handleSunoDemoAdded()}
-        />
-      ) : null}
 
       {playlistContextMenu ? (
         <PlaylistRowContextMenu
@@ -2149,6 +2205,17 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         busy={busy}
         onConfirm={(name) => void handleConfirmRenameLibraryPlaylist(name)}
         onCancel={() => setLibraryPlaylistRenameTarget(null)}
+      />
+
+      <SharePlaylistModal
+        open={sharePlaylistOpen}
+        busy={busy}
+        playlistName={selectedArtist?.artist_name ?? ''}
+        createdAt={selectedArtist?.created_at ?? null}
+        songs={songs}
+        customOrderIds={customOrderIds}
+        onClose={() => setSharePlaylistOpen(false)}
+        onCopyError={(message) => setError(message)}
       />
 
       <SongToPlaylistModal
