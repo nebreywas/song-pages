@@ -10,8 +10,10 @@ import {
 } from '@shared/vcModeTypes';
 
 import { getVisualizer } from '../visualizers/registry';
+import { isVcYoutubeSong } from '@shared/youtube/youtubeFeature';
 import { VisualizerPluginHost } from '../visualizers/VisualizerPluginHost';
 import { VcResolvedContentView } from './VcResolvedContentView';
+import { VcYoutubePlayer } from './VcYoutubePlayer';
 import { useOptionalVcVisualizerRotationContext } from './VcVisualizerRotationContext';
 
 type VcCellContentViewProps = {
@@ -72,12 +74,26 @@ export function VcCellContentView({
   if (resolved.kind === 'visualizer') {
     const song = state.currentSong;
     const playback = state.playback;
+    if (!song) return <div className="vc-cell-empty">Visualizer</div>;
+
+    // Visualizer slot temporarily hosts the YouTube embed for custom-playlist YT tracks.
+    if (isVcYoutubeSong(song) && song.youtubeVideoId) {
+      return (
+        <VcYoutubePlayer
+          videoId={song.youtubeVideoId}
+          songId={song.id}
+          playback={playback}
+          mirrorSongId={state.audioMirror?.songId ?? null}
+        />
+      );
+    }
+
     const experienceId =
       rotation?.activeVisualizerId ??
       state.effectiveVisualizerId ??
       state.config.visualizerId;
     const plugin = getVisualizer(experienceId);
-    if (!plugin || !song) return <div className="vc-cell-empty">Visualizer</div>;
+    if (!plugin) return <div className="vc-cell-empty">Visualizer</div>;
     const timeDomain = new Uint8Array(frequencyData.length * 2);
     return (
       <VisualizerPluginHost

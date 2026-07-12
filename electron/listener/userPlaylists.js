@@ -72,8 +72,11 @@ function isSunoSnapshot(pageUrl) {
   return String(pageUrl || '').startsWith('songpages-suno-demo:');
 }
 
+const { isYoutubeSnapshot } = require('./youtube/youtubeFeature');
+
 function isCompleteCatalogSnapshot(fields) {
   if (isSunoSnapshot(fields.page_url)) return true;
+  if (isYoutubeSnapshot(fields.page_url)) return true;
   return Boolean(
     fields.cover_url?.trim() &&
     fields.song_manifest_url?.trim() &&
@@ -212,6 +215,30 @@ function enrichSongFromSuno(song) {
   };
 }
 
+function enrichSongFromYoutubeFields(fields) {
+  const {
+    youtubeWatchUrl,
+    youtubePageUrl,
+    youtubeManifestUrl,
+    youtubeThumbnailUrl,
+    YOUTUBE_PLAYBACK_SCOPE,
+  } = require('./youtube/youtubeFeature');
+  const videoId = fields.external_id;
+  if (!videoId) return fields;
+  return {
+    ...fields,
+    artist_name: fields.artist_name || 'YouTube',
+    title: fields.title || 'YouTube Video',
+    page_url: youtubePageUrl(videoId),
+    playback_url: youtubeWatchUrl(videoId),
+    song_manifest_url: youtubeManifestUrl(videoId),
+    playback_scope: YOUTUBE_PLAYBACK_SCOPE,
+    cover_url: fields.cover_url || youtubeThumbnailUrl(videoId),
+    external_id: videoId,
+    site_root_normalized: '',
+  };
+}
+
 /**
  * Build the full row payload stored on a playlist — called only on add/move/repair.
  * Playlist-to-playlist copies carry the stored snapshot forward without re-querying catalog.
@@ -227,6 +254,10 @@ function materializePlaylistSnapshot(song, options = {}) {
   }
 
   let fields = captureSongFields(song);
+
+  if (isYoutubeSnapshot(fields.page_url) || fields.playback_scope === 'youtube') {
+    return enrichSongFromYoutubeFields(fields);
+  }
 
   if (isSunoDemoSongId(song.id) || isSunoSnapshot(fields.page_url)) {
     return enrichSongFromSuno(song);
@@ -448,6 +479,28 @@ function getEntryBySongId(songId) {
   return getDatabase().prepare('SELECT * FROM user_playlist_songs WHERE id = ?').get(entryId);
 }
 
+/** Persist runtime duration on a custom playlist snapshot row. */
+function updateUserPlaylistSongDuration(songId, durationSeconds) {
+  const entryId = entryIdFromSongId(songId);
+  if (entryId <= 0) return false;
+
+  const rounded = Math.round(durationSeconds);
+  if (!Number.isFinite(rounded) || rounded <= 0) return false;
+
+  const result = getDatabase()
+    .prepare(
+      `UPDATE user_playlist_songs SET duration_seconds = ?
+       WHERE id = ? AND (duration_seconds IS NULL OR duration_seconds <= 0)`,
+    )
+    .run(rounded, entryId);
+
+  return result.changes > 0;
+}
+
+function isUserPlaylistSongId(songId) {
+  return typeof songId === 'number' && songId <= USER_PLAYLIST_SONG_ID_BASE;
+}
+
 function rowToSongRow(row, playlistArtistId) {
   const entrySongId = songIdFromEntryId(row.id);
   return {
@@ -652,6 +705,11 @@ module.exports = {
   moveSongToUserPlaylist,
   removeUserPlaylistSong,
   getEntryBySongId,
+  getPlaylistSongRow,
+  findDuplicateEntryId,
+  insertSongFields,
+  updateUserPlaylistSongDuration,
+  isUserPlaylistSongId,
   userPlaylistArtistId,
   userPlaylistIdFromArtistId,
   isUserPlaylistArtistId,

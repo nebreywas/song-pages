@@ -5,6 +5,7 @@ import { VcWindowApp } from './VcWindowApp';
 import '../styles/themes.css';
 import '../styles/select.css';
 import '../styles/app.css';
+import '../styles/sunoDemo.css';
 import '../styles/visualizer.css';
 import '../vc-mode/vcMode.css';
 import './vc-window.css';

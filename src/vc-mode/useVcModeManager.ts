@@ -5,6 +5,7 @@ import type { VcModeConfig, VcPlaybackEffectsMirror, VcProjectionWindowBounds, V
 import { DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR } from '@shared/vcMode/playbackEffectsMirror';
 import { deriveCommandRuntimeContextFromVcState } from '@shared/commands';
 import { configUsesVisualizer, normalizeVcConfig } from '@shared/vcModeTypes';
+import { isYoutubeSong, youtubeVideoIdFromSong } from '@shared/youtube/youtubeFeature';
 
 import { resolveSongAssetUrl, resolveSongCoverUrl, normalizeSongRowAssets } from '@shared/listener/songResolution';
 
@@ -87,6 +88,8 @@ function buildSongPayload(
     durationSeconds: normalized.duration_seconds,
     mainGenre: null,
     additionalGenres: null,
+    playbackScope: normalized.playback_scope ?? null,
+    youtubeVideoId: isYoutubeSong(normalized) ? youtubeVideoIdFromSong(normalized) : null,
   };
 }
 
@@ -195,7 +198,11 @@ export function useVcModeManager({
     timingRef.current = { currentTime, duration, isPlaying };
   }, [currentTime, duration, isPlaying]);
 
-  const analyserEnabled = vcOpen && configUsesVisualizer(activeConfig) && playingSong != null;
+  const analyserEnabled =
+    vcOpen &&
+    configUsesVisualizer(activeConfig) &&
+    playingSong != null &&
+    !isYoutubeSong(playingSong);
 
   const { analyser, butterchurnTap, applyButterchurnAudioSettings, audioContext } = useAudioAnalyser({
     audioRef: analyserAudioRef,

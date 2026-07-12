@@ -42,4 +42,21 @@ describe('urlPolicy', () => {
     assert.equal(isPrivateOrLocalAddress('192.168.0.1'), true);
     assert.equal(isPrivateOrLocalAddress('example.com'), false);
   });
+
+  it('allows YouTube oEmbed endpoint for metadata intake', () => {
+    const result = validateRemoteUrl(
+      'https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc&format=json',
+      { purpose: 'youtube-oembed', provenance: { kind: 'youtube-oembed', videoId: 'abc' } },
+    );
+    assert.equal(result.ok, true);
+  });
+
+  it('denies non-oEmbed YouTube URLs for metadata intake', () => {
+    const result = validateRemoteUrl('https://www.youtube.com/watch?v=abc', {
+      purpose: 'youtube-oembed',
+      provenance: { kind: 'youtube-oembed', videoId: 'abc' },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'URL_HOST');
+  });
 });

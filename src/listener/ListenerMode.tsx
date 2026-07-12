@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { VcPlaybackEffectsMirror } from '@shared/vcModeTypes';
+import { configUsesVisualizer, type VcPlaybackEffectsMirror } from '@shared/vcModeTypes';
 import { getApp } from '../lib/bridge';
 import Hls from 'hls.js';
 import { SongPageWebview } from './SongPageWebview';
@@ -67,6 +67,8 @@ import { LibraryPlaylistRenameDialog } from './LibraryPlaylistRenameDialog';
 import { SongToPlaylistModal } from './SongToPlaylistModal';
 import { SharePlaylistModal } from './SharePlaylistModal';
 import { CustomPlaylistPanel } from './CustomPlaylistPanel';
+import { YoutubeSongPage } from './YoutubeSongPage';
+import type { YoutubePlayerHandle } from './youtube/YoutubePlayer';
 import { sidebarEntryType, isRenamableSidebarPlaylist, isSidebarPlaylistContextTarget } from './sidebarEntry';
 import { SkippedSongMarker } from './SkippedSongMarker';
 import { shareableSongLink } from './shareableSongPageUrl';
@@ -79,6 +81,7 @@ import {
 import {
   buildUserPlaylistArtistRow,
   isUserPlaylistArtistId,
+  isUserPlaylistSongId,
   userPlaylistIdFromArtistId,
   userPlaylistArtistId,
   type PlaylistPickerRow,
@@ -91,6 +94,7 @@ import {
   sunoPlaylistIdFromArtistId,
   SUNO_DEMO_FEATURE_ENABLED,
 } from '@shared/demo/sunoDemoFeature';
+import { isYoutubeSong } from '@shared/youtube/youtubeFeature';
 import type { ArtistRow, SongRow } from '../types/app';
 import { EmbeddedVisualizerHost } from '../visualizers/EmbeddedVisualizerHost';
 import { VisualizerSettingsDialog } from '../visualizers/settings/ui/VisualizerSettingsDialog';
@@ -158,6 +162,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [siteUrl, setSiteUrl] = useState('');
   const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
   const [sunoDemoAddOpen, setSunoDemoAddOpen] = useState(false);
+  const [youtubeAddOpen, setYoutubeAddOpen] = useState(false);
   const [sharePlaylistOpen, setSharePlaylistOpen] = useState(false);
   const [vcCloseConfirmOpen, setVcCloseConfirmOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -235,6 +240,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const rowClickTimerRef = useRef<number | null>(null);
   const durationProbeRef = useRef<Set<number>>(new Set());
   const playSongRef = useRef<(song: SongRow) => Promise<void>>(async () => {});
+  const youtubePlayerRef = useRef<YoutubePlayerHandle | null>(null);
   const playNextRef = useRef<() => void>(() => {});
   /** Last row passed to playSong — visualizer must not depend on the selected playlist's song list. */
   const playingSongRowRef = useRef<SongRow | null>(null);
@@ -246,6 +252,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     handleSeek: (_time: number) => {},
     playSong: async (_song: SongRow) => {},
     sortedSongs: [] as SongRow[],
+    handleYoutubeEnded: () => {},
+    handleYoutubeDuration: (_seconds: number) => {},
+    applyYoutubeTiming: (_currentTime: number, _duration: number) => {},
   });
 
   const selectedArtist = artists.find((artist) => artist.id === selectedArtistId) ?? null;
@@ -282,6 +291,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const showArtistColumn = isLikedPlaylist || isSunoPlaylist || isCustomPlaylistSelected;
   const activeSongPage = previewSong ?? playingSong;
   const showingSunoDemoPage = Boolean(activeSongPage && isSunoDemoSong(activeSongPage));
+  const showingYoutubePage = Boolean(activeSongPage && isYoutubeSong(activeSongPage));
   const canToggleLike = previewSong != null && previewSong.id > 0;
   const playlistKey = useMemo(
     () => (selectedArtistId != null ? playlistKeyForArtistId(selectedArtistId) : null),
@@ -376,7 +386,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const persistSongDuration = useCallback(async (songId: number, seconds: number) => {
     const rounded = Math.round(seconds);
     if (rounded <= 0) return;
-    if (songId <= 0 && !isSunoDemoSongId(songId)) return;
+    if (songId <= 0 && !isSunoDemoSongId(songId) && !isUserPlaylistSongId(songId)) return;
 
     setRuntimeDurations((prev) => ({ ...prev, [songId]: rounded }));
     setSongs((prev) =>
@@ -636,6 +646,24 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     onPlayNext: () => playNextRef.current(),
   });
 
+  const handleYoutubeDuration = useCallback(
+    (seconds: number) => {
+      setDuration(seconds);
+      if (playingSongId != null && seconds > 0) {
+        void persistSongDuration(playingSongId, seconds);
+      }
+    },
+    [persistSongDuration, playingSongId],
+  );
+
+  const handleYoutubeReady = useCallback(() => {
+    if (playingSongIdRef.current != null) setIsPlaying(true);
+  }, []);
+
+  const handleYoutubeError = useCallback((message: string) => {
+    setError(message);
+  }, []);
+
   const vcPlaybackEffects = useMemo(
     (): VcPlaybackEffectsMirror => ({
       bassBoost,
@@ -676,6 +704,79 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     playbackEffects: vcPlaybackEffects,
     specialPlayPause: specialPlay.specialPlayPause,
   });
+
+  const vcYoutubeCaptureActive = useMemo(
+    () =>
+      vc.vcOpen &&
+      configUsesVisualizer(vc.activeConfig) &&
+      playingSong != null &&
+      isYoutubeSong(playingSong),
+    [vc.vcOpen, vc.activeConfig, playingSong],
+  );
+
+  const prevVcYoutubeCaptureRef = useRef(false);
+  useEffect(() => {
+    const active = vcYoutubeCaptureActive;
+    const wasActive = prevVcYoutubeCaptureRef.current;
+    prevVcYoutubeCaptureRef.current = active;
+    if (
+      !wasActive &&
+      active &&
+      playingSongId != null &&
+      playingSong != null &&
+      isYoutubeSong(playingSong)
+    ) {
+      setIsPlaying(true);
+    }
+  }, [vcYoutubeCaptureActive, playingSong, playingSongId]);
+
+  const handleYoutubeEnded = useCallback(() => {
+    if (advancingFromEndedRef.current) return;
+
+    setIsPlaying(false);
+    if (repeatMode === 'one') {
+      if (vcYoutubeCaptureActive) {
+        setCurrentTime(0);
+        setIsPlaying(true);
+      } else {
+        youtubePlayerRef.current?.seek(0);
+        youtubePlayerRef.current?.play();
+        setIsPlaying(true);
+      }
+      return;
+    }
+
+    const currentSongId = playingSongIdRef.current;
+    if (currentSongId == null) return;
+    if (vc.vcOpen && specialPlay.beginPauseAfterSong(vc.activeConfig.specialPlayStyle)) {
+      return;
+    }
+
+    advancingFromEndedRef.current = true;
+    const nextSongId = pickNextSongId(currentSongId);
+    if (nextSongId == null) {
+      advancingFromEndedRef.current = false;
+      return;
+    }
+    const nextSong = sortedSongsRef.current.find((song) => song.id === nextSongId);
+    if (nextSong) void playSongRef.current(nextSong);
+    advancingFromEndedRef.current = false;
+  }, [
+    pickNextSongId,
+    repeatMode,
+    specialPlay,
+    vc.activeConfig.specialPlayStyle,
+    vc.vcOpen,
+    vcYoutubeCaptureActive,
+  ]);
+
+  const applyYoutubeTiming = useCallback((nextTime: number, nextDuration: number) => {
+    if (!Number.isFinite(nextTime)) return;
+    setCurrentTime(nextTime);
+    if (Number.isFinite(nextDuration) && nextDuration > 0) {
+      setDuration(nextDuration);
+    }
+  }, []);
 
   useListenerPlaybackCommands({
     mainAudioRef: audioRef,
@@ -788,6 +889,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       }
       if (command.type === 'playNextSong') {
         specialPlay.playNextAfterPause();
+        return;
+      }
+      if (command.type === 'youtubeEnded') {
+        handlers.handleYoutubeEnded();
+        return;
+      }
+      if (command.type === 'youtubeTiming') {
+        handlers.applyYoutubeTiming(command.currentTime, command.duration);
+        return;
+      }
+      if (command.type === 'youtubeDuration') {
+        handlers.handleYoutubeDuration(command.seconds);
       }
     });
 
@@ -838,6 +951,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   );
   const probeDurationForSong = useCallback(
     async (song: SongRow) => {
+      // YouTube length is learned from the visible player on first play — not probed at intake.
+      if (isYoutubeSong(song)) return;
       if (!songNeedsDurationProbe(song, runtimeDurations[song.id])) return;
       if (durationProbeRef.current.has(song.id)) return;
 
@@ -885,11 +1000,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
       setPlayingSongId(song.id);
       playingSongRowRef.current = song;
-      // Keep VC mirror URL in sync with songId — stale activePlaybackUrl caused previous track audio after skip/next.
-      setActivePlaybackUrl(song.playback_url ?? null);
+      // YouTube uses the embedded iframe player — no HLS mirror URL for VC.
+      setActivePlaybackUrl(isYoutubeSong(song) ? null : (song.playback_url ?? null));
       setCurrentTime(0);
       setDuration(song.duration_seconds ?? 0);
-      setIsPlaying(false);
+      setIsPlaying(isYoutubeSong(song));
       setPreviewSongId(song.id);
       setMainContentView('song');
       setPageLoadError(null);
@@ -906,7 +1021,17 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       const audio = audioRef.current;
       if (!audio) return;
 
-      // pause/destroyHls can emit spurious `ended` — ignore until the new source is ready.
+      if (isYoutubeSong(song)) {
+        suppressPlaybackEndedRef.current = true;
+        destroyHls();
+        audio.pause();
+        suppressPlaybackEndedRef.current = false;
+        // audio.pause() must not leave isPlaying false after the async access gap above.
+        setIsPlaying(true);
+        return;
+      }
+
+      setIsPlaying(false);
       suppressPlaybackEndedRef.current = true;
       destroyHls();
       audio.pause();
@@ -1048,7 +1173,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     };
 
     const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
+    const onPause = () => {
+      // playSong pauses the hidden <audio> for YouTube tracks — that must not clear isPlaying.
+      const row = playingSongRowRef.current;
+      if (row && isYoutubeSong(row) && playingSongIdRef.current === row.id) return;
+      setIsPlaying(false);
+    };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('durationchange', onDurationChange);
@@ -1064,6 +1194,26 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       audio.removeEventListener('pause', onPause);
     };
   }, [persistSongDuration, pickNextSongId, playingSongId, repeatMode, specialPlay.beginPauseAfterSong, vc.activeConfig.specialPlayStyle, vc.vcOpen]);
+
+  useEffect(() => {
+    if (vcYoutubeCaptureActive) return;
+    if (!showingYoutubePage || playingSongId == null || !isPlaying) return;
+
+    const tick = () => {
+      const player = youtubePlayerRef.current;
+      if (!player) return;
+      const nextTime = player.getCurrentTime();
+      if (Number.isFinite(nextTime)) setCurrentTime(nextTime);
+      const nextDuration = player.getDuration();
+      if (Number.isFinite(nextDuration) && nextDuration > 0) {
+        setDuration(nextDuration);
+      }
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 250);
+    return () => window.clearInterval(intervalId);
+  }, [isPlaying, playingSongId, showingYoutubePage, vcYoutubeCaptureActive]);
 
   useEffect(() => () => destroyHls(), []);
 
@@ -1173,6 +1323,34 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     // Refresh sidebar count and the Suno playlist if it is already open — do not interrupt playback.
     await loadLibrary();
   }, [loadLibrary]);
+
+  const handleYoutubeAdded = useCallback(
+    async (result: {
+      duplicate: boolean;
+      intakeNotice?: string | null;
+      song?: SongRow;
+    }) => {
+      const app = getApp();
+      if (
+        !result.duplicate &&
+        result.song &&
+        isUserPlaylistArtistId(selectedArtistId) &&
+        app
+      ) {
+        setSongs((prev) => [result.song!, ...prev.filter((row) => row.id !== result.song!.id)]);
+      }
+
+      await loadLibrary();
+
+      if (result.duplicate) {
+        addToast('Song is already on that playlist.');
+      } else {
+        addToast('Added to playlist.');
+      }
+      if (result.intakeNotice) addToast(result.intakeNotice);
+    },
+    [addToast, loadLibrary, selectedArtistId],
+  );
 
   const handleCreateSunoPlaylist = useCallback(async () => {
     const app = getApp();
@@ -1375,6 +1553,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const selectedSunoPlaylistId = isSunoDemoArtistId(selectedArtistId)
     ? sunoPlaylistIdFromArtistId(selectedArtistId) ?? undefined
     : undefined;
+  const selectedCustomPlaylistId = isUserPlaylistArtistId(selectedArtistId)
+    ? userPlaylistIdFromArtistId(selectedArtistId) ?? undefined
+    : undefined;
 
   const selectArtist = (artistId: number) => {
     setSelectedArtistId(artistId);
@@ -1382,6 +1563,21 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   };
 
   const togglePlayPause = () => {
+    if (showingYoutubePage && playingSongId != null && activeSongPage?.id === playingSongId) {
+      if (vcYoutubeCaptureActive) {
+        setIsPlaying(!isPlaying);
+        return;
+      }
+      if (isPlaying) {
+        youtubePlayerRef.current?.pause();
+        setIsPlaying(false);
+      } else {
+        youtubePlayerRef.current?.play();
+        setIsPlaying(true);
+      }
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
@@ -1737,6 +1933,17 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   };
 
   const handleSeek = (time: number) => {
+    if (showingYoutubePage && playingSongId != null && activeSongPage?.id === playingSongId) {
+      const clamped = duration > 0 ? Math.min(duration, Math.max(0, time)) : Math.max(0, time);
+      if (vcYoutubeCaptureActive) {
+        setCurrentTime(clamped);
+        return;
+      }
+      youtubePlayerRef.current?.seek(clamped);
+      setCurrentTime(clamped);
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio || duration <= 0) return;
     audio.currentTime = Math.min(duration, Math.max(0, time));
@@ -1750,6 +1957,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     handleSeek,
     playSong,
     sortedSongs,
+    handleYoutubeEnded,
+    handleYoutubeDuration,
+    applyYoutubeTiming,
   };
 
   const handleContentResize = (deltaY: number) => {
@@ -1847,6 +2057,24 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       );
     }
 
+    if (mainContentView === 'song' && showingYoutubePage && activeSongPage) {
+      return (
+        <YoutubeSongPage
+          key={activeSongPage.id}
+          song={activeSongPage}
+          playerRef={youtubePlayerRef}
+          playbackGeneration={playbackGenerationRef.current}
+          shouldPlay={playingSongId === activeSongPage.id && isPlaying && !vcYoutubeCaptureActive}
+          captureInVc={vcYoutubeCaptureActive}
+          onReady={handleYoutubeReady}
+          onPlayingChange={setIsPlaying}
+          onEnded={handleYoutubeEnded}
+          onDuration={handleYoutubeDuration}
+          onError={handleYoutubeError}
+        />
+      );
+    }
+
     if (mainContentView === 'song' && pageUrl) {
       return (
         <>
@@ -1891,6 +2119,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           <CustomPlaylistPanel
             playlistName={selectedArtist.artist_name}
             songCount={selectedArtist.song_count ?? songs.length}
+            playlistId={selectedCustomPlaylistId}
+            addYoutubeOpen={youtubeAddOpen}
+            busy={busy}
+            onAddYoutubeOpenChange={setYoutubeAddOpen}
+            onYoutubeAdded={(result) => void handleYoutubeAdded(result)}
             onSharePlaylist={() => setSharePlaylistOpen(true)}
           />
         );

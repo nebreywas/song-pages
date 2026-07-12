@@ -234,6 +234,7 @@ function registerIpcHandlers() {
   ipcMain.handle('listener:fetchSongManifest', async (_event, url) => {
     const { parseManifestSongId } = require('./listener/sunoDemo/feature');
     const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
+    const youtubeSongs = require('./listener/youtube/youtubeSongs');
     const sunoSongId = parseManifestSongId(url);
     if (sunoSongId != null) {
       const manifest = sunoDemoSongs.buildManifestForSongId(sunoSongId);
@@ -241,6 +242,11 @@ function registerIpcHandlers() {
         return { ok: false, error: 'Suno demo song not found.' };
       }
       return { ok: true, data: manifest };
+    }
+
+    const youtubeVideoId = youtubeSongs.parseYoutubeManifestVideoId(url);
+    if (youtubeVideoId) {
+      return { ok: true, data: youtubeSongs.buildManifestForVideoId(youtubeVideoId) };
     }
 
     const provenance = resolveManifestFetchProvenance(url);
@@ -267,8 +273,12 @@ function registerIpcHandlers() {
   ipcMain.handle('listener:updateSongDuration', (_event, songId, durationSeconds) => {
     const { isSunoDemoSongId } = require('./listener/sunoDemo/feature');
     const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
+    const userPlaylists = require('./listener/userPlaylists');
     if (isSunoDemoSongId(songId)) {
       return sunoDemoSongs.updateSunoDemoSongDuration(songId, durationSeconds);
+    }
+    if (userPlaylists.isUserPlaylistSongId(songId)) {
+      return userPlaylists.updateUserPlaylistSongDuration(songId, durationSeconds);
     }
     return listenerLibrary.updateSongDurationSeconds(songId, durationSeconds);
   });
@@ -359,6 +369,19 @@ function registerIpcHandlers() {
     try {
       if (typeof playlistId !== 'number' || !song) return { ok: false, error: 'Invalid add request.' };
       return userPlaylists.addSongToUserPlaylist(playlistId, song);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:addYoutubeSongToUserPlaylist', async (_event, playlistId, input) => {
+    const youtubeSongs = require('./listener/youtube/youtubeSongs');
+    try {
+      if (typeof playlistId !== 'number' || typeof input !== 'string' || !input.trim()) {
+        return { ok: false, error: 'Invalid YouTube add request.' };
+      }
+      return await youtubeSongs.addYoutubeSongToUserPlaylist(playlistId, input);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message };

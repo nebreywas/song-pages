@@ -8,7 +8,7 @@
  * all rebinding attacks. Documented limitation; do not expand into a full network framework.
  */
 
-/** @typedef {'subscribe-catalog' | 'refresh-catalog' | 'fetch-song-manifest' | 'probe-song-availability'} UrlPurpose */
+/** @typedef {'subscribe-catalog' | 'refresh-catalog' | 'fetch-song-manifest' | 'probe-song-availability' | 'youtube-oembed'} UrlPurpose */
 
 /** @typedef {'user-initiated' | 'catalog-context' | 'song-context' | 'none'} UrlProvenance */
 
@@ -100,6 +100,18 @@ function validateRemoteUrl(url, options) {
         code: 'URL_PROVENANCE',
         error: 'Availability probe requires song or catalog context.',
       };
+
+    case 'youtube-oembed': {
+      const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+      if (host === 'youtube.com' && parsed.pathname === '/oembed') {
+        return { ok: true, url: parsed.href, provenance };
+      }
+      return {
+        ok: false,
+        code: 'URL_HOST',
+        error: 'YouTube metadata must use the public oEmbed endpoint.',
+      };
+    }
 
     default:
       return { ok: false, code: 'URL_PURPOSE', error: 'Unknown URL validation purpose.' };

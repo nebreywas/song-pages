@@ -262,6 +262,10 @@ export type VcSongPayload = {
   /** Added soon in song JSON — optional until editor ships. */
   mainGenre?: string | null;
   additionalGenres?: string | null;
+  /** `youtube` for custom-playlist YouTube tracks — drives visualizer-slot swap in VC. */
+  playbackScope?: string | null;
+  /** Canonical 11-char id when playbackScope is YouTube. */
+  youtubeVideoId?: string | null;
 };
 
 export type VcUpcomingSong = {

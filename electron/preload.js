@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('app', {
     removeUserPlaylist: (playlistId) => ipcRenderer.invoke('listener:removeUserPlaylist', playlistId),
     addSongToUserPlaylist: (playlistId, song) =>
       ipcRenderer.invoke('listener:addSongToUserPlaylist', playlistId, song),
+    addYoutubeSongToUserPlaylist: (playlistId, input) =>
+      ipcRenderer.invoke('listener:addYoutubeSongToUserPlaylist', playlistId, input),
     moveSongToUserPlaylist: (payload) => ipcRenderer.invoke('listener:moveSongToUserPlaylist', payload),
     removeUserPlaylistSong: (songId) => ipcRenderer.invoke('listener:removeUserPlaylistSong', songId),
     addSunoDemoSong: (input, playlistId) => ipcRenderer.invoke('listener:addSunoDemoSong', input, playlistId),

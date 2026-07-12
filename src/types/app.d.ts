@@ -184,6 +184,19 @@ declare global {
           data?: { duplicate: boolean; song: SongRow; count: number };
           error?: string;
         }>;
+        addYoutubeSongToUserPlaylist: (
+          playlistId: number,
+          input: string,
+        ) => Promise<{
+          ok: boolean;
+          data?: {
+            duplicate: boolean;
+            song: SongRow;
+            count: number;
+            intakeNotice?: string | null;
+          };
+          error?: string;
+        }>;
         moveSongToUserPlaylist: (payload: {
           sourceArtistId: number;
           destPlaylistId: number;
