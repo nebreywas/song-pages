@@ -41,7 +41,7 @@ export const MIN_PLAYLIST_COLUMN_PX: Record<PlaylistColumnId, number> = {
   artist: 64,
   album: 48,
   year: 36,
-  source: 48,
+  source: 34,
   duration: 52,
 };
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { configUsesVisualizer, type VcPlaybackEffectsMirror } from '@shared/vcModeTypes';
 import { getApp } from '../lib/bridge';
 import Hls from 'hls.js';
@@ -60,7 +60,7 @@ import { shouldUseDirectAudioPlayback, loadDirectAudioPlayback } from './directA
 import { PlaylistRowContextMenu } from './PlaylistRowContextMenu';
 import { LibrarySidebarContextMenu } from './LibrarySidebarContextMenu';
 import { LibraryPlaylistRemoveConfirm } from './LibraryPlaylistRemoveConfirm';
-import { LibraryPlaylistRenameDialog } from './LibraryPlaylistRenameDialog';
+import { LibraryPlaylistInfoDialog } from './LibraryPlaylistInfoDialog';
 import { SongToPlaylistModal } from './SongToPlaylistModal';
 import { SharePlaylistModal } from './SharePlaylistModal';
 import { CustomPlaylistPanel } from './CustomPlaylistPanel';
@@ -179,6 +179,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [lofi, setLofi] = useState(false);
   const [effectsLab, setEffectsLab] = useState<EffectsLabState>(() => DEFAULT_EFFECTS_LAB_STATE);
   const [crossfades, setCrossfades] = useState(false);
+  const [chromeMinified, setChromeMinified] = useState(false);
   const [contentHeight, setContentHeight] = useState(DEFAULT_CONTENT_HEIGHT);
   const [runtimeDurations, setRuntimeDurations] = useState<Record<number, number>>({});
   const [sortColumn, setSortColumn] = useState<SortColumn>('order');
@@ -204,7 +205,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [libraryPlaylistRemoveTarget, setLibraryPlaylistRemoveTarget] = useState<ArtistRow | null>(
     null,
   );
-  const [libraryPlaylistRenameTarget, setLibraryPlaylistRenameTarget] = useState<ArtistRow | null>(
+  const [libraryPlaylistInfoTarget, setLibraryPlaylistInfoTarget] = useState<ArtistRow | null>(
     null,
   );
   const [songToPlaylistModal, setSongToPlaylistModal] = useState<{
@@ -223,6 +224,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const playingSongIdRef = useRef<number | null>(null);
   const pageAccessGenerationRef = useRef(0);
   const mainColumnRef = useRef<HTMLDivElement>(null);
+  const listenerLayoutRef = useRef<HTMLDivElement>(null);
+  const listenerControlsRef = useRef<HTMLElement>(null);
   const playlistPanelRef = useRef<HTMLElement>(null);
   const rowClickTimerRef = useRef<number | null>(null);
   const durationProbeRef = useRef<Set<number>>(new Set());
@@ -361,24 +364,27 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     return snapshot;
   }, [runtimeDurations, songs]);
 
-  const toggleSort = (column: SortColumn) => {
-    setSortDurationsSnapshot(buildDurationSnapshot());
+  const toggleSort = useCallback(
+    (column: SortColumn) => {
+      setSortDurationsSnapshot(buildDurationSnapshot());
 
-    // # = catalog order; * = saved personal order (handled separately).
-    if (column === 'order' || column === 'custom') {
+      // # = catalog order; * = saved personal order (handled separately).
+      if (column === 'order' || column === 'custom') {
+        setSortColumn(column);
+        setSortDirection('asc');
+        return;
+      }
+
+      if (sortColumn === column) {
+        setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+        return;
+      }
+
       setSortColumn(column);
       setSortDirection('asc');
-      return;
-    }
-
-    if (sortColumn === column) {
-      setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-
-    setSortColumn(column);
-    setSortDirection('asc');
-  };
+    },
+    [buildDurationSnapshot, sortColumn],
+  );
 
   const persistSongDuration = useCallback(async (songId: number, seconds: number) => {
     const rounded = Math.round(seconds);
@@ -559,9 +565,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       const result = await app.listener.savePlaylistCustomOrder(playlistKey, reordered);
       if (!result.ok) {
         setError(result.error ?? 'Could not save playlist order.');
+        return;
+      }
+      if (playlistKey.startsWith('user:')) {
+        await loadLibrary();
       }
     },
-    [playlistKey],
+    [loadLibrary, playlistKey],
   );
 
   const playlistDrag = usePlaylistDragReorder({
@@ -607,6 +617,39 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     const observer = new ResizeObserver(onColumnResize);
     observer.observe(column);
     return () => observer.disconnect();
+  }, []);
+
+  // Shrink / restore the Electron window to fit the control bar in minified mode.
+  useLayoutEffect(() => {
+    const app = getApp();
+    if (!app?.listener?.setChromeMinified) return;
+
+    if (!chromeMinified) {
+      void app.listener.setChromeMinified({ minified: false });
+      return;
+    }
+
+    const layoutEl = listenerLayoutRef.current;
+    const controlsEl = listenerControlsRef.current;
+    if (!layoutEl || !controlsEl) return;
+
+    const layoutStyle = getComputedStyle(layoutEl);
+    const padX = parseFloat(layoutStyle.paddingLeft) + parseFloat(layoutStyle.paddingRight);
+    const padY = parseFloat(layoutStyle.paddingTop) + parseFloat(layoutStyle.paddingBottom);
+    const controls = controlsEl.getBoundingClientRect();
+
+    void app.listener.setChromeMinified({
+      minified: true,
+      contentWidth: Math.ceil(controls.width + padX),
+      contentHeight: Math.ceil(controls.height + padY),
+    });
+  }, [chromeMinified]);
+
+  useEffect(() => {
+    return () => {
+      const app = getApp();
+      void app?.listener?.setChromeMinified({ minified: false });
+    };
   }, []);
 
   const destroyHls = () => {
@@ -1392,17 +1435,21 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     });
   }, []);
 
-  const handleRequestRenameLibraryPlaylist = useCallback(() => {
-    if (!librarySidebarContextMenu) return;
-    const type = sidebarEntryType(librarySidebarContextMenu.artist);
+  const openPlaylistInfoForArtist = useCallback((artist: ArtistRow) => {
+    const type = sidebarEntryType(artist);
     if (!isRenamableSidebarPlaylist(type)) return;
-    setLibraryPlaylistRenameTarget(librarySidebarContextMenu.artist);
-    setLibrarySidebarContextMenu(null);
-  }, [librarySidebarContextMenu]);
+    setLibraryPlaylistInfoTarget(artist);
+  }, []);
 
-  const handleConfirmRenameLibraryPlaylist = useCallback(
-    async (name: string) => {
-      const target = libraryPlaylistRenameTarget;
+  const handleRequestPlaylistInfo = useCallback(() => {
+    if (!librarySidebarContextMenu) return;
+    openPlaylistInfoForArtist(librarySidebarContextMenu.artist);
+    setLibrarySidebarContextMenu(null);
+  }, [librarySidebarContextMenu, openPlaylistInfoForArtist]);
+
+  const handleConfirmPlaylistInfo = useCallback(
+    async ({ name, about }: { name: string; about: string }) => {
+      const target = libraryPlaylistInfoTarget;
       if (!target) return;
 
       const entryType = sidebarEntryType(target);
@@ -1415,35 +1462,44 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         let result;
         if (entryType === 'playlist') {
           const playlistId = userPlaylistIdFromArtistId(target.id);
-          if (!playlistId || !app.listener.renameUserPlaylist) {
-            setError('Restart the app to enable playlist renaming.');
+          if (!playlistId || !app.listener.updateUserPlaylist) {
+            setError('Restart the app to enable playlist editing.');
             return;
           }
-          result = await app.listener.renameUserPlaylist(playlistId, name);
+          result = await app.listener.updateUserPlaylist(playlistId, { name, about });
         } else {
           return;
         }
 
         if (!result.ok || !result.data) {
-          setError(result.error ?? 'Could not rename that playlist.');
+          setError(result.error ?? 'Could not update that playlist.');
           return;
         }
 
-        setLibraryPlaylistRenameTarget(null);
+        const aboutText = result.data.about?.trim() || null;
+        setLibraryPlaylistInfoTarget(null);
         setArtists((prev) =>
           prev.map((row) =>
-            row.id === target.id ? { ...row, artist_name: result.data!.name, song_count: result.data!.song_count } : row,
+            row.id === target.id
+              ? {
+                  ...row,
+                  artist_name: result.data!.name,
+                  artist_bio: aboutText,
+                  updated_at: result.data!.updated_at ?? result.data!.created_at,
+                  song_count: result.data!.song_count,
+                }
+              : row,
           ),
         );
-        addToast(`Renamed to ${result.data.name}.`);
+        addToast('Playlist updated.');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        setError(message || 'Could not rename that playlist.');
+        setError(message || 'Could not update that playlist.');
       } finally {
         setBusy(false);
       }
     },
-    [addToast, libraryPlaylistRenameTarget],
+    [addToast, libraryPlaylistInfoTarget],
   );
 
   const clearPlaybackForRemovedPlaylist = useCallback(
@@ -1473,11 +1529,10 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     [playingSong?.artist_id, previewSong?.artist_id, selectedArtistId],
   );
 
-  const handleRequestRemoveLibraryPlaylist = useCallback(() => {
-    if (!librarySidebarContextMenu) return;
-    setLibraryPlaylistRemoveTarget(librarySidebarContextMenu.artist);
+  const handleRequestRemoveLibraryPlaylist = useCallback((artist: ArtistRow) => {
+    setLibraryPlaylistRemoveTarget(artist);
     setLibrarySidebarContextMenu(null);
-  }, [librarySidebarContextMenu]);
+  }, []);
 
   const handleConfirmRemoveLibraryPlaylist = useCallback(async () => {
     const target = libraryPlaylistRemoveTarget;
@@ -2109,13 +2164,23 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         return (
           <CustomPlaylistPanel
             playlistName={selectedArtist.artist_name}
+            playlistAbout={selectedArtist.artist_bio}
+            createdAt={selectedArtist.created_at}
+            updatedAt={selectedArtist.updated_at ?? selectedArtist.created_at}
             songCount={selectedArtist.song_count ?? songs.length}
+            songs={songs}
             playlistId={selectedCustomPlaylistId}
             addSongOpen={addSongOpen}
             busy={busy}
             onAddSongOpenChange={setAddSongOpen}
             onSongAdded={(result) => void handleExternalSongAdded(result)}
             onSharePlaylist={() => setSharePlaylistOpen(true)}
+            onEditPlaylistInfo={() => {
+              if (selectedArtist) openPlaylistInfoForArtist(selectedArtist);
+            }}
+            onRemovePlaylist={() => {
+              if (selectedArtist) handleRequestRemoveLibraryPlaylist(selectedArtist);
+            }}
           />
         );
       }
@@ -2136,7 +2201,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   return (
     <div
-      className={`listener-layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}${sidebarResizing ? ' sidebar-resizing' : ''}${!sidebarCollapsed && sidebarWidth >= LIBRARY_ADDED_COLUMN_MIN_WIDTH ? ' sidebar-library-added-visible' : ''}`}
+      ref={listenerLayoutRef}
+      className={`listener-layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}${sidebarResizing ? ' sidebar-resizing' : ''}${!sidebarCollapsed && sidebarWidth >= LIBRARY_ADDED_COLUMN_MIN_WIDTH ? ' sidebar-library-added-visible' : ''}${chromeMinified ? ' listener-chrome-minified' : ''}`}
       style={
         sidebarCollapsed
           ? undefined
@@ -2172,11 +2238,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       ) : null}
 
       <div className="listener-content">
-        <section className="listener-controls panel">
+        <section ref={listenerControlsRef} className="listener-controls panel">
           <PlayerBar
             disabled={!songs.length || playingSongId == null}
             isPlaying={isPlaying}
             nowPlayingTitle={playingSong?.title ?? ''}
+            nowPlayingArtist={playingSong?.artist_name ?? ''}
+            nowPlayingCoverUrl={playingSong?.cover_url ?? null}
             shuffle={shuffle}
             repeatMode={repeatMode}
             volume={volume}
@@ -2210,6 +2278,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             onToggleCrossfades={() => setCrossfades((on) => !on)}
             seekTimeDisplay={playerSettings.seekTimeDisplay}
             onToggleSeekTimeDisplay={toggleSeekLabel}
+            chromeMinified={chromeMinified}
+            onToggleChromeMinified={() => setChromeMinified((on) => !on)}
           />
           <audio ref={audioRef} preload="metadata" />
           <audio
@@ -2258,7 +2328,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
                 isLikedPlaylist
                   ? 'No liked songs yet.'
                   : isCustomPlaylistSelected
-                    ? 'No tracks yet. Open the playlist home and choose Add New Song.'
+                    ? 'No tracks yet. Open the playlist home and choose Add Song.'
                     : 'No songs in library.'
               }
               playingSongId={playingSongId}
@@ -2312,18 +2382,19 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           playlistName={librarySidebarContextMenu.artist.artist_name}
           x={librarySidebarContextMenu.x}
           y={librarySidebarContextMenu.y}
-          onRename={handleRequestRenameLibraryPlaylist}
-          onRemove={handleRequestRemoveLibraryPlaylist}
+          onRename={handleRequestPlaylistInfo}
+          onRemove={() => handleRequestRemoveLibraryPlaylist(librarySidebarContextMenu.artist)}
           onClose={() => setLibrarySidebarContextMenu(null)}
         />
       ) : null}
 
-      <LibraryPlaylistRenameDialog
-        open={libraryPlaylistRenameTarget != null}
-        playlistName={libraryPlaylistRenameTarget?.artist_name ?? ''}
+      <LibraryPlaylistInfoDialog
+        open={libraryPlaylistInfoTarget != null}
+        playlistName={libraryPlaylistInfoTarget?.artist_name ?? ''}
+        playlistAbout={libraryPlaylistInfoTarget?.artist_bio ?? ''}
         busy={busy}
-        onConfirm={(name) => void handleConfirmRenameLibraryPlaylist(name)}
-        onCancel={() => setLibraryPlaylistRenameTarget(null)}
+        onConfirm={(payload) => void handleConfirmPlaylistInfo(payload)}
+        onCancel={() => setLibraryPlaylistInfoTarget(null)}
       />
 
       <SharePlaylistModal

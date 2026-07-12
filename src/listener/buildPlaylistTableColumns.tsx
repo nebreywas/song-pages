@@ -9,6 +9,7 @@ import { isSongSkipped } from '@shared/listener/playlistKinds';
 import type { SongRow } from '../types/app';
 import { formatTime } from './formatTime';
 import { LikedSongIndicator } from './LikedSongIndicator';
+import { IconClock } from './PlayerIcons';
 import { playlistColumnClassName } from './playlistColumnClasses';
 import { PlaylistSongSourceCell } from './PlaylistSongSourceCell';
 import { SkippedSongMarker } from './SkippedSongMarker';
@@ -17,6 +18,7 @@ import { SortableColumnHeader } from './SortableColumnHeader';
 import type { usePlaylistDragReorder } from './usePlaylistDragReorder';
 
 type PlaylistDrag = ReturnType<typeof usePlaylistDragReorder>;
+type PlaylistDragHandles = Pick<PlaylistDrag, 'startDrag' | 'setRowRef'>;
 
 export type PlaylistTableColumnContext = {
   profile: PlaylistLayoutProfile;
@@ -29,7 +31,7 @@ export type PlaylistTableColumnContext = {
   catalogOrderBySongId: Map<number, number>;
   customOrderBySongId: Map<number, number>;
   runtimeDurations: Record<number, number>;
-  playlistDrag: PlaylistDrag;
+  playlistDrag: PlaylistDragHandles;
 };
 
 function songDurationLabel(song: SongRow, runtimeSeconds: number | undefined): string {
@@ -194,25 +196,31 @@ function buildColumn(
       return {
         ...base,
         header: () => (
-          <>
-            <span className="playlist-source-heading playlist-source-heading--short">Src</span>
-            <span className="playlist-source-heading playlist-source-heading--long">Source</span>
-          </>
+          <SortableColumnHeader
+            label="SRC"
+            ariaLabel="Source"
+            column="source"
+            activeColumn={ctx.sortColumn}
+            direction={ctx.sortDirection}
+            onSort={ctx.onSort}
+            className="playlist-source-heading"
+          />
         ),
         cell: ({ row }) => <PlaylistSongSourceCell song={row.original} />,
-        enableSorting: false,
       };
     case 'duration':
       return {
         ...base,
         header: () => (
           <SortableColumnHeader
-            label="Length"
             column="length"
             activeColumn={ctx.sortColumn}
             direction={ctx.sortDirection}
             onSort={ctx.onSort}
-          />
+            ariaLabel="Length"
+          >
+            <IconClock className="playlist-duration-header-icon" />
+          </SortableColumnHeader>
         ),
         cell: ({ row }) =>
           row.original.unavailable === 1 ? (

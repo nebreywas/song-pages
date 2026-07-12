@@ -165,22 +165,193 @@
 }
 
 .custom-playlist-panel {
-  padding: 1.5rem 2rem;
+  /* Fill the song-page panel and pin actions/footer to the bottom. */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 2rem 1.5rem;
+  container-type: inline-size;
+  container-name: custom-playlist;
 }
 
-.custom-playlist-panel-copy {
-  max-width: 36rem;
-  line-height: 1.5;
-  color: var(--text-muted, #aaa);
+.custom-playlist-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.custom-playlist-panel-toolbar {
+  flex-shrink: 0;
+  margin-top: 1rem;
+}
+
+.custom-playlist-panel-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0;
+}
+
+/* Beat .panel h2 { font-size: 1rem } in the web chrome wrapper. */
+.custom-playlist-panel .custom-playlist-panel-title {
+  margin: 0;
+  min-width: 0;
+  font-size: clamp(2.025rem, 5cqi, 2.4rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.custom-playlist-panel .custom-playlist-panel-about {
+  margin: 0.2rem 0 calc(0.75rem + 12px);
+  max-width: 40rem;
+  line-height: 1.45;
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--text) 52%, var(--muted));
+  white-space: pre-wrap;
+}
+
+.custom-playlist-panel-sources {
+  margin: 0.2rem 0 1.35rem;
+}
+
+.custom-playlist-panel-sources-heading {
+  margin: 0 0 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.custom-playlist-panel-sources-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.custom-playlist-panel-source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.45rem 0.3rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-2) 88%, var(--bg));
+}
+
+.custom-playlist-panel-source-pill-icon {
+  display: block;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.custom-playlist-panel-source-pill-label {
+  font-size: 0.8125rem;
+  line-height: 1;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.custom-playlist-panel-source-pill-count {
+  box-sizing: border-box;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1.5px solid #fdd017;
+  background: transparent;
+  color: #fdd017;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .custom-playlist-panel-count {
+  flex-shrink: 0;
+  margin: 0;
   font-weight: 600;
-  margin: 1rem 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
-.library-playlist-rename-dialog {
-  width: min(28rem, 92vw);
+.custom-playlist-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.65rem;
+  padding-top: 0;
+  border-top: none;
+}
+
+.custom-playlist-panel-created {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin: 0;
+  text-align: right;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.custom-playlist-panel-created-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.custom-playlist-panel-created-icon path,
+.custom-playlist-panel-created-icon rect {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.custom-playlist-panel-updated {
+  font-style: italic;
+}
+
+.library-playlist-info-dialog {
+  width: min(30rem, 92vw);
+}
+
+.library-playlist-info-about {
+  font: inherit;
+  width: 100%;
+  min-height: 6.5rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  resize: vertical;
+}
+
+.library-playlist-info-about-count {
+  margin: -0.35rem 0 0.75rem;
+  text-align: right;
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 .song-to-playlist-modal {
@@ -379,9 +550,78 @@
 /* YouTube custom-playlist experiment */
 .custom-playlist-panel .playlist-home-actions {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem 1rem;
+  margin-top: 0;
+}
+
+.custom-playlist-panel .playlist-home-actions-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+}
+
+.custom-playlist-panel .playlist-home-actions-group .btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: auto;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.2;
+  padding: 0.4rem 0.75rem;
+  min-height: 2.15rem;
+  white-space: nowrap;
+}
+
+.playlist-home-action-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
+}
+
+.playlist-home-action-icon path,
+.playlist-home-action-icon circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.playlist-home-action-icon-fill {
+  fill: currentColor;
+  stroke: none;
+}
+
+.custom-playlist-panel .playlist-home-remove-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  width: 2.15rem;
+  min-width: 2.15rem;
+  height: 2.15rem;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.custom-playlist-panel .playlist-home-remove-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.custom-playlist-panel .playlist-home-remove-icon path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .youtube-add-link {
@@ -415,6 +655,14 @@
   flex-direction: column;
   gap: 0.85rem;
   height: 100%;
+  min-height: 0;
+}
+
+.youtube-song-page--embed {
+  gap: 0;
+}
+
+.youtube-song-page--embed .youtube-song-player-wrap {
   min-height: 0;
 }
 
@@ -501,10 +749,112 @@
   overflow: hidden;
 }
 
-.soundcloud-vc-capture-note {
+/* VC Mode — main window shows art + metadata while the widget plays in the VC slot. */
+.vc-capture-song-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 1.25rem 1.5rem 2.75rem;
+  box-sizing: border-box;
+  container-type: inline-size;
+  container-name: vc-capture-song;
+}
+
+.vc-capture-song-page-header {
+  flex-shrink: 0;
+}
+
+.vc-capture-song-page-title {
   margin: 0;
-  align-self: center;
-  color: var(--text-muted, #aaa);
-  font-size: 0.92rem;
-  text-align: center;
+  font-size: clamp(1.4rem, 3.8cqi, 2rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+
+.vc-capture-song-page-artist {
+  margin: 0.4rem 0 0;
+  font-size: 1.02rem;
+  line-height: 1.25;
+  color: var(--muted);
+}
+
+.vc-capture-song-page-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  max-width: min(26rem, calc(50% - 0.5rem));
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-align: left;
+}
+
+.vc-capture-song-page-source-logo {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.vc-capture-song-page-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0 0.25rem;
+  overflow: hidden;
+}
+
+.vc-capture-song-page-cover-wrap {
+  width: min(100%, clamp(8rem, 36cqi, 14.5rem));
+  max-height: min(100%, clamp(8rem, 40cqi, 14.5rem));
+}
+
+.vc-capture-song-page-cover {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(46vh, 14.5rem);
+  aspect-ratio: 1;
+  border-radius: 0.65rem;
+  object-fit: cover;
+  background: var(--surface-2);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+}
+
+.vc-capture-song-page-cover-fallback {
+  height: 100%;
+  min-height: 7.5rem;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent) 28%, var(--surface-2)),
+    var(--surface-2)
+  );
+}
+
+.vc-capture-song-page-footer {
+  position: absolute;
+  left: 1.5rem;
+  right: 1.5rem;
+  bottom: 1rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.vc-capture-song-page-vc-note {
+  margin: 0;
+  max-width: min(26rem, calc(50% - 0.5rem));
+  font-size: 0.82rem;
+  line-height: 1.35;
+  text-align: right;
+  color: color-mix(in srgb, var(--muted) 90%, var(--text));
 }

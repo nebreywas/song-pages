@@ -135,6 +135,15 @@ export function IconSidebarOrder({ className }: IconProps) {
   );
 }
 
+/** Horizontal bar — minify chrome toggle. */
+export function IconMinifyBar({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+      <rect x="3.5" y="9.25" width="17" height="5.5" rx="2.75" />
+    </svg>
+  );
+}
+
 /** images/menu-bar-icons2.svg — hamburger / options menu. */
 export function IconMenu({ className }: IconProps) {
   return (
@@ -159,5 +168,74 @@ export function IconChevronRight({ className }: IconProps) {
     <PlayerIcon className={className} viewBox="0 0 24 24">
       <path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
     </PlayerIcon>
+  );
+}
+
+/** Trash can — stroke paths tinted via currentColor (playlist home remove, etc.). */
+export function IconTrash({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 7h18" />
+      <path d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7" />
+      <path d="M6 7h12l-1 12.5a1 1 0 0 1-1 .9H8a1 1 0 0 1-1-.9L6 7Z" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </svg>
+  );
+}
+
+/** Circled info — playlist home actions. */
+export function IconInfo({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <circle className="playlist-home-action-icon-fill" cx="12" cy="8" r="1" />
+    </svg>
+  );
+}
+
+/** Share nodes — playlist home actions. */
+export function IconShare({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="18" cy="5" r="2.25" />
+      <circle cx="6" cy="12" r="2.25" />
+      <circle cx="18" cy="19" r="2.25" />
+      <path d="M8.2 10.7 15.8 6.3" />
+      <path d="M8.2 13.3 15.8 17.7" />
+    </svg>
+  );
+}
+
+/** Plus — playlist home actions. */
+export function IconPlus({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 6v12" />
+      <path d="M6 12h12" />
+    </svg>
+  );
+}
+
+/** Calendar — playlist home metadata. */
+export function IconCalendar({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="4" y="5.5" width="16" height="14" rx="2" />
+      <path d="M8 3.5v3" />
+      <path d="M16 3.5v3" />
+      <path d="M4 10h16" />
+    </svg>
+  );
+}
+
+/** Clock — playlist length column header. */
+export function IconClock({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 8v4.5l3 2" />
+    </svg>
   );
 }

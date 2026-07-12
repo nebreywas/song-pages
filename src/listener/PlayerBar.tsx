@@ -14,6 +14,7 @@ import {
   IconVolume,
   IconVolumeMuted,
   IconMenu,
+  IconMinifyBar,
 } from './PlayerIcons';
 
 export type RepeatMode = 'off' | 'all' | 'one';
@@ -22,6 +23,8 @@ type PlayerBarProps = {
   disabled: boolean;
   isPlaying: boolean;
   nowPlayingTitle: string;
+  nowPlayingArtist: string;
+  nowPlayingCoverUrl: string | null;
   shuffle: boolean;
   repeatMode: RepeatMode;
   volume: number;
@@ -52,6 +55,8 @@ type PlayerBarProps = {
   onToggleCrossfades?: () => void;
   seekTimeDisplay?: SeekTimeDisplay;
   onToggleSeekTimeDisplay?: () => void;
+  chromeMinified?: boolean;
+  onToggleChromeMinified?: () => void;
 };
 
 const MENU_IDLE_MS = 60_000;
@@ -69,6 +74,8 @@ export function PlayerBar({
   disabled,
   isPlaying,
   nowPlayingTitle,
+  nowPlayingArtist,
+  nowPlayingCoverUrl,
   shuffle,
   repeatMode,
   volume,
@@ -99,6 +106,8 @@ export function PlayerBar({
   onToggleCrossfades,
   seekTimeDisplay = 'remaining',
   onToggleSeekTimeDisplay,
+  chromeMinified = false,
+  onToggleChromeMinified,
 }: PlayerBarProps) {
   const progressRef = useRef<HTMLDivElement>(null);
   const menuIdleTimerRef = useRef<number | null>(null);
@@ -229,7 +238,7 @@ export function PlayerBar({
       <div className="player-transport-controls">
         <button
           type="button"
-          className={`transport-btn${shuffle ? ' active' : ''}`}
+          className={`transport-btn transport-btn-shuffle${shuffle ? ' active' : ''}`}
           onClick={onToggleShuffle}
           disabled={disabled}
           aria-label="Shuffle"
@@ -264,7 +273,11 @@ export function PlayerBar({
         </button>
       </div>
 
-      <ScrollingNowPlaying title={nowPlayingTitle} />
+      <ScrollingNowPlaying
+        title={nowPlayingTitle}
+        artist={nowPlayingArtist}
+        coverUrl={nowPlayingCoverUrl}
+      />
 
       <div className="player-volume">
         <button
@@ -418,22 +431,37 @@ export function PlayerBar({
           )}
         </div>
 
-        {menuOpen ? (
-          <span className="player-menu-counter" aria-live="polite">
-            {formatTime(currentTime)} / {formatTime(timeRemaining)}
-          </span>
-        ) : null}
-
-        {!menuOpen && vcLive && onVcLiveClick ? (
-          <button
-            type="button"
-            className="btn player-vc-live-btn"
-            onClick={onVcLiveClick}
-            title="End VC Mode"
-          >
-            VC Live
-          </button>
-        ) : null}
+        <div className="player-secondary-trailing">
+          {menuOpen ? (
+            <span className="player-menu-counter" aria-live="polite">
+              {formatTime(currentTime)} / {formatTime(timeRemaining)}
+            </span>
+          ) : null}
+          <div className="player-secondary-actions">
+            {!menuOpen && vcLive && onVcLiveClick ? (
+              <button
+                type="button"
+                className="btn player-on-air-btn"
+                onClick={onVcLiveClick}
+                title="End VC Mode"
+              >
+                On Air
+              </button>
+            ) : null}
+            {onToggleChromeMinified ? (
+              <button
+                type="button"
+                className={`player-minify-btn${chromeMinified ? ' active' : ''}`}
+                onClick={onToggleChromeMinified}
+                aria-pressed={chromeMinified}
+                aria-label={chromeMinified ? 'Show full Song Pages view' : 'Minify to control bar only'}
+                title={chromeMinified ? 'Show full view' : 'Minify view'}
+              >
+                <IconMinifyBar />
+              </button>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   );

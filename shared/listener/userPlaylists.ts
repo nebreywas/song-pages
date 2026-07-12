@@ -8,12 +8,23 @@ export const USER_PLAYLIST_ARTIST_ID_BASE = -10_000;
 /** Synthetic song row ids for custom playlist entries. */
 export const USER_PLAYLIST_SONG_ID_BASE = -3_000_000;
 
+/** Max characters for the playlist About blurb on the home view. */
+export const MAX_USER_PLAYLIST_ABOUT_LENGTH = 200;
+
 export type UserPlaylistRow = {
   id: number;
   name: string;
+  about: string | null;
   created_at: string;
+  updated_at: string;
   song_count: number;
 };
+
+export function normalizeUserPlaylistAbout(value: string | null | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .slice(0, MAX_USER_PLAYLIST_ABOUT_LENGTH);
+}
 
 export function isUserPlaylistArtistId(artistId: number | null | undefined): boolean {
   return typeof artistId === 'number' && artistId <= USER_PLAYLIST_ARTIST_ID_BASE - 1;
@@ -49,11 +60,12 @@ export function buildUserPlaylistArtistRow(playlist: UserPlaylistRow) {
     artist_slug: `custom-${playlist.id}`,
     artist_name: playlist.name,
     artist_photo_url: null,
-    artist_bio: null,
+    artist_bio: playlist.about?.trim() ? playlist.about.trim() : null,
     artist_social_json: null,
     build_version: null,
     last_fetched_at: null,
     created_at: playlist.created_at,
+    updated_at: playlist.updated_at ?? playlist.created_at,
     song_count: playlist.song_count,
   };
 }

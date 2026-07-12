@@ -4,6 +4,7 @@ import { youtubeVideoIdFromSong } from '@shared/youtube/youtubeFeature';
 import type { SongRow } from '../types/app';
 
 import { YoutubePlayer, type YoutubePlayerHandle } from './youtube/YoutubePlayer';
+import { VcCaptureSongPage } from './VcCaptureSongPage';
 
 type YoutubeSongPageProps = {
   song: SongRow;
@@ -42,28 +43,26 @@ export function YoutubeSongPage({
     );
   }
 
+  if (captureInVc) {
+    return (
+      <VcCaptureSongPage song={song} vcNote="Video plays in the VC window visualizer slot." />
+    );
+  }
+
   return (
-    <article className="youtube-song-page">
-      <header className="youtube-song-header">
-        <h2 className="youtube-song-title">{song.title}</h2>
-        {song.artist_name ? <p className="youtube-song-artist">{song.artist_name}</p> : null}
-      </header>
+    <article className="youtube-song-page youtube-song-page--embed">
       <div className="youtube-song-player-wrap">
-        {captureInVc ? (
-          <p className="youtube-vc-capture-note">Video plays in the VC window visualizer slot.</p>
-        ) : (
-          <YoutubePlayer
-            ref={playerRef}
-            videoId={videoId}
-            playbackGeneration={playbackGeneration}
-            shouldPlay={shouldPlay}
-            onReady={onReady}
-            onPlayingChange={onPlayingChange}
-            onEnded={onEnded}
-            onDuration={onDuration}
-            onError={onError}
-          />
-        )}
+        <YoutubePlayer
+          ref={playerRef}
+          videoId={videoId}
+          playbackGeneration={playbackGeneration}
+          shouldPlay={shouldPlay}
+          onReady={onReady}
+          onPlayingChange={onPlayingChange}
+          onEnded={onEnded}
+          onDuration={onDuration}
+          onError={onError}
+        />
       </div>
     </article>
   );

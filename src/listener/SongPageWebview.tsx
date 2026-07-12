@@ -6,6 +6,7 @@ import {
   SONG_PAGES_GUEST_WEB_PREFERENCES,
 } from '@shared/appClient';
 import type { ListenerLyricsDisplaySettings } from '@shared/listener/lyricsDisplaySettings';
+import { DEFAULT_LISTENER_LYRICS_DISPLAY_SETTINGS } from '@shared/listener/lyricsDisplaySettings';
 import { renderLyricsMarkdownPreview } from '../lib/markdownPreview';
 import { LyricsSettingsPopover } from './LyricsSettingsPopover';
 import { SongCoverPopover } from './SongCoverPopover';
@@ -30,8 +31,9 @@ type SongPageWebviewProps = {
   songManifestUrl?: string | null;
   /** Bumps when the user re-opens a song so the guest webview remounts reliably. */
   loadKey?: string | number;
-  lyricsSettings: ListenerLyricsDisplaySettings;
-  onRemoveBracketsChange: (value: boolean) => void;
+  /** Omitted in projection / embed contexts — defaults apply; no lyrics settings popover. */
+  lyricsSettings?: ListenerLyricsDisplaySettings;
+  onRemoveBracketsChange?: (value: boolean) => void;
   onLoadError?: (message: string) => void;
   /** Fired when the host cover popover opens or closes. */
   onCoverModalChange?: (open: boolean) => void;
@@ -65,11 +67,12 @@ export function SongPageWebview({
   url,
   songManifestUrl,
   loadKey,
-  lyricsSettings,
+  lyricsSettings = DEFAULT_LISTENER_LYRICS_DISPLAY_SETTINGS,
   onRemoveBracketsChange,
   onLoadError,
   onCoverModalChange,
 }: SongPageWebviewProps) {
+  const lyricsSettingsEnabled = onRemoveBracketsChange != null;
   const containerRef = useRef<HTMLDivElement>(null);
   const onLoadErrorRef = useRef(onLoadError);
   onLoadErrorRef.current = onLoadError;
@@ -294,16 +297,18 @@ export function SongPageWebview({
           /* optional bridge */
         });
 
-      void webview
-        .executeJavaScript(INSTALL_LYRICS_HEADING_BRIDGE, false)
-        .then((initialTick) => {
-          if (disposed) return;
-          const tick = typeof initialTick === 'number' ? initialTick : Number(initialTick);
-          if (Number.isFinite(tick)) lastLyricsMenuTick = tick;
-        })
-        .catch(() => {
-          /* optional bridge */
-        });
+      if (lyricsSettingsEnabled) {
+        void webview
+          .executeJavaScript(INSTALL_LYRICS_HEADING_BRIDGE, false)
+          .then((initialTick) => {
+            if (disposed) return;
+            const tick = typeof initialTick === 'number' ? initialTick : Number(initialTick);
+            if (Number.isFinite(tick)) lastLyricsMenuTick = tick;
+          })
+          .catch(() => {
+            /* optional bridge */
+          });
+      }
 
       readGuestLyricsFallback();
       window.setTimeout(readGuestLyricsFallback, 0);
@@ -313,7 +318,9 @@ export function SongPageWebview({
       }
 
       coverClickPollId = window.setInterval(pollCoverClick, COVER_CLICK_POLL_MS);
-      lyricsHeadingPollId = window.setInterval(pollLyricsHeading, LYRICS_HEADING_POLL_MS);
+      if (lyricsSettingsEnabled) {
+        lyricsHeadingPollId = window.setInterval(pollLyricsHeading, LYRICS_HEADING_POLL_MS);
+      }
     };
 
     webview.addEventListener('dom-ready', onDomReady);
@@ -339,7 +346,7 @@ export function SongPageWebview({
       webview.removeEventListener('did-fail-load', onFailLoad);
       container.replaceChildren();
     };
-  }, [url, loadKey]);
+  }, [url, loadKey, lyricsSettingsEnabled]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -379,7 +386,7 @@ export function SongPageWebview({
           onClose={closeCoverPopover}
         />
       ) : null}
-      {lyricsPopoverAnchor ? (
+      {lyricsPopoverAnchor && onRemoveBracketsChange ? (
         <LyricsSettingsPopover
           anchor={lyricsPopoverAnchor}
           settings={lyricsSettings}

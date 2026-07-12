@@ -53,6 +53,8 @@ contextBridge.exposeInMainWorld('app', {
       ipcRenderer.invoke('listener:renameSunoDemoPlaylist', playlistId, name),
     listUserPlaylists: () => ipcRenderer.invoke('listener:listUserPlaylists'),
     createUserPlaylist: (name) => ipcRenderer.invoke('listener:createUserPlaylist', name),
+    updateUserPlaylist: (playlistId, patch) =>
+      ipcRenderer.invoke('listener:updateUserPlaylist', playlistId, patch),
     renameUserPlaylist: (playlistId, name) =>
       ipcRenderer.invoke('listener:renameUserPlaylist', playlistId, name),
     removeUserPlaylist: (playlistId) => ipcRenderer.invoke('listener:removeUserPlaylist', playlistId),
@@ -88,6 +90,7 @@ contextBridge.exposeInMainWorld('app', {
       ipcRenderer.on('listener:playback-command', handler);
       return () => ipcRenderer.removeListener('listener:playback-command', handler);
     },
+    setChromeMinified: (payload) => ipcRenderer.invoke('listener:setChromeMinified', payload),
   },
 
   artist: {

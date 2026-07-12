@@ -111,7 +111,7 @@ export function AddNewSongPopover({
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id="add-new-song-title" className="suno-demo-add-popover-title">
-          Add New Song
+          Add Song
         </h2>
         <p className="suno-demo-add-popover-lead">
           Paste a link or ID from {SUPPORTED_EXTERNAL_SONG_SERVICES}. Other services and local files

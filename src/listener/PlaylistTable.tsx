@@ -20,6 +20,7 @@ import type { SongRow } from '../types/app';
 import { buildPlaylistTableColumns } from './buildPlaylistTableColumns';
 import { PlaylistColumnResizeHandle } from './PlaylistColumnResizeHandle';
 import { playlistColumnClassName } from './playlistColumnClasses';
+import { IconClock } from './PlayerIcons';
 import { SortableColumnHeader } from './SortableColumnHeader';
 import type { SortColumn, SortDirection } from './sortPlaylist';
 import type { usePlaylistDragReorder } from './usePlaylistDragReorder';
@@ -222,20 +223,27 @@ function renderHeaderCell(
       );
     case 'source':
       return (
-        <>
-          <span className="playlist-source-heading playlist-source-heading--short">Src</span>
-          <span className="playlist-source-heading playlist-source-heading--long">Source</span>
-        </>
+        <SortableColumnHeader
+          label="SRC"
+          ariaLabel="Source"
+          column="source"
+          activeColumn={props.sortColumn}
+          direction={props.sortDirection}
+          onSort={props.onSort}
+          className="playlist-source-heading"
+        />
       );
     case 'duration':
       return (
         <SortableColumnHeader
-          label="Length"
           column="length"
           activeColumn={props.sortColumn}
           direction={props.sortDirection}
           onSort={props.onSort}
-        />
+          ariaLabel="Length"
+        >
+          <IconClock className="playlist-duration-header-icon" />
+        </SortableColumnHeader>
       );
     default:
       return null;
@@ -270,6 +278,8 @@ export function PlaylistTable({
   onRowDoubleClick,
   onRowContextMenu,
 }: PlaylistTableProps) {
+  const { startDrag, setRowRef } = playlistDrag;
+
   const columns = useMemo(
     () =>
       buildPlaylistTableColumns({
@@ -283,7 +293,7 @@ export function PlaylistTable({
         catalogOrderBySongId,
         customOrderBySongId,
         runtimeDurations,
-        playlistDrag,
+        playlistDrag: { startDrag, setRowRef },
       }),
     [
       profile,
@@ -296,7 +306,8 @@ export function PlaylistTable({
       catalogOrderBySongId,
       customOrderBySongId,
       runtimeDurations,
-      playlistDrag,
+      startDrag,
+      setRowRef,
     ],
   );
 

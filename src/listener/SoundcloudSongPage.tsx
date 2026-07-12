@@ -4,6 +4,7 @@ import { soundcloudPermalinkFromSong } from '@shared/soundcloud/soundcloudFeatur
 import type { SongRow } from '../types/app';
 
 import { SoundcloudPlayer, type SoundcloudPlayerHandle } from './soundcloud/SoundcloudPlayer';
+import { VcCaptureSongPage } from './VcCaptureSongPage';
 
 type SoundcloudSongPageProps = {
   song: SongRow;
@@ -42,6 +43,15 @@ export function SoundcloudSongPage({
     );
   }
 
+  if (captureInVc) {
+    return (
+      <VcCaptureSongPage
+        song={song}
+        vcNote="SoundCloud visual plays in the VC window visualizer slot."
+      />
+    );
+  }
+
   return (
     <article className="soundcloud-song-page">
       <header className="soundcloud-song-header">
@@ -49,10 +59,7 @@ export function SoundcloudSongPage({
         {song.artist_name ? <p className="soundcloud-song-artist">{song.artist_name}</p> : null}
       </header>
       <div className="soundcloud-song-player-wrap">
-        {captureInVc ? (
-          <p className="soundcloud-vc-capture-note">SoundCloud visual plays in the VC window visualizer slot.</p>
-        ) : (
-          <SoundcloudPlayer
+        <SoundcloudPlayer
             ref={playerRef}
             permalink={permalink}
             playbackGeneration={playbackGeneration}
@@ -63,7 +70,6 @@ export function SoundcloudSongPage({
             onDuration={onDuration}
             onError={onError}
           />
-        )}
       </div>
     </article>
   );

@@ -1,31 +1,52 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { formatPlaylistCreatedDate } from '@shared/listener/formatPlaylistCreatedDate';
+
 import { AddNewSongPopover, type ExternalSongAddResult } from './AddNewSongPopover';
+import { IconCalendar, IconInfo, IconPlus, IconShare, IconTrash } from './PlayerIcons';
+import { PlaylistSourceIcons } from './PlaylistSourceIcons';
+import type { SongRow } from '../types/app';
 
 type PlaylistPanelProps = {
   playlistName: string;
+  playlistAbout: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
   songCount: number;
+  songs: SongRow[];
   playlistId?: number;
   addSongOpen: boolean;
   busy: boolean;
   onAddSongOpenChange: (open: boolean) => void;
   onSongAdded: (result: ExternalSongAddResult) => void;
   onSharePlaylist: () => void;
+  onEditPlaylistInfo: () => void;
+  onRemovePlaylist: () => void;
 };
 
 /** Home view for a user-created Playlist. */
 export function CustomPlaylistPanel({
   playlistName,
+  playlistAbout,
+  createdAt,
+  updatedAt,
   songCount,
+  songs,
   playlistId,
   addSongOpen,
   busy,
   onAddSongOpenChange,
   onSongAdded,
   onSharePlaylist,
+  onEditPlaylistInfo,
+  onRemovePlaylist,
 }: PlaylistPanelProps) {
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  const aboutText = playlistAbout?.trim() ?? '';
+  const createdLabel = formatPlaylistCreatedDate(createdAt);
+  const updatedLabel = formatPlaylistCreatedDate(updatedAt ?? createdAt);
+  const showDateFooter = Boolean(createdLabel || updatedLabel);
 
   const resolveAnchor = useCallback((button: HTMLButtonElement | null) => {
     const rect = button?.getBoundingClientRect();
@@ -57,26 +78,61 @@ export function CustomPlaylistPanel({
 
   return (
     <div className="custom-playlist-panel">
-      <h2>{playlistName}</h2>
-      <p className="custom-playlist-panel-copy">
-        Your playlist — add tracks from Artist Pages, Liked Songs, or other playlists via
-        right-click, or paste a supported third-party link below.
-      </p>
-      <p className="custom-playlist-panel-count">
-        {songCount === 1 ? '1 track' : `${songCount} tracks`}
-      </p>
-      <div className="playlist-home-actions">
-        <button type="button" className="btn" onClick={onSharePlaylist}>
-          Share Playlist
-        </button>
-        <button
-          ref={addButtonRef}
-          type="button"
-          className="btn primary"
-          onClick={openPopover}
-        >
-          Add New Song
-        </button>
+      <div className="custom-playlist-panel-body">
+        <div className="custom-playlist-panel-heading">
+          <h2 className="custom-playlist-panel-title">{playlistName}</h2>
+          <p className="custom-playlist-panel-count">
+            {songCount === 1 ? '1 track' : `${songCount} tracks`}
+          </p>
+        </div>
+        {aboutText ? <p className="custom-playlist-panel-about">{aboutText}</p> : null}
+        <PlaylistSourceIcons songs={songs} />
+      </div>
+      <div className="custom-playlist-panel-toolbar">
+        <div className="playlist-home-actions">
+          <div className="playlist-home-actions-group">
+            <button type="button" className="btn" onClick={onEditPlaylistInfo} disabled={busy}>
+              <IconInfo className="playlist-home-action-icon" />
+              Playlist Info
+            </button>
+            <button type="button" className="btn" onClick={onSharePlaylist}>
+              <IconShare className="playlist-home-action-icon" />
+              Share Playlist
+            </button>
+            <button
+              ref={addButtonRef}
+              type="button"
+              className="btn"
+              onClick={openPopover}
+            >
+              <IconPlus className="playlist-home-action-icon" />
+              Add Song
+            </button>
+          </div>
+          <button
+            type="button"
+            className="btn playlist-home-remove-btn"
+            onClick={onRemovePlaylist}
+            disabled={busy}
+            aria-label={`Remove ${playlistName}…`}
+          >
+            <IconTrash className="playlist-home-remove-icon" />
+          </button>
+        </div>
+        {showDateFooter ? (
+          <footer className="custom-playlist-panel-footer">
+            <p className="custom-playlist-panel-created">
+              <IconCalendar className="custom-playlist-panel-created-icon" />
+              <span>
+                {createdLabel ? <>Created on {createdLabel}</> : null}
+                {createdLabel && updatedLabel ? ' · ' : null}
+                {updatedLabel ? (
+                  <em className="custom-playlist-panel-updated">last updated {updatedLabel}</em>
+                ) : null}
+              </span>
+            </p>
+          </footer>
+        ) : null}
       </div>
       <AddNewSongPopover
         open={addSongOpen}

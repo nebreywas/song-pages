@@ -178,6 +178,28 @@ function readStoredPlaylistEntry(song) {
   return null;
 }
 
+function migrateUserPlaylistColumns(db) {
+  const cols = db.prepare('PRAGMA table_info(user_playlists)').all().map((col) => col.name);
+  if (!cols.includes('about')) {
+    db.exec('ALTER TABLE user_playlists ADD COLUMN about TEXT');
+  }
+  if (!cols.includes('updated_at')) {
+    db.exec('ALTER TABLE user_playlists ADD COLUMN updated_at TEXT');
+    db.exec(`UPDATE user_playlists SET updated_at = created_at WHERE updated_at IS NULL`);
+  }
+}
+
+function touchUserPlaylistUpdatedAt(db, playlistId) {
+  db.prepare(`UPDATE user_playlists SET updated_at = datetime('now') WHERE id = ?`).run(playlistId);
+}
+
+function markUserPlaylistUpdated(playlistId) {
+  const existing = getUserPlaylistById(playlistId);
+  if (!existing) return false;
+  touchUserPlaylistUpdatedAt(getDatabase(), playlistId);
+  return true;
+}
+
 function migratePlaylistSongColumns(db) {
   const cols = db.prepare('PRAGMA table_info(user_playlist_songs)').all().map((col) => col.name);
   if (!cols.includes('site_root_normalized')) {
@@ -631,6 +653,7 @@ function initUserPlaylistsSchema(db) {
       WHERE library_song_id IS NULL;
   `);
 
+  migrateUserPlaylistColumns(db);
   migratePlaylistSongColumns(db);
   runRepairUserPlaylistSnapshotsIfNeeded(db);
 }
@@ -638,7 +661,7 @@ function initUserPlaylistsSchema(db) {
 function listUserPlaylists() {
   return getDatabase()
     .prepare(
-      `SELECT p.id, p.name, p.created_at,
+      `SELECT p.id, p.name, p.about, p.created_at, p.updated_at,
               (SELECT COUNT(*) FROM user_playlist_songs s WHERE s.playlist_id = p.id) AS song_count
        FROM user_playlists p
        ORDER BY p.id ASC`,
@@ -649,7 +672,7 @@ function listUserPlaylists() {
 function getUserPlaylistById(playlistId) {
   return getDatabase()
     .prepare(
-      `SELECT p.id, p.name, p.created_at,
+      `SELECT p.id, p.name, p.about, p.created_at, p.updated_at,
               (SELECT COUNT(*) FROM user_playlist_songs s WHERE s.playlist_id = p.id) AS song_count
        FROM user_playlists p
        WHERE p.id = ?`,
@@ -670,7 +693,9 @@ function nextUserPlaylistName(db) {
 function createUserPlaylist(name) {
   const db = getDatabase();
   const resolvedName = String(name ?? '').trim() || nextUserPlaylistName(db);
-  const insert = db.prepare('INSERT INTO user_playlists (name) VALUES (?)').run(resolvedName);
+  const insert = db
+    .prepare('INSERT INTO user_playlists (name, updated_at) VALUES (?, datetime(\'now\'))')
+    .run(resolvedName);
   const playlist = getUserPlaylistById(insert.lastInsertRowid);
   return {
     ok: true,
@@ -678,15 +703,33 @@ function createUserPlaylist(name) {
   };
 }
 
-function renameUserPlaylist(playlistId, name) {
-  const trimmed = String(name ?? '').trim();
-  if (!trimmed) return { ok: false, error: 'Playlist name cannot be empty.' };
+const MAX_USER_PLAYLIST_ABOUT_LENGTH = 200;
+
+function normalizeUserPlaylistAbout(value) {
+  return String(value ?? '')
+    .trim()
+    .slice(0, MAX_USER_PLAYLIST_ABOUT_LENGTH);
+}
+
+function updateUserPlaylist(playlistId, { name, about }) {
+  const trimmedName = String(name ?? '').trim();
+  if (!trimmedName) return { ok: false, error: 'Playlist name cannot be empty.' };
+  const normalizedAbout = normalizeUserPlaylistAbout(about);
   const db = getDatabase();
   const existing = getUserPlaylistById(playlistId);
   if (!existing) return { ok: false, error: 'Playlist not found.' };
-  db.prepare('UPDATE user_playlists SET name = ? WHERE id = ?').run(trimmed, playlistId);
+  db.prepare(
+    `UPDATE user_playlists
+     SET name = ?, about = ?, updated_at = datetime('now')
+     WHERE id = ?`,
+  ).run(trimmedName, normalizedAbout || null, playlistId);
   const playlist = getUserPlaylistById(playlistId);
   return { ok: true, data: { ...playlist, artist_id: userPlaylistArtistId(playlist.id) } };
+}
+
+/** @deprecated Use updateUserPlaylist */
+function renameUserPlaylist(playlistId, name) {
+  return updateUserPlaylist(playlistId, { name, about: getUserPlaylistById(playlistId)?.about });
 }
 
 function removeUserPlaylist(playlistId) {
@@ -838,6 +881,7 @@ function insertSongFields(playlistId, fields) {
   const entryId = insert.lastInsertRowid;
   const { appendSongToUserPlaylistCustomOrder } = require('./playlistOrder');
   appendSongToUserPlaylistCustomOrder(playlistId, songIdFromEntryId(entryId));
+  touchUserPlaylistUpdatedAt(getDatabase(), playlistId);
   return entryId;
 }
 
@@ -873,7 +917,9 @@ function removeUserPlaylistSong(songId) {
   const entry = getEntryBySongId(songId);
   if (!entry) return { count: 0 };
   const playlistId = entry.playlist_id;
-  getDatabase().prepare('DELETE FROM user_playlist_songs WHERE id = ?').run(entry.id);
+  const db = getDatabase();
+  db.prepare('DELETE FROM user_playlist_songs WHERE id = ?').run(entry.id);
+  touchUserPlaylistUpdatedAt(db, playlistId);
 
   const { removeSongFromUserPlaylistCustomOrder } = require('./playlistOrder');
   removeSongFromUserPlaylistCustomOrder(playlistId, songId);
@@ -969,7 +1015,9 @@ module.exports = {
   listUserPlaylists,
   getUserPlaylistById,
   createUserPlaylist,
+  updateUserPlaylist,
   renameUserPlaylist,
+  markUserPlaylistUpdated,
   removeUserPlaylist,
   listUserPlaylistSongs,
   addSongToUserPlaylist,

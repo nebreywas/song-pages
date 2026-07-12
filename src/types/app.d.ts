@@ -33,6 +33,8 @@ export type ArtistRow = {
   build_version: string | null;
   last_fetched_at: string | null;
   created_at: string;
+  /** Custom playlist rows — last metadata or track-list change. */
+  updated_at?: string | null;
   song_count: number;
 };
 
@@ -152,13 +154,44 @@ declare global {
           error?: string;
         }>;
         listUserPlaylists: () => Promise<
-          Array<{ id: number; name: string; created_at: string; song_count: number }>
+          Array<{
+            id: number;
+            name: string;
+            about: string | null;
+            created_at: string;
+            updated_at: string;
+            song_count: number;
+          }>
         >;
         createUserPlaylist: (
           name?: string,
         ) => Promise<{
           ok: boolean;
-          data?: { id: number; name: string; created_at: string; song_count: number; artist_id: number };
+          data?: {
+            id: number;
+            name: string;
+            about: string | null;
+            created_at: string;
+            updated_at: string;
+            song_count: number;
+            artist_id: number;
+          };
+          error?: string;
+        }>;
+        updateUserPlaylist: (
+          playlistId: number,
+          patch: { name: string; about: string },
+        ) => Promise<{
+          ok: boolean;
+          data?: {
+            id: number;
+            name: string;
+            about: string | null;
+            created_at: string;
+            updated_at: string;
+            song_count: number;
+            artist_id: number;
+          };
           error?: string;
         }>;
         renameUserPlaylist: (
@@ -166,7 +199,15 @@ declare global {
           name: string,
         ) => Promise<{
           ok: boolean;
-          data?: { id: number; name: string; created_at: string; song_count: number; artist_id: number };
+          data?: {
+            id: number;
+            name: string;
+            about: string | null;
+            created_at: string;
+            updated_at: string;
+            song_count: number;
+            artist_id: number;
+          };
           error?: string;
         }>;
         removeUserPlaylist: (
@@ -300,6 +341,11 @@ declare global {
         onPlaybackCommand: (
           callback: (payload: import('@shared/listener/playbackCommands').ListenerPlaybackCommand) => void,
         ) => () => void;
+        setChromeMinified: (payload: {
+          minified: boolean;
+          contentWidth?: number;
+          contentHeight?: number;
+        }) => Promise<{ ok: boolean; error?: string }>;
       };
       artist: {
         pickAudio: () => Promise<string | null>;

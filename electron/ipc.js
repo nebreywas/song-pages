@@ -19,6 +19,7 @@ const { isAllowedExternalHttpUrl } = require('./net/externalUrl');
 const visualizerWindow = require('./visualizerWindow');
 const vcWindow = require('./vcWindow');
 const { registerHostContentIpc } = require('./hostContent');
+const { setListenerChromeMinified } = require('./listenerChromeMinify');
 
 function registerIpcHandlers() {
   registerHostContentIpc(ipcMain);
@@ -380,6 +381,17 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle('listener:updateUserPlaylist', (_event, playlistId, patch) => {
+    const userPlaylists = require('./listener/userPlaylists');
+    try {
+      if (typeof playlistId !== 'number') return { ok: false, error: 'Invalid playlist id.' };
+      return userPlaylists.updateUserPlaylist(playlistId, patch);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
   ipcMain.handle('listener:renameUserPlaylist', (_event, playlistId, name) => {
     const userPlaylists = require('./listener/userPlaylists');
     try {
@@ -521,6 +533,13 @@ function registerIpcHandlers() {
         return { ok: false, error: 'Invalid playlist order save.' };
       }
       playlistOrder.saveCustomOrder(playlistKey, orderedSongIds);
+      if (playlistKey.startsWith('user:')) {
+        const userPlaylists = require('./listener/userPlaylists');
+        const playlistId = Number(playlistKey.slice('user:'.length));
+        if (Number.isFinite(playlistId)) {
+          userPlaylists.markUserPlaylistUpdated(playlistId);
+        }
+      }
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -584,6 +603,14 @@ function registerIpcHandlers() {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message };
     }
+  });
+
+  ipcMain.handle('listener:setChromeMinified', (event, payload) => {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!payload || typeof payload.minified !== 'boolean') {
+      return { ok: false, error: 'Invalid chrome minify payload.' };
+    }
+    return setListenerChromeMinified(mainWindow, payload);
   });
 
   // --- Artist Mode (compile) ---

@@ -5,7 +5,10 @@ import { SUNO_DEMO_PLAYBACK_SCOPE } from '../demo/sunoDemoFeature.ts';
 import { FLOW_PLAYBACK_SCOPE } from '../flow/flowFeature.ts';
 import { SOUNDCLOUD_PLAYBACK_SCOPE } from '../soundcloud/soundcloudFeature.ts';
 import { YOUTUBE_PLAYBACK_SCOPE } from '../youtube/youtubeFeature.ts';
-import { resolvePlaylistSongSource } from './playlistSongSource.ts';
+import {
+  countPlaylistSongsBySource,
+  resolvePlaylistSongSource,
+} from './playlistSongSource.ts';
 
 test('resolvePlaylistSongSource maps third-party playback scopes', () => {
   assert.equal(
@@ -35,4 +38,18 @@ test('resolvePlaylistSongSource defaults to Song Pages for catalog snapshots', (
   assert.equal(source.id, 'song-pages');
   assert.equal(source.label, 'Song Pages');
   assert.equal(source.abbrev, 'SP');
+});
+
+test('countPlaylistSongsBySource aggregates snapshot rows by source', () => {
+  const counts = countPlaylistSongsBySource([
+    { id: -3_000_001, playback_scope: SUNO_DEMO_PLAYBACK_SCOPE },
+    { id: -3_000_002, playback_scope: YOUTUBE_PLAYBACK_SCOPE },
+    { id: -3_000_003, playback_scope: YOUTUBE_PLAYBACK_SCOPE },
+    { id: -3_000_010, page_url: 'https://example.com/songs/track-one', playback_scope: 'full' },
+  ]);
+
+  assert.equal(counts.suno, 1);
+  assert.equal(counts.youtube, 2);
+  assert.equal(counts['song-pages'], 1);
+  assert.equal(counts.flow, undefined);
 });

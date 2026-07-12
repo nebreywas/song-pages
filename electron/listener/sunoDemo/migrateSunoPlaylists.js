@@ -35,8 +35,8 @@ function migrateSunoSidebarPlaylistsToUserPlaylists(db) {
   const tx = db.transaction(() => {
     for (const sunoPlaylist of sunoPlaylists) {
       const insert = db
-        .prepare('INSERT INTO user_playlists (name, created_at) VALUES (?, ?)')
-        .run(sunoPlaylist.name, sunoPlaylist.created_at);
+        .prepare('INSERT INTO user_playlists (name, created_at, updated_at) VALUES (?, ?, ?)')
+        .run(sunoPlaylist.name, sunoPlaylist.created_at, sunoPlaylist.created_at);
       const userPlaylistId = insert.lastInsertRowid;
 
       const songs = db

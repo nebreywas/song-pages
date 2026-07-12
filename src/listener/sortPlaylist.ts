@@ -1,6 +1,15 @@
+import { resolvePlaylistSongSource } from '@shared/listener/playlistSongSource';
 import type { SongRow } from '../types/app';
 
-export type SortColumn = 'order' | 'custom' | 'title' | 'artist' | 'album' | 'year' | 'length';
+export type SortColumn =
+  | 'order'
+  | 'custom'
+  | 'title'
+  | 'artist'
+  | 'album'
+  | 'year'
+  | 'source'
+  | 'length';
 export type SortDirection = 'asc' | 'desc';
 
 function compareText(a: string, b: string): number {
@@ -41,6 +50,12 @@ export function sortPlaylistSongs(
         break;
       case 'year':
         result = compareText(a.year || '', b.year || '');
+        break;
+      case 'source':
+        result = compareText(
+          resolvePlaylistSongSource(a).label,
+          resolvePlaylistSongSource(b).label,
+        );
         break;
       case 'length': {
         const aLen = songLengthSeconds(a, runtimeDurations);

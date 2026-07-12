@@ -36,3 +36,24 @@ export function resolvePlaylistSongSource(song: PlaylistSongSourceInput): Playli
   if (isSoundcloudSong(song)) return PLAYLIST_SONG_SOURCES.soundcloud;
   return PLAYLIST_SONG_SOURCES['song-pages'];
 }
+
+/** Stable display order for playlist home source icons. */
+export const PLAYLIST_SONG_SOURCE_DISPLAY_ORDER: PlaylistSongSourceId[] = [
+  'song-pages',
+  'suno',
+  'youtube',
+  'flow',
+  'soundcloud',
+];
+
+/** Count snapshot rows per source for playlist home summaries. */
+export function countPlaylistSongsBySource(
+  songs: PlaylistSongSourceInput[],
+): Partial<Record<PlaylistSongSourceId, number>> {
+  const counts: Partial<Record<PlaylistSongSourceId, number>> = {};
+  for (const song of songs) {
+    const { id } = resolvePlaylistSongSource(song);
+    counts[id] = (counts[id] ?? 0) + 1;
+  }
+  return counts;
+}
