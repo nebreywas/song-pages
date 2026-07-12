@@ -61,14 +61,97 @@ export function sunoDemoManifestUrl(songId: number): string {
   return `${SUNO_DEMO_MANIFEST_PREFIX}${songId}`;
 }
 
+const SUNO_PAGE_PREFIX = 'songpages-suno-demo:page/';
+
 const SUNO_CLIP_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function normalizeSunoClipUuid(clipUuid: string | null | undefined): string | null {
+  const trimmed = String(clipUuid ?? '').trim().toLowerCase();
+  return SUNO_CLIP_UUID_RE.test(trimmed) ? trimmed : null;
+}
+
+/** Custom-playlist snapshots key by Suno clip UUID — not sidebar sqlite song ids. */
+export function sunoDemoPageUrlFromClipUuid(clipUuid: string): string {
+  const normalized = normalizeSunoClipUuid(clipUuid);
+  if (!normalized) throw new Error('Invalid Suno clip UUID.');
+  return `${SUNO_PAGE_PREFIX}${normalized}`;
+}
+
+export function sunoDemoManifestUrlFromClipUuid(clipUuid: string): string {
+  const normalized = normalizeSunoClipUuid(clipUuid);
+  if (!normalized) throw new Error('Invalid Suno clip UUID.');
+  return `${SUNO_DEMO_MANIFEST_PREFIX}${normalized}`;
+}
+
+/** Parse clip UUID from a Suno custom-playlist page URL. */
+export function parseSunoPageClipUuid(pageUrl: string | null | undefined): string | null {
+  if (typeof pageUrl !== 'string' || !pageUrl.startsWith(SUNO_PAGE_PREFIX)) return null;
+  return normalizeSunoClipUuid(pageUrl.slice(SUNO_PAGE_PREFIX.length));
+}
+
+/** Parse clip UUID from a Suno manifest URL (custom-playlist snapshot form). */
+export function parseSunoManifestClipUuid(url: string | null | undefined): string | null {
+  if (typeof url !== 'string' || !url.startsWith(SUNO_DEMO_MANIFEST_PREFIX)) return null;
+  return normalizeSunoClipUuid(url.slice(SUNO_DEMO_MANIFEST_PREFIX.length));
+}
+
+/** Parse the canonical Suno demo song id embedded in a sidebar playlist page URL. */
+export function sunoSongIdFromPageUrl(pageUrl: string | null | undefined): number | null {
+  if (typeof pageUrl !== 'string' || !pageUrl.startsWith(SUNO_PAGE_PREFIX)) return null;
+  const suffix = pageUrl.slice(SUNO_PAGE_PREFIX.length);
+  if (normalizeSunoClipUuid(suffix)) return null;
+  const id = Number(suffix);
+  return isSunoDemoSongId(id) ? id : null;
+}
+
+/** Parse a Suno demo manifest URL into the canonical song id, or null when invalid. */
+export function parseSunoManifestSongId(url: string | null | undefined): number | null {
+  if (typeof url !== 'string' || !url.startsWith(SUNO_DEMO_MANIFEST_PREFIX)) return null;
+  const id = Number(url.slice(SUNO_DEMO_MANIFEST_PREFIX.length));
+  return isSunoDemoSongId(id) ? id : null;
+}
+
+/**
+ * Resolve the internal manifest URL for a Suno demo track.
+ * Custom-playlist snapshots use clip-UUID URLs; sidebar playlists use numeric song ids.
+ */
+export function resolveSunoDemoManifestUrl(song: {
+  id?: number;
+  song_manifest_url?: string | null;
+  page_url?: string | null;
+  playback_scope?: string | null;
+  external_id?: string | null;
+}): string | null {
+  if (!isSunoDemoSong(song)) return null;
+
+  const fromPageClip = parseSunoPageClipUuid(song.page_url);
+  if (fromPageClip) return sunoDemoManifestUrlFromClipUuid(fromPageClip);
+
+  const fromPageSongId = sunoSongIdFromPageUrl(song.page_url);
+  if (fromPageSongId != null) return sunoDemoManifestUrl(fromPageSongId);
+
+  const fromManifestClip = parseSunoManifestClipUuid(song.song_manifest_url);
+  if (fromManifestClip) return sunoDemoManifestUrlFromClipUuid(fromManifestClip);
+
+  const fromExternal = normalizeSunoClipUuid(song.external_id);
+  if (fromExternal) return sunoDemoManifestUrlFromClipUuid(fromExternal);
+
+  if (typeof song.id === 'number' && isSunoDemoSongId(song.id)) {
+    return sunoDemoManifestUrl(song.id);
+  }
+
+  const storedSongId = parseSunoManifestSongId(song.song_manifest_url);
+  if (storedSongId != null) return sunoDemoManifestUrl(storedSongId);
+
+  return null;
+}
+
 /** Canonical Suno share URL — https://suno.com/song/{clip-uuid} */
 export function sunoShareUrlFromClipUuid(clipUuid: string | null | undefined): string | null {
-  const trimmed = String(clipUuid ?? '').trim();
-  if (!SUNO_CLIP_UUID_RE.test(trimmed)) return null;
-  return `https://suno.com/song/${trimmed.toLowerCase()}`;
+  const normalized = normalizeSunoClipUuid(clipUuid);
+  if (!normalized) return null;
+  return `https://suno.com/song/${normalized}`;
 }
 
 /** Virtual sidebar row for one Suno playlist. */

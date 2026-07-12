@@ -99,7 +99,7 @@ Listeners build a personal collection by subscribing to Song Pages artist URLs (
 1. Fetches `songpages-catalog.json` (and related manifests)
 2. Imports artist and song metadata into a local **SQLite** library (catalog mirror; user playlists are **snapshots** — [persistence-philosophy.md](./persistence-philosophy.md))
 3. Presents artists and songs in a familiar sidebar + song list UI
-4. Refreshes subscribed artists on launch and on manual refresh
+4. Refreshes subscribed artists on launch (when older than 30 days) and on manual refresh
 
 There is no centralized Song Pages catalog server. Each user's library is their own.
 

@@ -111,13 +111,13 @@ function createMainWindow() {
 
 async function refreshArtistsOnLaunch() {
   try {
-    const results = await listenerSubscribe.refreshAllArtists();
+    const results = await listenerSubscribe.refreshStaleArtistsOnLaunch();
     const refreshed = results.filter((r) => r.ok).length;
     if (refreshed > 0) {
-      logger.info('Launch refresh completed', { refreshed, total: results.length });
+      logger.info('Launch catalog refresh completed', { refreshed, total: results.length });
     }
   } catch (error) {
-    logger.warn('Launch refresh skipped', { error: String(error) });
+    logger.warn('Launch catalog refresh skipped', { error: String(error) });
   }
 }
 
@@ -132,7 +132,7 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   createMainWindow();
 
-  // Optional: refresh subscribed artists on launch when simple to do so.
+  // Refresh subscribed catalogs older than the auto-refresh window (30 days).
   void refreshArtistsOnLaunch();
 
   app.on('activate', () => {

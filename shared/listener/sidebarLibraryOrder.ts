@@ -101,26 +101,23 @@ export function mergeSidebarLibraryOrder(
   return { ordered, orderIds: ordered.map((artist) => artist.id) };
 }
 
-export type SidebarEntryType = 'artist' | 'playlist' | 'suno' | 'custom';
+export type SidebarEntryType = 'artist' | 'liked' | 'playlist';
 
 /** Minimal type label helper — mirrors sidebarEntry.ts without renderer imports. */
 export function sidebarEntryTypeForSort(artist: SidebarLibraryArtistRow): SidebarEntryType {
-  if (isLikedSongsSidebarArtist(artist.id)) return 'playlist';
-  if (isUserPlaylistArtistId(artist.id)) return 'custom';
-  if (artist.id < 0) return 'suno';
+  if (isLikedSongsSidebarArtist(artist.id)) return 'liked';
+  if (isUserPlaylistArtistId(artist.id)) return 'playlist';
   return 'artist';
 }
 
 export function sidebarEntryTypeSortLabel(type: SidebarEntryType): string {
   switch (type) {
     case 'artist':
-      return 'Artist';
+      return 'Artist Pages';
+    case 'liked':
+      return 'Liked Songs';
     case 'playlist':
       return 'Playlist';
-    case 'suno':
-      return 'Suno';
-    case 'custom':
-      return 'Custom';
   }
 }
 

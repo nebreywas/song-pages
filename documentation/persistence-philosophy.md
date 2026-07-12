@@ -90,7 +90,7 @@ Convenience references must not be upgraded to ownership without explicit produc
 | `song_cache` | `songs` | **Cache** | Tied to current song row; invalidated on revision change |
 | `song_cache` | `song_cache_assets` | **Ownership** | Asset rows belong to cache entry |
 | `catalog_song_skips` | `artists` + `external_id` | **Derived / overlay** | User preference; keyed to survive song row replacement |
-| `playlist_custom_orders` | song ids | **Derived** | Order overlay; sync prunes missing ids |
+| `playlist_custom_orders` | song ids | **Derived** | Order overlay; sync prunes missing ids; adds/moves append to bottom when order exists |
 | `settings` JSON blobs | — | **Snapshot / config** | Versioned JSON; normalize on read |
 
 ---
@@ -133,6 +133,20 @@ Convenience references must not be upgraded to ownership without explicit produc
 - `materializePlaylistSnapshot()` — copies/enriches **at write time** (add, move, repair), not on every read.  
 - Partial unique indexes use `page_url` when no `library_song_id` — snapshot identity path.
 
+**No cross-playlist pointers (required):**
+
+When a user adds or moves a track between playlists, the destination row must receive a **full 1:1 copy** of the snapshot fields at write time — title, URLs, lyrics, cover, duration, `external_id`, etc.
+
+Playlist rows must **never** store pointers into:
+
+- another custom playlist’s rows  
+- Suno sidebar / demo playlist song ids (`suno_demo_songs` row ids)  
+- subscribed catalog `songs` rows as the authoritative playback identity  
+
+`library_song_id` and `source_artist_id` are optional **convenience references** for provenance and dedup only. Playback and manifests resolve from the snapshot body (`page_url`, `external_id`, stored lyrics, …), not by re-joining the source playlist or catalog at read time.
+
+Provider-native ids (`external_id`, e.g. Suno clip UUID, YouTube video id) are part of the snapshot — not relational foreign keys to other local tables.
+
 **Convenience references (acceptable if stale):**
 
 - `library_song_id` — set on add when known; used for duplicate detection and write-time enrichment.  
@@ -142,14 +156,29 @@ Convenience references must not be upgraded to ownership without explicit produc
 
 | Area | Behavior | Snapshot-First read |
 |------|----------|---------------------|
-| `repairUserPlaylistSnapshots()` at startup | Re-queries catalog when snapshot “incomplete” | OK if **repair** only; risky if it silently replaces good historical snapshots when catalog changed |
+| `repairUserPlaylistSnapshots()` at startup | Re-queries catalog when snapshot “incomplete” | Fill-missing-only merge; gated by `user_playlist_snapshot_repair_version` in settings |
 | `enrichSongFromLibrary()` during materialize | Overwrites fields from live `songs` row when `library_song_id` set | OK at **user-initiated add/move**; should not run on passive read |
 | Live DB FK on `library_song_id` | `ON DELETE SET NULL` if FK enforced | Preserves row ✓; but FK still wrongly implies relational dependency — prefer no FK |
-| `playlist_custom_orders` | Stores song ids including synthetic negatives | Derived overlay; prunes on sync — separate from snapshot body |
+| `playlist_custom_orders` | Stores song ids including synthetic negatives | Derived overlay; prunes on sync; **adds and moves append to the bottom** when custom order exists |
 
 **Suno demo playlists** — same snapshot pattern within `suno_demo_songs` rows; not joined to `songs` table.
 
 **Liked Songs** — hybrid: `listLikedSongs()` uses `LEFT JOIN songs` for live enrichment with `COALESCE` fallback to snapshot columns. Acceptable if ghost/stale UI handles missing live rows; document as *read-time enrichment*, not relational playlist.
+
+---
+
+## Cache refresh cadence
+
+Snapshots are historical records — we do **not** re-scrape provider pages on every play. Background refresh is bounded and explicit:
+
+| Data | Auto-refresh window | Trigger |
+|------|---------------------|---------|
+| **Suno** demo + custom-playlist snapshots | **7 days** (`SUNO_SNAPSHOT_REFRESH_MS`) | Manifest resolution refetches clip metadata when `snapshot_refreshed_at` / `metadata_refreshed_at` is missing or stale |
+| **Subscribed artist / Song Pages catalogs** | **30 days** (`CATALOG_AUTO_REFRESH_MS`) | App launch runs `refreshStaleArtistsOnLaunch()` for artists whose `last_fetched_at` is older than the window |
+
+User-initiated refresh (manual “Refresh artist”, re-add, repair) always runs immediately and is not gated by these windows. Catalog refresh replaces the local mirror (`songs` rows) but **does not mutate** custom-playlist snapshot rows.
+
+Constants live in `shared/listener/cacheRefreshPolicy.ts` (mirrored in `electron/listener/cacheRefreshPolicy.js`).
 
 ---
 

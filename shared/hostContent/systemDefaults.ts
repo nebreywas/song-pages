@@ -56,6 +56,17 @@ We've finally reached the end`,
   'additional-genres': 'Our experts are still debating this.',
 };
 
+/**
+ * Lyrics shown in VC when embed-based tracks (YouTube, SoundCloud) have no lyrics text.
+ * Replaces the humorous system default — these providers never ship lyrics in our manifest.
+ */
+export const EMBED_PROVIDER_LYRICS_FALLBACK_TEXT = {
+  youtube:
+    "This content doesn't share lyrics text at this time. For YouTube you can turn on closed captions.",
+  soundcloud:
+    "This content doesn't share lyrics text at this time. For SoundCloud you'll just have to do without.",
+} as const;
+
 export const FALLBACK_SLOT_LABELS: Record<HostFallbackSlotId, string> = {
   cover: 'Cover Fallback',
   'video-cover': 'Video cover fallback',

@@ -1,7 +1,14 @@
 /**
  * Per-playlist manual song order — persisted when users drag-reorder tracks.
+ *
+ * Policy: adds and moves append new track ids to the bottom when custom order exists.
+ * Playlists without custom order stay on catalog/default sort until the user drags.
  */
 const { getDatabase } = require('../database');
+
+function userPlaylistKey(playlistId) {
+  return `user:${playlistId}`;
+}
 
 function initPlaylistOrderSchema(db) {
   db.exec(`
@@ -62,6 +69,40 @@ function clearCustomOrder(playlistKey) {
   );
 }
 
+/** Append a song to the bottom of custom order when the playlist already has one. */
+function appendSongToCustomOrderIfExists(playlistKey, songId) {
+  const stored = listOrderedSongIds(playlistKey);
+  if (stored.length === 0) return false;
+  if (stored.includes(songId)) return false;
+  saveCustomOrder(playlistKey, [...stored, songId]);
+  return true;
+}
+
+/** Remove a song from custom order when present; clears order if it was the last id. */
+function removeSongFromCustomOrderIfExists(playlistKey, songId) {
+  const stored = listOrderedSongIds(playlistKey);
+  if (stored.length === 0) return false;
+
+  const next = stored.filter((id) => id !== songId);
+  if (next.length === stored.length) return false;
+
+  if (next.length === 0) {
+    clearCustomOrder(playlistKey);
+    return true;
+  }
+
+  saveCustomOrder(playlistKey, next);
+  return true;
+}
+
+function appendSongToUserPlaylistCustomOrder(playlistId, songId) {
+  return appendSongToCustomOrderIfExists(userPlaylistKey(playlistId), songId);
+}
+
+function removeSongFromUserPlaylistCustomOrder(playlistId, songId) {
+  return removeSongFromCustomOrderIfExists(userPlaylistKey(playlistId), songId);
+}
+
 /**
  * Load custom order for a playlist, pruning missing songs and appending new ones.
  * Persists the synced order when it changed.
@@ -92,4 +133,10 @@ module.exports = {
   getPlaylistOrderState,
   saveCustomOrder,
   clearCustomOrder,
+  userPlaylistKey,
+  listOrderedSongIds,
+  appendSongToCustomOrderIfExists,
+  removeSongFromCustomOrderIfExists,
+  appendSongToUserPlaylistCustomOrder,
+  removeSongFromUserPlaylistCustomOrder,
 };

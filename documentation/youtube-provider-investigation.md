@@ -278,7 +278,7 @@ YouTube is the **first implementation** under `shared/providers/youtube/`.
 | `ListenerMode` | Only `isYoutubeSong()` branch + `YoutubeSongPage` — no URL parsing |
 | Playlist export / queue | Uses generic `SongRow` fields + `playback_scope` |
 
-## Future providers (SoundCloud, Bandcamp, …)
+## Future providers (…)
 
 Same shape:
 
@@ -286,6 +286,8 @@ Same shape:
 2. `extractMetadata` → intake-time official API  
 3. `playback_scope` + dedicated player component or direct audio URL  
 4. No changes to shuffle/repeat/VC transport except scope checks  
+
+**Autoplay gate:** Track-level paste integrations must start playback from Song Pages transport without a second click inside the provider widget — see [third-party-integrations.md §6](./third-party-integrations.md#6-autoplay-at-track-selection-required-for-track-level-integrations). **Bandcamp** was evaluated and rejected. **SoundCloud** shipped — see [soundcloud-provider-investigation.md](./soundcloud-provider-investigation.md).
 
 Suno demo remains separate historically but could migrate to `providers/suno` later.
 

@@ -184,7 +184,46 @@ declare global {
           data?: { duplicate: boolean; song: SongRow; count: number };
           error?: string;
         }>;
+        addExternalSongToUserPlaylist: (
+          playlistId: number,
+          input: string,
+        ) => Promise<{
+          ok: boolean;
+          data?: {
+            duplicate: boolean;
+            song: SongRow;
+            count: number;
+            intakeNotice?: string | null;
+            provider?: string;
+          };
+          error?: string;
+        }>;
         addYoutubeSongToUserPlaylist: (
+          playlistId: number,
+          input: string,
+        ) => Promise<{
+          ok: boolean;
+          data?: {
+            duplicate: boolean;
+            song: SongRow;
+            count: number;
+            intakeNotice?: string | null;
+          };
+          error?: string;
+        }>;
+        addFlowSongToUserPlaylist: (
+          playlistId: number,
+          input: string,
+        ) => Promise<{
+          ok: boolean;
+          data?: {
+            duplicate: boolean;
+            song: SongRow;
+            count: number;
+          };
+          error?: string;
+        }>;
+        addSoundcloudSongToUserPlaylist: (
           playlistId: number,
           input: string,
         ) => Promise<{

@@ -34,11 +34,9 @@ export function PlaylistRowContextMenu({
       ? 'Remove song'
       : playlistKind === 'personal'
         ? 'Remove from Liked Songs'
-        : playlistKind === 'suno'
-          ? `Remove from ${playlistName?.trim() || 'Suno playlist'}`
-          : playlistKind === 'custom'
-            ? `Remove from ${playlistName?.trim() || 'playlist'}`
-            : 'Remove song';
+        : playlistKind === 'custom'
+          ? `Remove from ${playlistName?.trim() || 'playlist'}`
+          : 'Remove song';
 
   return (
     <>

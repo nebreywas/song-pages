@@ -61,3 +61,12 @@ test('pickPreviousPlayableSongId skips marked rows', () => {
 test('resolvePlayableSong advances past a skipped request', () => {
   assert.equal(resolvePlayableSong(songs, songs[1]!)?.id, 3);
 });
+
+test('pickNextPlayableSongId skips unavailable liked rows', () => {
+  const likedSongs = [
+    { id: 1, skipped: 0, unavailable: 0 },
+    { id: 2, skipped: 0, unavailable: 1 },
+    { id: 3, skipped: 0, unavailable: 0 },
+  ];
+  assert.equal(pickNextPlayableSongId(likedSongs, 1, { shuffle: false, repeatMode: 'off' }), 3);
+});

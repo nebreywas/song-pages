@@ -665,6 +665,29 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                     </HelpTooltip>
                   </div>
 
+                  <div className="vc-settings-checkbox-row vc-settings-checkbox-row-indent">
+                    <label className="vc-field vc-field-inline vc-settings-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={config.suppressEmbedProviderLyricsMessages === true}
+                        disabled={config.useFallbacks === false}
+                        onChange={(e) => {
+                          setConfig((prev) =>
+                            normalizeVcConfig({
+                              ...prev,
+                              suppressEmbedProviderLyricsMessages: e.target.checked,
+                            }),
+                          );
+                        }}
+                      />
+                      <span>Suppress SoundCloud and YouTube lyrics messages</span>
+                    </label>
+                    <HelpTooltip ariaLabel="About suppressing embed lyrics messages">
+                      When enabled, lyrics cells stay blank for YouTube and SoundCloud tracks instead of
+                      showing the platform notice about captions or missing lyrics.
+                    </HelpTooltip>
+                  </div>
+
                   <div className="vc-settings-host-popup">
                     <label className="vc-settings-host-popup-label" htmlFor="vc-host-graphic-popup">
                       Host Content Graphic Popup

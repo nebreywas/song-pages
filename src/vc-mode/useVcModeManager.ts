@@ -6,6 +6,8 @@ import { DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR } from '@shared/vcMode/playbackEffec
 import { deriveCommandRuntimeContextFromVcState } from '@shared/commands';
 import { configUsesVisualizer, normalizeVcConfig } from '@shared/vcModeTypes';
 import { isYoutubeSong, youtubeVideoIdFromSong } from '@shared/youtube/youtubeFeature';
+import { isSoundcloudSong, soundcloudPermalinkFromSong } from '@shared/soundcloud/soundcloudFeature';
+import { resolveSunoDemoManifestUrl } from '@shared/demo/sunoDemoFeature';
 
 import { resolveSongAssetUrl, resolveSongCoverUrl, normalizeSongRowAssets } from '@shared/listener/songResolution';
 
@@ -64,32 +66,65 @@ type UseVcModeManagerOptions = {
   specialPlayPause?: VcSpecialPlayPauseState | null;
 };
 
+function effectiveManifestUrlForSong(song: SongRow | null | undefined): string | null {
+  if (!song) return null;
+  const normalized = normalizeSongRowAssets(song);
+  // Suno custom-playlist snapshots: canonical manifest from page_url, not stale stored URL.
+  return resolveSunoDemoManifestUrl(normalized) || normalized.song_manifest_url?.trim() || null;
+}
+
+function activeManifestForSong(
+  song: SongRow | null | undefined,
+  manifest: SongPagesSongManifest | null,
+  loadedManifestUrl: string | null,
+): SongPagesSongManifest | null {
+  if (!song || !manifest || !loadedManifestUrl) return null;
+  const url = effectiveManifestUrlForSong(song);
+  if (!url || url !== loadedManifestUrl) return null;
+  return manifest;
+}
+
+function lyricsSourceReadyForSong(
+  song: SongRow | null | undefined,
+  loadedManifestUrl: string | null,
+): boolean {
+  if (!song) return true;
+  const url = effectiveManifestUrlForSong(song);
+  if (!url) return true;
+  return loadedManifestUrl === url;
+}
+
 function buildSongPayload(
   song: SongRow | null | undefined,
   manifest: SongPagesSongManifest | null,
   artist: ArtistRow | null,
+  loadedManifestUrl: string | null,
 ): VcStatePayload['currentSong'] {
   if (!song) return null;
   const normalized = normalizeSongRowAssets(song);
   const profileArtist = isVirtualPlaylistSong(song) ? null : artist;
+  const activeManifest = activeManifestForSong(song, manifest, loadedManifestUrl);
   const trackArtist =
-    normalized.artist_name?.trim() || manifest?.artistName?.trim() || profileArtist?.artist_name?.trim() || '';
+    normalized.artist_name?.trim() || activeManifest?.artistName?.trim() || profileArtist?.artist_name?.trim() || '';
   return {
     id: normalized.id,
     title: normalized.title,
     artist: trackArtist,
     year: normalized.year,
     caption: normalized.caption,
-    coverUrl: resolveSongCoverUrl(normalized, manifest?.coverUrl ?? null),
-    videoCoverUrl: resolveSongAssetUrl(normalized, manifest?.extraImageUrl ?? null),
-    about: manifest?.about ?? '',
-    lyrics: manifest?.lyrics ?? '',
+    coverUrl: resolveSongCoverUrl(normalized, activeManifest?.coverUrl ?? null),
+    videoCoverUrl: resolveSongAssetUrl(normalized, activeManifest?.extraImageUrl ?? null),
+    about: activeManifest?.about ?? '',
+    lyrics: activeManifest?.lyrics ?? '',
     artistId: normalized.artist_id,
     durationSeconds: normalized.duration_seconds,
     mainGenre: null,
     additionalGenres: null,
     playbackScope: normalized.playback_scope ?? null,
     youtubeVideoId: isYoutubeSong(normalized) ? youtubeVideoIdFromSong(normalized) : null,
+    soundcloudPermalink: isSoundcloudSong(normalized)
+      ? soundcloudPermalinkFromSong(normalized)
+      : null,
   };
 }
 
@@ -119,6 +154,8 @@ export function useVcModeManager({
   const [hostCatalog, setHostCatalog] = useState<HostContentCatalog>(() => createDefaultHostContentCatalog());
 
   const manifestCacheRef = useRef(new Map<string, SongPagesSongManifest>());
+  /** Manifest URL that `songManifest` state belongs to — prevents cross-track bleed. */
+  const loadedManifestUrlRef = useRef<string | null>(null);
   const timingRef = useRef({ currentTime, duration, isPlaying });
   const canvasMirrorFrameRef = useRef<string | null>(null);
   const activeConfigRef = useRef(activeConfig);
@@ -202,7 +239,8 @@ export function useVcModeManager({
     vcOpen &&
     configUsesVisualizer(activeConfig) &&
     playingSong != null &&
-    !isYoutubeSong(playingSong);
+    !isYoutubeSong(playingSong) &&
+    !isSoundcloudSong(playingSong);
 
   const { analyser, butterchurnTap, applyButterchurnAudioSettings, audioContext } = useAudioAnalyser({
     audioRef: analyserAudioRef,
@@ -256,16 +294,22 @@ export function useVcModeManager({
 
   useEffect(() => {
     const song = designerSong ? normalizeSongRowAssets(designerSong) : null;
-    if (!song?.song_manifest_url) {
+    const url = effectiveManifestUrlForSong(song);
+    if (!url) {
+      loadedManifestUrlRef.current = null;
       setSongManifest(null);
       return;
     }
-    const url = song.song_manifest_url;
     const cached = manifestCacheRef.current.get(url);
     if (cached) {
+      loadedManifestUrlRef.current = url;
       setSongManifest(cached);
       return;
     }
+
+    // Drop the prior track's manifest while this one loads — stale empty lyrics triggered fallbacks.
+    loadedManifestUrlRef.current = null;
+    setSongManifest(null);
 
     const app = getApp();
     if (!app?.listener.fetchSongManifest) return;
@@ -275,13 +319,14 @@ export function useVcModeManager({
       if (cancelled || !result.ok || !result.data) return;
       const manifest = result.data as SongPagesSongManifest;
       manifestCacheRef.current.set(url, manifest);
+      loadedManifestUrlRef.current = url;
       setSongManifest(manifest);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [designerSong?.id, designerSong?.song_manifest_url]);
+  }, [designerSong?.id, designerSong?.song_manifest_url, designerSong?.page_url, designerSong?.playback_scope]);
 
   useEffect(() => {
     if (!designerSong) {
@@ -313,6 +358,8 @@ export function useVcModeManager({
   const buildStatePayload = useCallback((): VcStatePayload => {
     const config = normalizeVcConfig(activeConfig);
     const displaySong = playingSong ?? previewSong ?? null;
+    const loadedManifestUrl = loadedManifestUrlRef.current;
+    const activeManifest = activeManifestForSong(displaySong, songManifest, loadedManifestUrl);
     return {
       config,
       playback: { currentTime, duration, isPlaying },
@@ -325,17 +372,18 @@ export function useVcModeManager({
         volume,
         playbackEffects,
       },
-      currentSong: buildSongPayload(displaySong, songManifest, artistProfile),
+      currentSong: buildSongPayload(displaySong, songManifest, artistProfile, loadedManifestUrl),
       nextSong: nextSongPreview,
       upcoming,
       hostGraphicUrl: hostGraphicPopupUrl,
-      artistName: vcArtistDisplayName(displaySong, artistProfile, songManifest?.artistName),
+      artistName: vcArtistDisplayName(displaySong, artistProfile, activeManifest?.artistName),
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
       effectiveVisualizerId: vcVisualizerId,
       kudoPresets: kudos.presets,
       specialPlayPause,
       surfaceDesigns: getVcSurfaceDesignPickerState(),
+      lyricsSourceReady: lyricsSourceReadyForSong(displaySong, loadedManifestUrl),
     };
   }, [
     activeConfig,
@@ -361,6 +409,8 @@ export function useVcModeManager({
   const buildDesignerPreviewState = useCallback((): VcStatePayload => {
     const song = designerSong;
     const useLivePlayback = playingSong != null && song?.id === playingSong.id;
+    const loadedManifestUrl = loadedManifestUrlRef.current;
+    const activeManifest = activeManifestForSong(song, songManifest, loadedManifestUrl);
     return {
       config: normalizeVcConfig(activeConfig),
       playback: useLivePlayback
@@ -371,16 +421,17 @@ export function useVcModeManager({
             isPlaying: false,
           },
       audioMirror: { songId: null, playbackUrl: null, volume, playbackEffects },
-      currentSong: buildSongPayload(song, songManifest, artistProfile),
+      currentSong: buildSongPayload(song, songManifest, artistProfile, loadedManifestUrl),
       nextSong: nextSongPreview,
       upcoming,
       hostGraphicUrl: hostGraphicPopupUrl,
-      artistName: vcArtistDisplayName(song, artistProfile, songManifest?.artistName),
+      artistName: vcArtistDisplayName(song, artistProfile, activeManifest?.artistName),
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
       effectiveVisualizerId: vcVisualizerId,
       kudoPresets: kudos.presets,
       specialPlayPause,
+      lyricsSourceReady: lyricsSourceReadyForSong(song, loadedManifestUrl),
     };
   }, [
     activeConfig,

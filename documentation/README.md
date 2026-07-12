@@ -44,6 +44,7 @@
 |----------|----------|
 | [manifest-schemas.md](./manifest-schemas.md) | `songpages-*.json` contracts, compile output |
 | [ffmpeg-compile-prerequisites.md](./ffmpeg-compile-prerequisites.md) | Artist Mode compile (FFmpeg not bundled) |
+| [third-party-integrations.md](./third-party-integrations.md) | Suno, YouTube, Google Flow, future external source adapters |
 
 ### Audio & playback
 
@@ -84,6 +85,7 @@ Implemented features may still reference archived specs from code (`@see documen
 |-----------|-------------|
 | `electron/database.js`, `electron/listener/*` | persistence-philosophy.md, settings-and-persistence.md |
 | `electron/listener/userPlaylists.js` | persistence-philosophy.md (snapshots) |
+| `shared/providers/*`, `electron/listener/youtube/`, `flow/`, `sunoDemo/` | third-party-integrations.md |
 | `src/audio/*` | audio-pipeline.md, audio-systems-baseline.md |
 | `src/vc-mode/*`, `src/vc-window/*` | vc-mode-architecture.md |
 | `src/visualizers/*` | visualizer-architecture.md |

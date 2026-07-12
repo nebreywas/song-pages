@@ -25,6 +25,8 @@ function migrateListenerSchema(db) {
     db.exec('ALTER TABLE songs ADD COLUMN duration_seconds INTEGER');
   }
 
+  db.exec('CREATE INDEX IF NOT EXISTS idx_songs_page_url ON songs(page_url)');
+
   if (!artistCols.includes('song_count')) {
     db.exec('ALTER TABLE artists ADD COLUMN song_count INTEGER');
     // Backfill from imported songs for libraries created before this column existed.
@@ -89,8 +91,14 @@ function initListenerSchema() {
   const { initSunoDemoSchema } = require('./sunoDemo/sunoDemoSongs');
   initSunoDemoSchema(db);
 
+  const { initFlowSchema } = require('./flow/flowSongs');
+  initFlowSchema(db);
+
   const { initUserPlaylistsSchema } = require('./userPlaylists');
   initUserPlaylistsSchema(db);
+
+  const { migrateSunoSidebarPlaylistsToUserPlaylists } = require('./sunoDemo/migrateSunoPlaylists');
+  migrateSunoSidebarPlaylistsToUserPlaylists(db);
 
   const { initPlaylistOrderSchema } = require('./playlistOrder');
   initPlaylistOrderSchema(db);

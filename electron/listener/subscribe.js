@@ -196,6 +196,38 @@ async function refreshAllArtists() {
   return results;
 }
 
+/** Refresh subscribed catalogs that have not been fetched within the auto-refresh window. */
+async function refreshStaleArtistsOnLaunch() {
+  const { CATALOG_AUTO_REFRESH_MS, isStoredTimestampOlderThan } = require('./cacheRefreshPolicy');
+  const artists = library.listArtists();
+  const stale = artists.filter((artist) =>
+    isStoredTimestampOlderThan(artist.last_fetched_at, CATALOG_AUTO_REFRESH_MS),
+  );
+
+  if (stale.length === 0) {
+    return [];
+  }
+
+  logger.info('Refreshing stale subscribed catalogs', {
+    staleCount: stale.length,
+    artistCount: artists.length,
+  });
+
+  const results = [];
+  for (const artist of stale) {
+    try {
+      const result = await refreshArtist(artist.id);
+      results.push({ artistId: artist.id, ok: true, result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('Stale artist refresh failed', { artistId: artist.id, error: message });
+      results.push({ artistId: artist.id, ok: false, error: message });
+    }
+  }
+
+  return results;
+}
+
 /**
  * Fetch songpages-artist.json and merge identity fields into SQLite.
  * Always re-fetches so manual manifest edits show up without a full catalog recompile.
@@ -222,5 +254,6 @@ module.exports = {
   subscribeArtist,
   refreshArtist,
   refreshAllArtists,
+  refreshStaleArtistsOnLaunch,
   ensureArtistManifest,
 };

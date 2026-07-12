@@ -35,7 +35,7 @@ type UsePlaylistDragReorderOptions = {
 export function usePlaylistDragReorder({ rowCount, onReorder }: UsePlaylistDragReorderOptions) {
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const [insertIndex, setInsertIndex] = useState<number | null>(null);
-  const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
+  const rowRefs = useRef<(HTMLElement | null)[]>([]);
 
   const draggingSongId = dragSession?.songId ?? null;
   const draggingIndex = dragSession?.fromIndex ?? -1;
@@ -89,7 +89,7 @@ export function usePlaylistDragReorder({ rowCount, onReorder }: UsePlaylistDragR
     };
   }, [dragSession, finishDrag, updateInsertIndex]);
 
-  const setRowRef = useCallback((index: number, node: HTMLTableRowElement | null) => {
+  const setRowRef = useCallback((index: number, node: HTMLElement | null) => {
     rowRefs.current[index] = node;
   }, []);
 

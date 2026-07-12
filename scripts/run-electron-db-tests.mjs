@@ -21,7 +21,7 @@ const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
 
 const result = spawnSync(
   electronBinary,
-  ['--test', 'electron/listener/libraryUpsert.test.js', 'electron/listener/convenienceFkMigration.test.js'],
+  ['--test', 'electron/listener/libraryUpsert.test.js', 'electron/listener/convenienceFkMigration.test.js', 'electron/listener/userPlaylists.integration.test.js'],
   { cwd: projectRoot, env, stdio: 'inherit' },
 );
 

@@ -52,9 +52,40 @@ function sunoDemoManifestUrl(songId) {
   return `${SUNO_DEMO_MANIFEST_PREFIX}${songId}`;
 }
 
+const SUNO_PAGE_PREFIX = 'songpages-suno-demo:page/';
+
+function normalizeSunoClipUuid(clipUuid) {
+  const trimmed = String(clipUuid ?? '').trim().toLowerCase();
+  return UUID_RE.test(trimmed) ? trimmed : null;
+}
+
+function sunoDemoPageUrlFromClipUuid(clipUuid) {
+  const normalized = normalizeSunoClipUuid(clipUuid);
+  if (!normalized) throw new Error('Invalid Suno clip UUID.');
+  return `${SUNO_PAGE_PREFIX}${normalized}`;
+}
+
+function sunoDemoManifestUrlFromClipUuid(clipUuid) {
+  const normalized = normalizeSunoClipUuid(clipUuid);
+  if (!normalized) throw new Error('Invalid Suno clip UUID.');
+  return `${SUNO_DEMO_MANIFEST_PREFIX}${normalized}`;
+}
+
+function parseSunoPageClipUuid(pageUrl) {
+  if (typeof pageUrl !== 'string' || !pageUrl.startsWith(SUNO_PAGE_PREFIX)) return null;
+  return normalizeSunoClipUuid(pageUrl.slice(SUNO_PAGE_PREFIX.length));
+}
+
+function parseManifestClipUuid(url) {
+  if (typeof url !== 'string' || !url.startsWith(SUNO_DEMO_MANIFEST_PREFIX)) return null;
+  return normalizeSunoClipUuid(url.slice(SUNO_DEMO_MANIFEST_PREFIX.length));
+}
+
 function parseManifestSongId(url) {
   if (typeof url !== 'string' || !url.startsWith(SUNO_DEMO_MANIFEST_PREFIX)) return null;
-  const id = Number(url.slice(SUNO_DEMO_MANIFEST_PREFIX.length));
+  const suffix = url.slice(SUNO_DEMO_MANIFEST_PREFIX.length);
+  if (normalizeSunoClipUuid(suffix)) return null;
+  const id = Number(suffix);
   return isSunoDemoSongId(id) ? id : null;
 }
 
@@ -145,12 +176,24 @@ function artistFromClip(clip) {
   );
 }
 
-function coverFromClip(clip, songId) {
-  return (
-    clip?.image_large_url ||
-    clip?.image_url ||
-    `https://cdn1.suno.ai/image_${songId}.jpeg`
-  );
+/** Canonical Suno CDN cover when the API omits image fields (cdn2, not legacy cdn1). */
+function coverUrlFromClipUuid(clipUuid) {
+  const id = String(clipUuid || '').trim();
+  if (!id) return null;
+  return `https://cdn2.suno.ai/image_large_${id}.jpeg`;
+}
+
+function coverFromClip(clip, clipUuid) {
+  return clip?.image_large_url || clip?.image_url || coverUrlFromClipUuid(clipUuid || clip?.id);
+}
+
+/** Prefer API art, then stored snapshot, then canonical CDN pattern. */
+function resolveSunoCoverUrl(clip, clipUuid, snapshotCoverUrl) {
+  const fromApi = clip?.image_large_url || clip?.image_url;
+  if (fromApi) return fromApi;
+  const stored = String(snapshotCoverUrl ?? '').trim();
+  if (stored) return stored;
+  return coverUrlFromClipUuid(clipUuid || clip?.id);
 }
 
 function playbackFromClip(clip, songId) {
@@ -171,11 +214,17 @@ module.exports = {
   rowIdFromSongId,
   songIdFromRowId,
   sunoDemoManifestUrl,
+  sunoDemoPageUrlFromClipUuid,
+  sunoDemoManifestUrlFromClipUuid,
+  parseSunoPageClipUuid,
+  parseManifestClipUuid,
   parseManifestSongId,
   resolveInputToSongId,
   fetchStudioClip,
   lyricsFromClip,
   artistFromClip,
+  coverUrlFromClipUuid,
   coverFromClip,
+  resolveSunoCoverUrl,
   playbackFromClip,
 };

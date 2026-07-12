@@ -102,6 +102,119 @@ test('resolveVcCellContent returns empty when song field missing and useFallback
   assert.equal(cover.kind, 'empty');
 });
 
+test('resolveVcCellContent defers lyrics fallback while manifest is loading', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: '' },
+    lyricsSourceReady: false,
+  });
+
+  const lyrics = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(lyrics.kind, 'empty');
+});
+
+test('resolveVcCellContent shows catalog lyrics when present instead of humorous fallback', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: 'Real lyrics from manifest', playbackScope: 'full' },
+    lyricsSourceReady: true,
+  });
+
+  const lyrics = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(lyrics.kind, 'lyrics');
+  if (lyrics.kind === 'lyrics') {
+    assert.equal(lyrics.text, 'Real lyrics from manifest');
+    assert.doesNotMatch(lyrics.text, /La la la/);
+  }
+});
+
+test('resolveVcCellContent does not use embed fallback when lyrics are present', () => {
+  const ctx = baseContext({
+    song: {
+      ...songPayload(),
+      lyrics: 'Synced captions text',
+      playbackScope: 'youtube',
+    },
+  });
+
+  const lyrics = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(lyrics.kind, 'lyrics');
+  if (lyrics.kind === 'lyrics') {
+    assert.equal(lyrics.text, 'Synced captions text');
+    assert.doesNotMatch(lyrics.text, /closed captions/i);
+  }
+});
+
+test('resolveVcCellContent uses humorous fallback for Suno demo tracks without lyrics', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: '', playbackScope: 'suno-demo' },
+    lyricsSourceReady: true,
+  });
+
+  const lyrics = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(lyrics.kind, 'lyrics');
+  if (lyrics.kind === 'lyrics') {
+    assert.match(lyrics.text, /La la la/);
+    assert.doesNotMatch(lyrics.text, /closed captions/i);
+    assert.doesNotMatch(lyrics.text, /SoundCloud/i);
+  }
+});
+
+test('resolveVcCellContent uses embed-provider lyrics fallback for YouTube without lyrics', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: '', playbackScope: 'youtube' },
+  });
+
+  const lyrics = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(lyrics.kind, 'lyrics');
+  if (lyrics.kind === 'lyrics') {
+    assert.match(lyrics.text, /closed captions/i);
+    assert.doesNotMatch(lyrics.text, /La la la/);
+  }
+});
+
+test('resolveVcCellContent uses embed-provider lyrics fallback for SoundCloud without lyrics', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: '', playbackScope: 'soundcloud' },
+  });
+
+  const lyrics = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(lyrics.kind, 'lyrics');
+  if (lyrics.kind === 'lyrics') {
+    assert.match(lyrics.text, /SoundCloud/i);
+    assert.doesNotMatch(lyrics.text, /La la la/);
+  }
+});
+
+test('resolveVcCellContent skips host lyrics fallback for embed providers', () => {
+  const catalog = createDefaultHostContentCatalog();
+  const hostLyrics = catalog.items.find(
+    (item) => item.type === 'fallback' && item.slotId === 'lyrics',
+  );
+  assert.ok(hostLyrics && hostLyrics.type === 'fallback');
+  hostLyrics.textFields = ['Host custom lyrics fallback'];
+
+  const ctx = baseContext({
+    catalog,
+    song: { ...songPayload(), lyrics: '', playbackScope: 'youtube' },
+  });
+
+  const lyrics = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(lyrics.kind, 'lyrics');
+  if (lyrics.kind === 'lyrics') {
+    assert.match(lyrics.text, /closed captions/i);
+    assert.doesNotMatch(lyrics.text, /Host custom/);
+  }
+});
+
+test('resolveVcCellContent blanks embed-provider lyrics when suppress setting is on', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: '', playbackScope: 'youtube' },
+    suppressEmbedProviderLyricsMessages: true,
+  });
+
+  const lyrics = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(lyrics.kind, 'empty');
+});
+
 test('resolveHostAssignment resolves host graphic from catalog binding', () => {
   const catalog = createDefaultHostContentCatalog();
   catalog.items.push({

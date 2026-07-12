@@ -79,6 +79,7 @@ export function migrateVcConfig(raw: unknown, visualizerIdFallback: string = DEF
       visualizerSequence: value.visualizerSequence,
       visualizerAlsoClickToChange: value.visualizerAlsoClickToChange,
       useFallbacks: value.useFallbacks !== false,
+      suppressEmbedProviderLyricsMessages: value.suppressEmbedProviderLyricsMessages === true,
       gridDesign: value.gridDesign as VcModeConfig['gridDesign'],
       specialPlayStyle: value.specialPlayStyle as VcModeConfig['specialPlayStyle'],
       hostGraphicPopupId:

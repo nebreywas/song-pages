@@ -11,8 +11,10 @@ import {
 
 import { getVisualizer } from '../visualizers/registry';
 import { isVcYoutubeSong } from '@shared/youtube/youtubeFeature';
+import { isVcSoundcloudSong } from '@shared/soundcloud/soundcloudFeature';
 import { VisualizerPluginHost } from '../visualizers/VisualizerPluginHost';
 import { VcResolvedContentView } from './VcResolvedContentView';
+import { VcSoundcloudPlayer } from './VcSoundcloudPlayer';
 import { VcYoutubePlayer } from './VcYoutubePlayer';
 import { useOptionalVcVisualizerRotationContext } from './VcVisualizerRotationContext';
 
@@ -49,6 +51,9 @@ export function VcCellContentView({
         upcoming: state.upcoming,
         catalog: hostCatalog,
         useFallbacks: state.config.useFallbacks !== false,
+        suppressEmbedProviderLyricsMessages:
+          state.config.suppressEmbedProviderLyricsMessages === true,
+        lyricsSourceReady: state.lyricsSourceReady !== false,
         gridDesign: state.config.gridDesign,
       }, songBinding?.overrides),
     [
@@ -63,6 +68,8 @@ export function VcCellContentView({
       state.playback,
       state.upcoming,
       state.config.useFallbacks,
+      state.config.suppressEmbedProviderLyricsMessages,
+      state.lyricsSourceReady,
       state.config.gridDesign,
     ],
   );
@@ -81,6 +88,18 @@ export function VcCellContentView({
       return (
         <VcYoutubePlayer
           videoId={song.youtubeVideoId}
+          songId={song.id}
+          playback={playback}
+          mirrorSongId={state.audioMirror?.songId ?? null}
+        />
+      );
+    }
+
+    // SoundCloud tracks use the provider's waveform visual — no Web Audio tap available.
+    if (isVcSoundcloudSong(song) && song.soundcloudPermalink) {
+      return (
+        <VcSoundcloudPlayer
+          permalink={song.soundcloudPermalink}
           songId={song.id}
           playback={playback}
           mirrorSongId={state.audioMirror?.songId ?? null}

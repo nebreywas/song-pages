@@ -128,23 +128,30 @@ function registerIpcHandlers() {
 
   ipcMain.handle('listener:resolveSongAccess', async (_event, songRef, source) => {
     try {
-      const { resolveLibrarySongIdForAccess } = require('./listener/librarySongLookup');
+      const {
+        resolveLibrarySongIdForAccess,
+        clearStalePlaylistLibrarySongId,
+        snapshotAccessUrls,
+      } = require('./listener/librarySongLookup');
       const cacheManager = require('./listener/cacheManager');
+      const snapshot = snapshotAccessUrls(songRef);
+
       const songId = resolveLibrarySongIdForAccess(songRef);
       if (!songId) {
-        if (songRef && typeof songRef === 'object' && songRef.page_url && songRef.playback_url) {
-          return {
-            ok: true,
-            data: {
-              pageUrl: songRef.page_url,
-              playbackUrl: songRef.playback_url,
-              fromCache: false,
-            },
-          };
+        if (snapshot) {
+          return { ok: true, data: snapshot };
         }
         return { ok: false, error: 'Song not found.' };
       }
-      return await cacheManager.resolveSongAccess(songId, source);
+
+      const result = await cacheManager.resolveSongAccess(songId, source);
+      if (result.ok) return result;
+
+      clearStalePlaylistLibrarySongId(songId);
+      if (snapshot) {
+        return { ok: true, data: snapshot };
+      }
+      return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message };
@@ -232,21 +239,52 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('listener:fetchSongManifest', async (_event, url) => {
-    const { parseManifestSongId } = require('./listener/sunoDemo/feature');
+    const { parseManifestSongId, parseManifestClipUuid } = require('./listener/sunoDemo/feature');
     const sunoDemoSongs = require('./listener/sunoDemo/sunoDemoSongs');
     const youtubeSongs = require('./listener/youtube/youtubeSongs');
     const sunoSongId = parseManifestSongId(url);
     if (sunoSongId != null) {
-      const manifest = sunoDemoSongs.buildManifestForSongId(sunoSongId);
-      if (!manifest) {
-        return { ok: false, error: 'Suno demo song not found.' };
+      try {
+        const manifest = await sunoDemoSongs.buildManifestForSongIdAsync(sunoSongId);
+        if (!manifest) {
+          return { ok: false, error: 'Suno demo song not found.' };
+        }
+        return { ok: true, data: manifest };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { ok: false, error: message };
       }
-      return { ok: true, data: manifest };
+    }
+
+    const sunoClipUuid = parseManifestClipUuid(url);
+    if (sunoClipUuid) {
+      try {
+        const manifest = await sunoDemoSongs.buildManifestForClipUuidAsync(sunoClipUuid);
+        if (!manifest) {
+          return { ok: false, error: 'Suno demo song not found.' };
+        }
+        return { ok: true, data: manifest };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { ok: false, error: message };
+      }
     }
 
     const youtubeVideoId = youtubeSongs.parseYoutubeManifestVideoId(url);
     if (youtubeVideoId) {
       return { ok: true, data: youtubeSongs.buildManifestForVideoId(youtubeVideoId) };
+    }
+
+    const flowSongs = require('./listener/flow/flowSongs');
+    const flowClipId = flowSongs.parseFlowManifestClipId(url);
+    if (flowClipId) {
+      return { ok: true, data: flowSongs.buildManifestForClipId(flowClipId) };
+    }
+
+    const soundcloudSongs = require('./listener/soundcloud/soundcloudSongs');
+    const soundcloudTrackId = soundcloudSongs.parseSoundcloudManifestTrackId(url);
+    if (soundcloudTrackId) {
+      return { ok: true, data: soundcloudSongs.buildManifestForTrackId(soundcloudTrackId) };
     }
 
     const provenance = resolveManifestFetchProvenance(url);
@@ -375,6 +413,19 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle('listener:addExternalSongToUserPlaylist', async (_event, playlistId, input) => {
+    const externalSongIntake = require('./listener/externalSongIntake');
+    try {
+      if (typeof playlistId !== 'number' || typeof input !== 'string' || !input.trim()) {
+        return { ok: false, error: 'Invalid add request.' };
+      }
+      return await externalSongIntake.addExternalSongToUserPlaylist(playlistId, input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
   ipcMain.handle('listener:addYoutubeSongToUserPlaylist', async (_event, playlistId, input) => {
     const youtubeSongs = require('./listener/youtube/youtubeSongs');
     try {
@@ -382,6 +433,32 @@ function registerIpcHandlers() {
         return { ok: false, error: 'Invalid YouTube add request.' };
       }
       return await youtubeSongs.addYoutubeSongToUserPlaylist(playlistId, input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:addFlowSongToUserPlaylist', async (_event, playlistId, input) => {
+    const flowSongs = require('./listener/flow/flowSongs');
+    try {
+      if (typeof playlistId !== 'number' || typeof input !== 'string' || !input.trim()) {
+        return { ok: false, error: 'Invalid Google Flow add request.' };
+      }
+      return await flowSongs.addFlowSongToUserPlaylist(playlistId, input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:addSoundcloudSongToUserPlaylist', async (_event, playlistId, input) => {
+    const soundcloudSongs = require('./listener/soundcloud/soundcloudSongs');
+    try {
+      if (typeof playlistId !== 'number' || typeof input !== 'string' || !input.trim()) {
+        return { ok: false, error: 'Invalid SoundCloud add request.' };
+      }
+      return await soundcloudSongs.addSoundcloudSongToUserPlaylist(playlistId, input);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message };

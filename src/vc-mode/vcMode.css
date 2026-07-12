@@ -2222,6 +2222,10 @@
   gap: 0.45rem;
 }
 
+.vc-settings-checkbox-row-indent {
+  margin-left: 1.25rem;
+}
+
 .vc-settings-checkbox-label {
   flex: 0 0 auto;
   margin-bottom: 0;

@@ -59,4 +59,54 @@ describe('urlPolicy', () => {
     assert.equal(result.ok, false);
     assert.equal(result.code, 'URL_HOST');
   });
+
+  it('allows SoundCloud oEmbed endpoint for metadata intake', () => {
+    const result = validateRemoteUrl(
+      'https://soundcloud.com/oembed?format=json&url=https%3A%2F%2Fsoundcloud.com%2Fa%2Fb',
+      { purpose: 'soundcloud-oembed', provenance: { kind: 'soundcloud-oembed', permalink: 'x' } },
+    );
+    assert.equal(result.ok, true);
+  });
+
+  it('allows SoundCloud short links and track landings for redirect resolve', () => {
+    const short = validateRemoteUrl('https://on.soundcloud.com/abc', {
+      purpose: 'soundcloud-shortlink',
+      provenance: { kind: 'soundcloud-shortlink' },
+    });
+    assert.equal(short.ok, true);
+
+    const track = validateRemoteUrl('https://soundcloud.com/forss/flickermood', {
+      purpose: 'soundcloud-shortlink',
+      provenance: { kind: 'soundcloud-shortlink' },
+    });
+    assert.equal(track.ok, true);
+
+    const profile = validateRemoteUrl('https://soundcloud.com/forss', {
+      purpose: 'soundcloud-shortlink',
+      provenance: { kind: 'soundcloud-shortlink' },
+    });
+    assert.equal(profile.ok, false);
+  });
+
+  it('allows public Flow song pages for metadata intake', () => {
+    const result = validateRemoteUrl(
+      'https://www.flowmusic.app/song/57d4ab70-3279-4175-b327-c56d1df6a298',
+      { purpose: 'flow-song-page', provenance: 'user-initiated' },
+    );
+    assert.equal(result.ok, true);
+  });
+
+  it('allows public Flow GCS clips and rejects private buckets', () => {
+    const publicClip = validateRemoteUrl(
+      'https://storage.googleapis.com/producer-app-public/clips/57d4ab70-3279-4175-b327-c56d1df6a298.m4a',
+      { purpose: 'flow-public-clip', provenance: 'user-initiated' },
+    );
+    assert.equal(publicClip.ok, true);
+
+    const privateClip = validateRemoteUrl(
+      'https://storage.googleapis.com/producer-app-private/clips/57d4ab70-3279-4175-b327-c56d1df6a298.m4a',
+      { purpose: 'flow-public-clip', provenance: 'user-initiated' },
+    );
+    assert.equal(privateClip.ok, false);
+  });
 });

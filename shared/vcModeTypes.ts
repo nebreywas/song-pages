@@ -208,6 +208,8 @@ export type VcModeConfig = {
   visualizerAlsoClickToChange?: boolean;
   /** When false, missing song content renders blank instead of host/system fallbacks. */
   useFallbacks: boolean;
+  /** When true, YouTube/SoundCloud tracks show blank lyrics instead of the embed-provider notice. */
+  suppressEmbedProviderLyricsMessages?: boolean;
   /** Surface background, divider lines, and default text typography. */
   gridDesign: VcGridDesignSettings;
   /** Between-song pacing for VC hosts (pause / countdown). */
@@ -266,6 +268,8 @@ export type VcSongPayload = {
   playbackScope?: string | null;
   /** Canonical 11-char id when playbackScope is YouTube. */
   youtubeVideoId?: string | null;
+  /** Public track permalink when playbackScope is SoundCloud. */
+  soundcloudPermalink?: string | null;
 };
 
 export type VcUpcomingSong = {
@@ -309,6 +313,11 @@ export type VcStatePayload = {
   specialPlayPause?: VcSpecialPlayPauseState | null;
   /** Saved surface designs — lets the host switch layouts from the VC controller. */
   surfaceDesigns?: VcSurfaceDesignPickerState;
+  /**
+   * False while the current song's manifest is still loading — lyrics fallbacks wait
+   * so a prior track's empty manifest cannot trigger the humorous placeholder.
+   */
+  lyricsSourceReady?: boolean;
 };
 
 export const VC_SONG_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: string }> = [
@@ -614,6 +623,7 @@ export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
     visualizerSequence: sanitizeVisualizerSequence(config.visualizerSequence),
     visualizerAlsoClickToChange: migratedClick.visualizerAlsoClickToChange,
     useFallbacks: config.useFallbacks !== false,
+    suppressEmbedProviderLyricsMessages: config.suppressEmbedProviderLyricsMessages === true,
     gridDesign,
     specialPlayStyle: sanitizeSpecialPlayStyleSettings(config.specialPlayStyle),
     hostGraphicPopupId:

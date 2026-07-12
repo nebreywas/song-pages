@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { SUNO_DEMO_ARTIST_ID } from '../demo/sunoDemoFeature.ts';
+import { userPlaylistArtistId } from './userPlaylists.ts';
 import { LIKED_SONGS_ARTIST_ID, vcArtistDisplayName } from './playlistKinds.ts';
 
 test('vcArtistDisplayName uses track artist on virtual playlists', () => {
@@ -43,5 +44,5 @@ test('vcArtistDisplayName uses manifest fallback on Suno tracks', () => {
 });
 
 test('vcArtistDisplayName ignores virtual sidebar artist profile when song is absent', () => {
-  assert.equal(vcArtistDisplayName(null, { id: SUNO_DEMO_ARTIST_ID, artist_name: 'Suno 1' }), null);
+  assert.equal(vcArtistDisplayName(null, { id: userPlaylistArtistId(1), artist_name: 'My Mix' }), null);
 });

@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@melloware/coloris": "^0.25.0",
+    "@tanstack/react-table": "^8.21.3",
     "better-sqlite3": "^11.8.1",
     "butterchurn": "^2.6.7",
     "butterchurn-presets": "^2.4.7",

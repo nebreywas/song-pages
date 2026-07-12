@@ -4,9 +4,14 @@
 const { getDatabase } = require('../database');
 
 const USER_PLAYLIST_ARTIST_ID_BASE = -10_000;
+const USER_PLAYLIST_SONG_ID_BASE = -3_000_000;
 
 function isUserPlaylistArtistId(artistId) {
   return typeof artistId === 'number' && artistId <= USER_PLAYLIST_ARTIST_ID_BASE - 1;
+}
+
+function isUserPlaylistSongId(songId) {
+  return typeof songId === 'number' && songId <= USER_PLAYLIST_SONG_ID_BASE;
 }
 
 function pageUrlResourceIdentity(url) {
@@ -20,13 +25,40 @@ function pageUrlResourceIdentity(url) {
 }
 
 function findLibrarySongIdByPageUrl(pageUrl) {
+  const trimmed = String(pageUrl || '').trim();
+  if (!trimmed) return null;
+
+  const db = getDatabase();
+  const exact = db.prepare('SELECT id FROM songs WHERE page_url = ?').get(trimmed);
+  if (exact) return exact.id;
+
   const identity = pageUrlResourceIdentity(pageUrl);
   if (!identity) return null;
-  const rows = getDatabase().prepare('SELECT id, page_url FROM songs').all();
+
+  const rows = db.prepare('SELECT id, page_url FROM songs').all();
   for (const row of rows) {
     if (pageUrlResourceIdentity(row.page_url) === identity) return row.id;
   }
   return null;
+}
+
+/** Null convenience links on playlist snapshots when the catalog row no longer exists. */
+function clearStalePlaylistLibrarySongId(librarySongId) {
+  if (typeof librarySongId !== 'number' || librarySongId <= 0) return false;
+  const library = require('./library');
+  if (library.getSongById(librarySongId)) return false;
+
+  getDatabase()
+    .prepare('UPDATE user_playlist_songs SET library_song_id = NULL WHERE library_song_id = ?')
+    .run(librarySongId);
+  return true;
+}
+
+function snapshotAccessUrls(songRef) {
+  const pageUrl = String(songRef?.page_url || '').trim();
+  const playbackUrl = String(songRef?.playback_url || '').trim();
+  if (!pageUrl || !playbackUrl) return null;
+  return { pageUrl, playbackUrl, fromCache: false };
 }
 
 /** Catalog artist id for snapshots — never use virtual playlist sidebar ids. */
@@ -49,6 +81,11 @@ function resolveLibrarySongIdForAccess(ref) {
   if (typeof ref === 'number' && ref > 0) return ref;
   if (!ref || typeof ref !== 'object') return null;
 
+  // Custom playlist synthetic ids always resolve from snapshot body, not catalog cache.
+  if (typeof ref.id === 'number' && isUserPlaylistSongId(ref.id)) {
+    return null;
+  }
+
   if (typeof ref.library_song_id === 'number' && ref.library_song_id > 0) {
     return ref.library_song_id;
   }
@@ -66,4 +103,8 @@ module.exports = {
   findLibrarySongIdByPageUrl,
   resolveCatalogSourceArtistId,
   resolveLibrarySongIdForAccess,
+  clearStalePlaylistLibrarySongId,
+  snapshotAccessUrls,
+  isUserPlaylistSongId,
+  USER_PLAYLIST_SONG_ID_BASE,
 };

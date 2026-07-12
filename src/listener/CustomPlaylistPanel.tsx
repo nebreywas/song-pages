@@ -1,69 +1,66 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { YoutubeAddPopover } from './YoutubeAddPopover';
+import { AddNewSongPopover, type ExternalSongAddResult } from './AddNewSongPopover';
 
-type CustomPlaylistPanelProps = {
+type PlaylistPanelProps = {
   playlistName: string;
   songCount: number;
   playlistId?: number;
-  addYoutubeOpen: boolean;
+  addSongOpen: boolean;
   busy: boolean;
-  onAddYoutubeOpenChange: (open: boolean) => void;
-  onYoutubeAdded: (result: {
-    duplicate: boolean;
-    intakeNotice?: string | null;
-    song?: import('../types/app').SongRow;
-  }) => void;
+  onAddSongOpenChange: (open: boolean) => void;
+  onSongAdded: (result: ExternalSongAddResult) => void;
   onSharePlaylist: () => void;
 };
 
-/** Artist panel for a custom user playlist. */
+/** Home view for a user-created Playlist. */
 export function CustomPlaylistPanel({
   playlistName,
   songCount,
   playlistId,
-  addYoutubeOpen,
+  addSongOpen,
   busy,
-  onAddYoutubeOpenChange,
-  onYoutubeAdded,
+  onAddSongOpenChange,
+  onSongAdded,
   onSharePlaylist,
-}: CustomPlaylistPanelProps) {
-  const addLinkRef = useRef<HTMLButtonElement>(null);
-  const [popoverAnchor, setPopoverAnchor] = useState<{ x: number; y: number } | null>(null);
+}: PlaylistPanelProps) {
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
 
-  const resolveAnchor = useCallback(() => {
-    const rect = addLinkRef.current?.getBoundingClientRect();
+  const resolveAnchor = useCallback((button: HTMLButtonElement | null) => {
+    const rect = button?.getBoundingClientRect();
     if (!rect) return null;
     return { x: rect.left, y: rect.bottom + 6 };
   }, []);
 
   const openPopover = useCallback(() => {
-    const anchor = resolveAnchor();
-    if (!anchor) return;
-    setPopoverAnchor(anchor);
-    onAddYoutubeOpenChange(true);
-  }, [onAddYoutubeOpenChange, resolveAnchor]);
+    const next = resolveAnchor(addButtonRef.current);
+    if (!next) return;
+    setAnchor(next);
+    onAddSongOpenChange(true);
+  }, [onAddSongOpenChange, resolveAnchor]);
 
   const closePopover = useCallback(() => {
-    onAddYoutubeOpenChange(false);
-    setPopoverAnchor(null);
-  }, [onAddYoutubeOpenChange]);
+    onAddSongOpenChange(false);
+    setAnchor(null);
+  }, [onAddSongOpenChange]);
 
   useEffect(() => {
-    if (!addYoutubeOpen) {
-      setPopoverAnchor(null);
+    if (!addSongOpen) {
+      setAnchor(null);
       return;
     }
-    if (popoverAnchor) return;
-    const anchor = resolveAnchor();
-    if (anchor) setPopoverAnchor(anchor);
-  }, [addYoutubeOpen, popoverAnchor, resolveAnchor]);
+    if (anchor) return;
+    const next = resolveAnchor(addButtonRef.current);
+    if (next) setAnchor(next);
+  }, [addSongOpen, anchor, resolveAnchor]);
 
   return (
     <div className="custom-playlist-panel">
       <h2>{playlistName}</h2>
       <p className="custom-playlist-panel-copy">
-        Your personal playlist — add tracks from any artist, Liked Songs, or Suno playlist via right-click.
+        Your playlist — add tracks from Artist Pages, Liked Songs, or other playlists via
+        right-click, or paste a supported third-party link below.
       </p>
       <p className="custom-playlist-panel-count">
         {songCount === 1 ? '1 track' : `${songCount} tracks`}
@@ -73,21 +70,21 @@ export function CustomPlaylistPanel({
           Share Playlist
         </button>
         <button
-          ref={addLinkRef}
+          ref={addButtonRef}
           type="button"
-          className="link-btn youtube-add-link"
+          className="btn primary"
           onClick={openPopover}
         >
-          Add YouTube song
+          Add New Song
         </button>
       </div>
-      <YoutubeAddPopover
-        open={addYoutubeOpen}
-        anchor={popoverAnchor}
+      <AddNewSongPopover
+        open={addSongOpen}
+        anchor={anchor}
         busy={busy}
         playlistId={playlistId}
         onClose={closePopover}
-        onAdded={onYoutubeAdded}
+        onAdded={onSongAdded}
       />
     </div>
   );

@@ -9,6 +9,7 @@ import {
   resolveMultiFieldFallback,
   SYSTEM_FALLBACK_ASSETS,
   SYSTEM_FALLBACK_TEXT,
+  EMBED_PROVIDER_LYRICS_FALLBACK_TEXT,
   type HostContentCatalog,
   type HostContentItem,
   type HostFallbackItem,
@@ -68,6 +69,10 @@ export type VcResolutionContext = {
   upcoming: VcUpcomingSong[];
   catalog: HostContentCatalog;
   useFallbacks: boolean;
+  /** When true, omit YouTube/SoundCloud lyrics placeholder text (blank cell). */
+  suppressEmbedProviderLyricsMessages?: boolean;
+  /** When false, defer lyrics fallbacks until the current song manifest has loaded. */
+  lyricsSourceReady?: boolean;
   gridDesign?: VcGridDesignSettings;
   random?: () => number;
 };
@@ -306,7 +311,23 @@ function hostItemToResolved(
   return null;
 }
 
-function resolveSystemFallback(slotId: HostFallbackSlotId, typography: VcGridDefaultTypography): ResolvedVcContent {
+function embedProviderLyricsFallback(playbackScope: string | null | undefined): string | null {
+  if (playbackScope === 'youtube') return EMBED_PROVIDER_LYRICS_FALLBACK_TEXT.youtube;
+  if (playbackScope === 'soundcloud') return EMBED_PROVIDER_LYRICS_FALLBACK_TEXT.soundcloud;
+  return null;
+}
+
+/** Embed tracks never ship lyrics — only use platform copy when scope and empty lyrics agree. */
+function embedProviderLyricsFallbackForSong(song: VcSongPayload): string | null {
+  if (song.lyrics.trim()) return null;
+  return embedProviderLyricsFallback(song.playbackScope);
+}
+
+function resolveSystemFallback(
+  slotId: HostFallbackSlotId,
+  typography: VcGridDefaultTypography,
+  ctx?: VcResolutionContext,
+): ResolvedVcContent {
   if (slotId === 'cover') {
     return { kind: 'graphic', systemAsset: 'cover' };
   }
@@ -317,6 +338,13 @@ function resolveSystemFallback(slotId: HostFallbackSlotId, typography: VcGridDef
     return { kind: 'video', systemAsset: 'video-cover' };
   }
   if (slotId === 'lyrics') {
+    const embedFallback = ctx?.song ? embedProviderLyricsFallbackForSong(ctx.song) : null;
+    if (embedFallback) {
+      if (ctx?.suppressEmbedProviderLyricsMessages) {
+        return { kind: 'empty' };
+      }
+      return { kind: 'lyrics', text: embedFallback };
+    }
     return { kind: 'lyrics', text: SYSTEM_FALLBACK_TEXT.lyrics };
   }
   if (slotId === 'about-song') {
@@ -395,12 +423,23 @@ function resolveWithFallbackChain(
   const random = ctx.random ?? Math.random;
   const typography = gridTypography(ctx);
 
+  // Embed providers never supply lyrics — skip host humorous fallback for a clear platform note.
+  if (slotId === 'lyrics' && ctx.song) {
+    const embedFallback = embedProviderLyricsFallbackForSong(ctx.song);
+    if (embedFallback) {
+      if (ctx.suppressEmbedProviderLyricsMessages) {
+        return { kind: 'empty' };
+      }
+      return { kind: 'lyrics', text: embedFallback };
+    }
+  }
+
   if (fallback && !fallback.resetToSystemDefault) {
     const hostResolved = resolveHostFallback(fallback, ctx.catalog, random, typography);
     if (hostResolved) return hostResolved;
   }
 
-  return resolveSystemFallback(slotId, typography);
+  return resolveSystemFallback(slotId, typography, ctx);
 }
 
 function songDurationSeconds(ctx: VcResolutionContext): number | null {
@@ -678,6 +717,14 @@ function resolveSongContent(
 
   const slotId = SONG_TO_FALLBACK[content];
   if (!slotId) return { kind: 'empty' };
+
+  // Avoid humorous or host fallbacks while manifest lyrics for this track are still loading.
+  if (
+    (content === 'lyrics' || content === 'marquee-lyrics') &&
+    ctx.lyricsSourceReady === false
+  ) {
+    return { kind: 'empty' };
+  }
 
   return applySongPresentation(content, resolveWithFallbackChain(slotId, ctx), songOverrides, ctx);
 }

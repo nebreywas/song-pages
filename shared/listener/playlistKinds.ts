@@ -1,8 +1,8 @@
-import { isSunoDemoSong, isSunoDemoArtistId } from '../demo/sunoDemoFeature';
+import { isSunoDemoSong } from '../demo/sunoDemoFeature';
 import { isUserPlaylistArtistId } from './userPlaylists';
 
 /** How remove/skip behaves for each listener playlist type. */
-export type PlaylistKind = 'catalog' | 'personal' | 'suno' | 'custom';
+export type PlaylistKind = 'catalog' | 'personal' | 'custom';
 
 export const LIKED_SONGS_ARTIST_ID = 0;
 
@@ -10,7 +10,6 @@ export function playlistKindForArtistId(artistId: number | null | undefined): Pl
   if (artistId == null) return null;
   if (artistId === LIKED_SONGS_ARTIST_ID) return 'personal';
   if (isUserPlaylistArtistId(artistId)) return 'custom';
-  if (isSunoDemoArtistId(artistId)) return 'suno';
   if (artistId > 0) return 'catalog';
   return null;
 }
@@ -27,14 +26,15 @@ export function isCustomPlaylist(artistId: number | null | undefined): boolean {
   return playlistKindForArtistId(artistId) === 'custom';
 }
 
-export function isSunoPlaylist(artistId: number | null | undefined): boolean {
-  return playlistKindForArtistId(artistId) === 'suno';
+/** @deprecated Suno sidebar playlists removed — Suno tracks live on user Playlists. */
+export function isSunoPlaylist(_artistId: number | null | undefined): boolean {
+  return false;
 }
 
-/** Liked Songs and Suno Only use virtual sidebar artists — not real artist profiles. */
+/** Liked Songs and user Playlists use virtual sidebar artists — not subscribed Artist Pages. */
 export function isVirtualPlaylistArtistId(artistId: number | null | undefined): boolean {
   const kind = playlistKindForArtistId(artistId);
-  return kind === 'personal' || kind === 'suno' || kind === 'custom';
+  return kind === 'personal' || kind === 'custom';
 }
 
 type VcArtistNameSource = {
@@ -74,4 +74,17 @@ export function vcArtistDisplayName(
 /** User-marked skip on subscribed catalog rows — song stays in the list. */
 export function isSongSkipped(song: { skipped?: number | boolean | null }): boolean {
   return song.skipped === 1 || song.skipped === true;
+}
+
+/** Liked Songs availability probe — NULL = unchecked, 1 = unavailable. */
+export function isSongUnavailable(song: { unavailable?: number | boolean | null }): boolean {
+  return song.unavailable === 1 || song.unavailable === true;
+}
+
+/** Songs eligible for auto-advance, shuffle, and resolvePlayableSong. */
+export function isQueueEligibleSong(song: {
+  skipped?: number | boolean | null;
+  unavailable?: number | boolean | null;
+}): boolean {
+  return !isSongSkipped(song) && !isSongUnavailable(song);
 }

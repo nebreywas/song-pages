@@ -7,15 +7,22 @@ const {
   SUNO_DEMO_SONG_ID_BASE,
   SUNO_DEMO_PLAYBACK_SCOPE,
   songIdFromRowId,
+  rowIdFromSongId,
   sunoDemoManifestUrl,
+  sunoDemoPageUrlFromClipUuid,
   sunoPlaylistArtistId,
   resolveInputToSongId,
   fetchStudioClip,
   lyricsFromClip,
   artistFromClip,
   coverFromClip,
+  resolveSunoCoverUrl,
   playbackFromClip,
 } = require('./feature');
+const {
+  SUNO_SNAPSHOT_REFRESH_MS,
+  isStoredTimestampOlderThan,
+} = require('../cacheRefreshPolicy');
 const {
   initSunoDemoPlaylistsSchema,
   ensureSunoDemoLibraryReady,
@@ -44,6 +51,15 @@ function initSunoDemoSchema(db) {
   `);
 
   initSunoDemoPlaylistsSchema(db);
+
+  const cols = db.prepare('PRAGMA table_info(suno_demo_songs)').all().map((col) => col.name);
+  if (!cols.includes('metadata_refreshed_at')) {
+    db.exec('ALTER TABLE suno_demo_songs ADD COLUMN metadata_refreshed_at TEXT');
+    db.exec(
+      `UPDATE suno_demo_songs SET metadata_refreshed_at = COALESCE(added_at, datetime('now'))
+       WHERE metadata_refreshed_at IS NULL`,
+    );
+  }
 }
 
 function countSunoDemoSongs(playlistId) {
@@ -99,10 +115,123 @@ function listSunoDemoSongs(playlistId) {
   return rows.map(rowToSongRow);
 }
 
-function buildManifestForSongId(songId) {
-  const row = getRowBySongId(songId);
-  if (!row) return null;
+function sunoDemoPageUrl(songId) {
+  return `songpages-suno-demo:page/${songId}`;
+}
 
+/** Custom-playlist snapshots keyed by clip UUID — self-contained, not sidebar song ids. */
+function findSunoSnapshotForClipUuid(clipUuid) {
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT id, title, artist_name, cover_url, playback_url, external_id, page_url, lyrics,
+                snapshot_refreshed_at, added_at
+         FROM user_playlist_songs
+         WHERE lower(external_id) = lower(?)
+         ORDER BY added_at DESC
+         LIMIT 1`,
+      )
+      .get(clipUuid) ?? null
+  );
+}
+
+function snapshotRefreshTimestamp(snapshot) {
+  return snapshot?.snapshot_refreshed_at ?? snapshot?.added_at ?? null;
+}
+
+function sunoSnapshotIsFresh(snapshot) {
+  return (
+    Boolean(String(snapshot?.lyrics ?? '').trim()) &&
+    !isStoredTimestampOlderThan(snapshotRefreshTimestamp(snapshot), SUNO_SNAPSHOT_REFRESH_MS)
+  );
+}
+
+function sunoDemoRowIsFresh(row) {
+  return (
+    Boolean(String(row?.lyrics ?? '').trim()) &&
+    !isStoredTimestampOlderThan(row?.metadata_refreshed_at ?? row?.added_at, SUNO_SNAPSHOT_REFRESH_MS)
+  );
+}
+
+/** Push refetched Suno clip metadata into every custom-playlist snapshot for this clip. */
+function applyClipToSunoSnapshots(clipUuid, clip) {
+  const normalized = String(clipUuid || clip?.id || '').trim().toLowerCase();
+  if (!normalized || !clip) return;
+
+  const title = String(clip.title || 'Untitled').trim() || 'Untitled';
+  const artistName = String(artistFromClip(clip) || 'Suno').trim() || 'Suno';
+  const coverUrl = coverFromClip(clip, normalized);
+  const playbackUrl = playbackFromClip(clip, normalized);
+  const lyrics = lyricsFromClip(clip);
+  const durationSeconds =
+    typeof clip.metadata?.duration === 'number' && clip.metadata.duration > 0
+      ? Math.round(clip.metadata.duration)
+      : null;
+
+  getDatabase()
+    .prepare(
+      `UPDATE user_playlist_songs SET
+         title = ?, artist_name = ?, cover_url = ?, playback_url = ?, lyrics = ?,
+         duration_seconds = COALESCE(?, duration_seconds),
+         snapshot_refreshed_at = datetime('now')
+       WHERE lower(external_id) = lower(?)`,
+    )
+    .run(title, artistName, coverUrl, playbackUrl, lyrics, durationSeconds, normalized);
+}
+
+function refreshSunoDemoRowFromClip(row, clip) {
+  if (!row || !clip) return row;
+
+  const clipUuid = String(clip.id || row.clip_uuid || '').trim();
+  const title = String(clip.title || row.title || 'Untitled').trim() || 'Untitled';
+  const artistName = String(artistFromClip(clip) || row.artist_name || 'Suno').trim() || 'Suno';
+  const coverUrl = coverFromClip(clip, clipUuid) || row.cover_url || null;
+  const playbackUrl = playbackFromClip(clip, clipUuid) || row.playback_url || '';
+  const lyrics = lyricsFromClip(clip) || String(row.lyrics ?? '').trim();
+  const durationSeconds =
+    typeof clip.metadata?.duration === 'number' && clip.metadata.duration > 0
+      ? Math.round(clip.metadata.duration)
+      : row.duration_seconds;
+
+  getDatabase()
+    .prepare(
+      `UPDATE suno_demo_songs SET
+         title = ?, artist_name = ?, cover_url = ?, playback_url = ?, lyrics = ?,
+         duration_seconds = ?, metadata_refreshed_at = datetime('now')
+       WHERE id = ?`,
+    )
+    .run(title, artistName, coverUrl, playbackUrl, lyrics, durationSeconds, row.id);
+
+  return {
+    ...row,
+    title,
+    artist_name: artistName,
+    cover_url: coverUrl,
+    playback_url: playbackUrl,
+    lyrics,
+    duration_seconds: durationSeconds,
+  };
+}
+
+/** Legacy lookup for sidebar song-id pointers still being migrated. */
+function findSunoSnapshotForSongId(songId) {
+  const pageUrl = sunoDemoPageUrl(songId);
+  const manifestUrl = sunoDemoManifestUrl(songId);
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT title, artist_name, cover_url, playback_url, external_id, page_url
+         FROM user_playlist_songs
+         WHERE (page_url = ? OR song_manifest_url = ?)
+           AND external_id IS NOT NULL AND trim(external_id) != ''
+         ORDER BY added_at DESC
+         LIMIT 1`,
+      )
+      .get(pageUrl, manifestUrl) ?? null
+  );
+}
+
+function manifestFromSunoRow(row, songId) {
   return {
     schemaVersion: 1,
     siteRoot: '',
@@ -118,7 +247,7 @@ function buildManifestForSongId(songId) {
     lyrics: row.lyrics || '',
     coverUrl: row.cover_url,
     extraImageUrl: null,
-    pageUrl: `songpages-suno-demo:page/${songId}`,
+    pageUrl: sunoDemoPageUrl(songId),
     playbackUrl: row.playback_url,
     streamLinks: { youtube: '', spotify: '', soundcloud: '' },
     playbackScope: 'full',
@@ -126,6 +255,203 @@ function buildManifestForSongId(songId) {
     buildVersion: 'suno-demo',
     durationSeconds: row.duration_seconds,
   };
+}
+
+function manifestFromSunoClip(clip, songId, snapshot) {
+  const clipUuid = String(clip.id || snapshot?.external_id || '').trim();
+  const title = String(clip.title || snapshot?.title || 'Untitled').trim() || 'Untitled';
+  const artistName = String(artistFromClip(clip) || snapshot?.artist_name || 'Suno').trim() || 'Suno';
+  const lyrics = String(snapshot?.lyrics || '').trim() || lyricsFromClip(clip);
+  const durationSeconds =
+    typeof clip.metadata?.duration === 'number' && clip.metadata.duration > 0
+      ? Math.round(clip.metadata.duration)
+      : null;
+  const pageUrl =
+    songId != null ? sunoDemoPageUrl(songId) : sunoDemoPageUrlFromClipUuid(clipUuid);
+
+  return {
+    schemaVersion: 1,
+    siteRoot: '',
+    artistSlug: 'suno-playlist',
+    artistName,
+    id: clipUuid,
+    slug: clipUuid,
+    title,
+    album: '',
+    year: '',
+    caption: '',
+    about: '',
+    lyrics,
+    coverUrl: resolveSunoCoverUrl(clip, clipUuid, snapshot?.cover_url),
+    extraImageUrl: null,
+    pageUrl,
+    playbackUrl: playbackFromClip(clip, clipUuid) || snapshot?.playback_url || '',
+    streamLinks: { youtube: '', spotify: '', soundcloud: '' },
+    playbackScope: 'full',
+    playbackQuality: 'standard',
+    buildVersion: 'suno-demo',
+    durationSeconds,
+  };
+}
+
+/** Re-insert a missing canonical row so future manifest lookups succeed without refetch. */
+function healMissingSunoDemoRow(songId, clip, snapshot, lyrics) {
+  const rowId = rowIdFromSongId(songId);
+  if (rowId <= 0) return null;
+
+  const db = getDatabase();
+  if (db.prepare('SELECT id FROM suno_demo_songs WHERE id = ?').get(rowId)) return null;
+
+  const clipUuid = String(clip.id || snapshot?.external_id || '').trim();
+  if (!clipUuid) return null;
+
+  const existingByClip = db.prepare('SELECT id FROM suno_demo_songs WHERE clip_uuid = ?').get(clipUuid);
+  if (existingByClip) return db.prepare('SELECT * FROM suno_demo_songs WHERE id = ?').get(existingByClip.id);
+
+  const title = String(clip.title || snapshot?.title || 'Untitled').trim() || 'Untitled';
+  const artistName = String(artistFromClip(clip) || snapshot?.artist_name || 'Suno').trim() || 'Suno';
+  const coverUrl = coverFromClip(clip, clipUuid) || snapshot?.cover_url || null;
+  const playbackUrl = playbackFromClip(clip, clipUuid) || snapshot?.playback_url || '';
+  const durationSeconds =
+    typeof clip.metadata?.duration === 'number' && clip.metadata.duration > 0
+      ? Math.round(clip.metadata.duration)
+      : null;
+  const sourceUrl = `https://suno.com/song/${clipUuid}`;
+
+  db.prepare(
+    `INSERT INTO suno_demo_songs (
+       id, clip_uuid, title, artist_name, cover_url, playback_url, lyrics, source_url, duration_seconds, playlist_id
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    rowId,
+    clipUuid,
+    title,
+    artistName,
+    coverUrl,
+    playbackUrl,
+    lyrics,
+    sourceUrl,
+    durationSeconds,
+    ensureDefaultSunoDemoPlaylistId(),
+  );
+
+  return db.prepare('SELECT * FROM suno_demo_songs WHERE id = ?').get(rowId);
+}
+
+function refreshSunoDemoLyrics(row, lyrics) {
+  const trimmed = String(lyrics ?? '').trim();
+  if (!trimmed || !row) return row;
+  if (String(row.lyrics ?? '').trim()) return row;
+
+  getDatabase()
+    .prepare(
+      `UPDATE suno_demo_songs SET lyrics = ?, metadata_refreshed_at = datetime('now') WHERE id = ?`,
+    )
+    .run(trimmed, row.id);
+
+  return { ...row, lyrics: trimmed };
+}
+
+/**
+ * Resolve a Suno manifest — refetching from Suno when the DB row is missing, lyrics are empty,
+ * or cached metadata is older than the Suno snapshot refresh window (7 days).
+ */
+async function buildManifestForSongIdAsync(songId) {
+  if (!isFeatureEnabled()) return null;
+
+  let row = getRowBySongId(songId);
+  if (row && sunoDemoRowIsFresh(row)) {
+    return manifestFromSunoRow(row, songId);
+  }
+
+  const snapshot = findSunoSnapshotForSongId(songId);
+  const clipUuid = String(row?.clip_uuid || snapshot?.external_id || '').trim();
+  if (!clipUuid) {
+    return row ? manifestFromSunoRow(row, songId) : null;
+  }
+
+  let clip;
+  try {
+    clip = await fetchStudioClip(clipUuid);
+  } catch {
+    return row ? manifestFromSunoRow(row, songId) : null;
+  }
+
+  const lyrics = lyricsFromClip(clip);
+  applyClipToSunoSnapshots(clipUuid, clip);
+
+  if (row) {
+    row = refreshSunoDemoRowFromClip(row, clip);
+    return manifestFromSunoRow(row, songId);
+  }
+
+  row = healMissingSunoDemoRow(songId, clip, snapshot, lyrics);
+  if (row) {
+    return manifestFromSunoRow(row, songId);
+  }
+
+  return manifestFromSunoClip(clip, songId, snapshot);
+}
+
+/**
+ * Resolve a Suno manifest for a custom-playlist clip UUID snapshot.
+ * Refetches from Suno when lyrics are empty or the snapshot is older than 7 days.
+ */
+async function buildManifestForClipUuidAsync(clipUuid) {
+  if (!isFeatureEnabled()) return null;
+
+  const normalized = String(clipUuid || '').trim().toLowerCase();
+  if (!normalized) return null;
+
+  const snapshot = findSunoSnapshotForClipUuid(normalized);
+  if (snapshot && sunoSnapshotIsFresh(snapshot)) {
+    return manifestFromSunoClip(
+      { id: normalized, title: snapshot.title, metadata: { prompt: snapshot.lyrics } },
+      null,
+      snapshot,
+    );
+  }
+
+  const row = getDatabase()
+    .prepare('SELECT * FROM suno_demo_songs WHERE lower(clip_uuid) = lower(?)')
+    .get(normalized);
+
+  if (row && sunoDemoRowIsFresh(row)) {
+    if (snapshot && !snapshot.lyrics?.trim()) {
+      getDatabase()
+        .prepare(
+          `UPDATE user_playlist_songs SET lyrics = ?, snapshot_refreshed_at = datetime('now') WHERE id = ?`,
+        )
+        .run(row.lyrics, snapshot.id);
+    }
+    return manifestFromSunoRow(row, songIdFromRowId(row.id));
+  }
+
+  let clip;
+  try {
+    clip = await fetchStudioClip(normalized);
+  } catch {
+    if (row) return manifestFromSunoRow(row, songIdFromRowId(row.id));
+    return snapshot
+      ? manifestFromSunoClip({ id: normalized, title: snapshot.title }, null, snapshot)
+      : null;
+  }
+
+  applyClipToSunoSnapshots(normalized, clip);
+
+  if (row) {
+    const refreshed = refreshSunoDemoRowFromClip(row, clip);
+    return manifestFromSunoRow(refreshed, songIdFromRowId(row.id));
+  }
+
+  return manifestFromSunoClip(clip, null, snapshot);
+}
+
+function buildManifestForSongId(songId) {
+  const row = getRowBySongId(songId);
+  if (!row) return null;
+
+  return manifestFromSunoRow(row, songId);
 }
 
 async function addSunoDemoSongByUrl(input, playlistId) {
@@ -235,6 +561,10 @@ module.exports = {
   listSunoDemoSongs,
   addSunoDemoSongByUrl,
   buildManifestForSongId,
+  buildManifestForSongIdAsync,
+  buildManifestForClipUuidAsync,
+  findSunoSnapshotForSongId,
+  findSunoSnapshotForClipUuid,
   getRowBySongId,
   updateSunoDemoSongDuration,
   removeSunoDemoSong,

@@ -18,7 +18,6 @@ export function SortableColumnHeader({
   activeColumn,
   direction,
   onSort,
-  className,
   disabled = false,
 }: SortableColumnHeaderProps) {
   const isActive = column === activeColumn;
@@ -26,21 +25,18 @@ export function SortableColumnHeader({
 
   if (disabled) {
     return (
-      <th className={`${className ?? ''} is-disabled`.trim()} aria-sort="none">
-        <span className="sort-header-label sort-header-label-disabled">{label}</span>
-      </th>
+      <span className="sort-header-label sort-header-label-disabled">{label}</span>
     );
   }
 
   return (
-    <th className={className} aria-sort={ariaSort}>
-      <button
-        type="button"
-        className={`sort-header-btn${isActive ? ' active' : ''}`}
-        onClick={() => onSort(column)}
-      >
-        {label}
-      </button>
-    </th>
+    <button
+      type="button"
+      className={`sort-header-btn${isActive ? ' active' : ''}`}
+      aria-sort={ariaSort}
+      onClick={() => onSort(column)}
+    >
+      {label}
+    </button>
   );
 }

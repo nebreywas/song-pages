@@ -5,7 +5,7 @@
  * reference (one track / one video), not a browsing session on the provider site.
  */
 
-export type ProviderId = 'youtube';
+export type ProviderId = 'youtube' | 'flow';
 
 /** Stable identity for one work on an external provider. */
 export type CanonicalWorkRef = {
@@ -29,7 +29,7 @@ export type ProviderIntakeResult<TRef extends CanonicalWorkRef> =
   | ProviderIntakeError;
 
 /**
- * Provider intake contract — future providers (SoundCloud, Bandcamp, …) implement
+ * Provider intake contract — future providers (e.g. SoundCloud) implement
  * the same surface without leaking provider details into ListenerMode transport.
  */
 export type ProviderIntake<TRef extends CanonicalWorkRef, TMetadata> = {

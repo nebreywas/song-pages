@@ -1,13 +1,49 @@
 /**
  * Custom user playlists — sidebar ids at -10001 and below.
  *
- * Playlist rows are self-contained snapshots. Add/move copies full song metadata
- * (URLs, cover, manifest, site root) at write time — reads never join the catalog.
+ * Playlist rows are self-contained snapshots. Add/move copies the full stored row
+ * at write time (1:1) — never pointers into Suno sidebar tables, other custom
+ * playlists, or subscribed catalog rows. Reads never join external playlists.
  */
 const { getDatabase } = require('../database');
 
 const USER_PLAYLIST_ARTIST_ID_BASE = -10_000;
 const USER_PLAYLIST_SONG_ID_BASE = -3_000_000;
+
+/** Bump when snapshot repair logic changes — triggers one-time repair pass. */
+const USER_PLAYLIST_SNAPSHOT_REPAIR_VERSION = 2;
+const USER_PLAYLIST_SNAPSHOT_REPAIR_KEY = 'user_playlist_snapshot_repair_version';
+
+function isNonemptyString(value) {
+  return Boolean(String(value ?? '').trim());
+}
+
+function isBlankSnapshotValue(value) {
+  if (value == null) return true;
+  if (typeof value === 'string') return !value.trim();
+  return false;
+}
+
+/** Fill missing snapshot fields from a repair source; replace when stored value is blank. */
+function mergeSnapshotFieldsFillMissing(stored, incoming) {
+  const merged = { ...stored };
+  for (const key of Object.keys(incoming)) {
+    if (isBlankSnapshotValue(merged[key]) && !isBlankSnapshotValue(incoming[key])) {
+      merged[key] = incoming[key];
+    }
+  }
+  return merged;
+}
+
+function isCompleteProviderSnapshot(pageUrl, fields, isSnapshot) {
+  return (
+    isSnapshot(pageUrl) &&
+    isNonemptyString(fields.external_id) &&
+    isNonemptyString(fields.page_url) &&
+    isNonemptyString(fields.playback_url) &&
+    isNonemptyString(fields.song_manifest_url)
+  );
+}
 
 function userPlaylistArtistId(playlistId) {
   return USER_PLAYLIST_ARTIST_ID_BASE - playlistId;
@@ -73,14 +109,37 @@ function isSunoSnapshot(pageUrl) {
 }
 
 const { isYoutubeSnapshot } = require('./youtube/youtubeFeature');
+const { isFlowSnapshot } = require('./flow/flowFeature');
+const { isSoundcloudSnapshot } = require('./soundcloud/soundcloudFeature');
 
 function isCompleteCatalogSnapshot(fields) {
-  if (isSunoSnapshot(fields.page_url)) return true;
-  if (isYoutubeSnapshot(fields.page_url)) return true;
+  if (isSunoSnapshot(fields.page_url)) {
+    const { parseSunoPageClipUuid } = require('./sunoDemo/feature');
+    const clipUuid = parseSunoPageClipUuid(fields.page_url);
+    if (clipUuid) {
+      return Boolean(
+        fields.song_manifest_url?.trim() &&
+        fields.external_id?.trim() &&
+        fields.playback_url?.trim(),
+      );
+    }
+    return false;
+  }
+  if (isYoutubeSnapshot(fields.page_url)) {
+    return isCompleteProviderSnapshot(fields.page_url, fields, isYoutubeSnapshot);
+  }
+  if (isFlowSnapshot(fields.page_url)) {
+    return isCompleteProviderSnapshot(fields.page_url, fields, isFlowSnapshot);
+  }
+  if (isSoundcloudSnapshot(fields.page_url)) {
+    return isCompleteProviderSnapshot(fields.page_url, fields, isSoundcloudSnapshot);
+  }
   return Boolean(
     fields.cover_url?.trim() &&
     fields.song_manifest_url?.trim() &&
-    fields.site_root_normalized?.trim(),
+    fields.site_root_normalized?.trim() &&
+    fields.page_url?.trim() &&
+    fields.playback_url?.trim(),
   );
 }
 
@@ -102,6 +161,8 @@ function snapshotFieldsFromDbRow(row) {
     external_id: row.external_id,
     duration_seconds: row.duration_seconds,
     site_root_normalized: row.site_root_normalized ?? null,
+    lyrics: row.lyrics ?? '',
+    snapshot_refreshed_at: row.snapshot_refreshed_at ?? row.added_at ?? null,
   };
 }
 
@@ -121,6 +182,80 @@ function migratePlaylistSongColumns(db) {
   const cols = db.prepare('PRAGMA table_info(user_playlist_songs)').all().map((col) => col.name);
   if (!cols.includes('site_root_normalized')) {
     db.exec('ALTER TABLE user_playlist_songs ADD COLUMN site_root_normalized TEXT');
+  }
+  if (!cols.includes('lyrics')) {
+    db.exec('ALTER TABLE user_playlist_songs ADD COLUMN lyrics TEXT NOT NULL DEFAULT ""');
+  }
+  if (!cols.includes('snapshot_refreshed_at')) {
+    db.exec('ALTER TABLE user_playlist_songs ADD COLUMN snapshot_refreshed_at TEXT');
+    db.exec(
+      `UPDATE user_playlist_songs SET snapshot_refreshed_at = COALESCE(added_at, datetime('now'))
+       WHERE snapshot_refreshed_at IS NULL`,
+    );
+  }
+  repairSunoPlaylistSnapshotPointers(db);
+  repairLegacySunoCoverSnapshots(db);
+}
+
+/** Force manifest refetch for snapshots still pointing at legacy cdn1 cover URLs (403 on many clips). */
+function repairLegacySunoCoverSnapshots(db) {
+  db.prepare(
+    `UPDATE user_playlist_songs
+     SET snapshot_refreshed_at = NULL
+     WHERE page_url LIKE 'songpages-suno-demo:%'
+       AND cover_url LIKE '%cdn1.suno.ai%'`,
+  ).run();
+}
+
+/** Rewrite legacy Suno sidebar song-id pointers into self-contained clip-UUID snapshots. */
+function repairSunoPlaylistSnapshotPointers(db) {
+  const {
+    sunoDemoPageUrlFromClipUuid,
+    sunoDemoManifestUrlFromClipUuid,
+    parseSunoPageClipUuid,
+  } = require('./sunoDemo/feature');
+  const { getRowBySongId } = require('./sunoDemo/sunoDemoSongs');
+
+  const rows = db
+    .prepare(`SELECT * FROM user_playlist_songs WHERE page_url LIKE 'songpages-suno-demo:page/%'`)
+    .all();
+  const update = db.prepare(
+    `UPDATE user_playlist_songs
+     SET page_url = ?, song_manifest_url = ?, external_id = ?, lyrics = ?,
+         cover_url = COALESCE(?, cover_url),
+         playback_url = COALESCE(?, playback_url)
+     WHERE id = ?`,
+  );
+
+  for (const row of rows) {
+    if (parseSunoPageClipUuid(row.page_url)) continue;
+
+    const sunoSongId = sunoSongIdFromPageUrl(row.page_url);
+    let clipUuid = String(row.external_id || '').trim().toLowerCase();
+    let lyrics = String(row.lyrics || '').trim();
+    let coverUrl = null;
+    let playbackUrl = null;
+    let sunoRow = null;
+
+    if (sunoSongId != null) {
+      sunoRow = getRowBySongId(sunoSongId);
+      clipUuid = clipUuid || String(sunoRow?.clip_uuid || '').trim().toLowerCase() || null;
+      if (!lyrics && sunoRow?.lyrics?.trim()) lyrics = sunoRow.lyrics.trim();
+      coverUrl = sunoRow?.cover_url?.trim() || null;
+      playbackUrl = sunoRow?.playback_url?.trim() || null;
+    }
+
+    if (!clipUuid) continue;
+
+    update.run(
+      sunoDemoPageUrlFromClipUuid(clipUuid),
+      sunoDemoManifestUrlFromClipUuid(clipUuid),
+      clipUuid,
+      lyrics,
+      coverUrl,
+      playbackUrl,
+      row.id,
+    );
   }
 }
 
@@ -153,6 +288,8 @@ function captureSongFields(song) {
     external_id: song.external_id ?? null,
     duration_seconds: song.duration_seconds ?? null,
     site_root_normalized: song.site_root_normalized ?? null,
+    lyrics: song.lyrics ?? '',
+    snapshot_refreshed_at: song.snapshot_refreshed_at ?? null,
   };
 }
 
@@ -191,26 +328,64 @@ function enrichSongFromLibrary(fields) {
   );
 }
 
+function sunoSongIdFromPageUrl(pageUrl) {
+  if (typeof pageUrl !== 'string' || !pageUrl.startsWith('songpages-suno-demo:page/')) return null;
+  const id = Number(pageUrl.slice('songpages-suno-demo:page/'.length));
+  return isSunoDemoSongId(id) ? id : null;
+}
+
 function enrichSongFromSuno(song) {
-  if (!isSunoDemoSongId(song.id)) return captureSongFields(song);
+  const {
+    sunoDemoPageUrlFromClipUuid,
+    sunoDemoManifestUrlFromClipUuid,
+    parseSunoPageClipUuid,
+  } = require('./sunoDemo/feature');
+
+  const existingClip = parseSunoPageClipUuid(song.page_url);
+  if (existingClip) {
+    // Self-contained snapshot — copy 1:1; never re-resolve through sidebar song ids.
+    return {
+      ...captureSongFields({
+        ...song,
+        page_url: sunoDemoPageUrlFromClipUuid(existingClip),
+        song_manifest_url: sunoDemoManifestUrlFromClipUuid(existingClip),
+        playback_scope: 'suno-demo',
+        external_id: existingClip,
+      }),
+      lyrics: String(song.lyrics ?? '').trim(),
+      snapshot_refreshed_at: song.snapshot_refreshed_at ?? null,
+      site_root_normalized: '',
+    };
+  }
+
   const { getRowBySongId } = require('./sunoDemo/sunoDemoSongs');
-  const { sunoDemoManifestUrl } = require('./sunoDemo/feature');
-  const row = getRowBySongId(song.id);
-  if (!row) return captureSongFields(song);
+  let clipUuid = String(song.external_id || '').trim().toLowerCase() || null;
+
+  const sunoSongId = isSunoDemoSongId(song.id) ? song.id : sunoSongIdFromPageUrl(song.page_url);
+  let row = null;
+  if (sunoSongId != null) {
+    row = getRowBySongId(sunoSongId);
+    clipUuid = clipUuid || String(row?.clip_uuid || '').trim().toLowerCase() || null;
+  }
+
+  if (!clipUuid) return captureSongFields(song);
+
   return {
     ...captureSongFields({
       ...song,
-      artist_name: row.artist_name,
-      title: row.title,
-      page_url: `songpages-suno-demo:page/${song.id}`,
-      playback_url: row.playback_url,
-      song_manifest_url: sunoDemoManifestUrl(song.id),
+      artist_name: row?.artist_name ?? song.artist_name,
+      title: row?.title ?? song.title,
+      page_url: sunoDemoPageUrlFromClipUuid(clipUuid),
+      playback_url: row?.playback_url ?? song.playback_url,
+      song_manifest_url: sunoDemoManifestUrlFromClipUuid(clipUuid),
       playback_scope: 'suno-demo',
-      external_id: row.clip_uuid,
-      cover_url: row.cover_url,
-      duration_seconds: row.duration_seconds,
+      external_id: clipUuid,
+      cover_url: row?.cover_url ?? song.cover_url,
+      duration_seconds: row?.duration_seconds ?? song.duration_seconds,
       site_root_normalized: '',
     }),
+    lyrics: String(row?.lyrics ?? song.lyrics ?? '').trim(),
+    snapshot_refreshed_at: null,
     site_root_normalized: '',
   };
 }
@@ -239,6 +414,48 @@ function enrichSongFromYoutubeFields(fields) {
   };
 }
 
+function enrichSongFromFlowFields(fields) {
+  const {
+    flowPageUrl,
+    flowManifestUrl,
+    FLOW_PLAYBACK_SCOPE,
+  } = require('./flow/flowFeature');
+  const clipId = fields.external_id;
+  if (!clipId) return fields;
+  return {
+    ...fields,
+    artist_name: fields.artist_name || 'Google Flow',
+    title: fields.title || 'Google Flow Song',
+    page_url: flowPageUrl(clipId),
+    playback_url: fields.playback_url || `https://storage.googleapis.com/producer-app-public/clips/${clipId}.m4a`,
+    song_manifest_url: flowManifestUrl(clipId),
+    playback_scope: FLOW_PLAYBACK_SCOPE,
+    external_id: clipId,
+    site_root_normalized: '',
+  };
+}
+
+function enrichSongFromSoundcloudFields(fields) {
+  const {
+    soundcloudPageUrl,
+    soundcloudManifestUrl,
+    SOUNDCLOUD_PLAYBACK_SCOPE,
+  } = require('./soundcloud/soundcloudFeature');
+  const trackId = fields.external_id;
+  if (!trackId) return fields;
+  return {
+    ...fields,
+    artist_name: fields.artist_name || 'SoundCloud',
+    title: fields.title || 'SoundCloud Track',
+    page_url: soundcloudPageUrl(trackId),
+    playback_url: fields.playback_url || '',
+    song_manifest_url: soundcloudManifestUrl(trackId),
+    playback_scope: SOUNDCLOUD_PLAYBACK_SCOPE,
+    external_id: trackId,
+    site_root_normalized: '',
+  };
+}
+
 /**
  * Build the full row payload stored on a playlist — called only on add/move/repair.
  * Playlist-to-playlist copies carry the stored snapshot forward without re-querying catalog.
@@ -257,6 +474,14 @@ function materializePlaylistSnapshot(song, options = {}) {
 
   if (isYoutubeSnapshot(fields.page_url) || fields.playback_scope === 'youtube') {
     return enrichSongFromYoutubeFields(fields);
+  }
+
+  if (isFlowSnapshot(fields.page_url) || fields.playback_scope === 'flow') {
+    return enrichSongFromFlowFields(fields);
+  }
+
+  if (isSoundcloudSnapshot(fields.page_url) || fields.playback_scope === 'soundcloud') {
+    return enrichSongFromSoundcloudFields(fields);
   }
 
   if (isSunoDemoSongId(song.id) || isSunoSnapshot(fields.page_url)) {
@@ -305,14 +530,13 @@ function materializePlaylistSnapshot(song, options = {}) {
 }
 
 function repairUserPlaylistSnapshots(db) {
-  migratePlaylistSongColumns(db);
   const rows = db.prepare('SELECT * FROM user_playlist_songs').all();
   const update = db.prepare(
     `UPDATE user_playlist_songs SET
        library_song_id = ?, source_artist_id = ?, artist_name = ?, title = ?, album = ?, year = ?,
        caption = ?, cover_url = ?, page_url = ?, playback_url = ?, song_manifest_url = ?,
        playback_scope = ?, playback_quality = ?, external_id = ?, duration_seconds = ?,
-       site_root_normalized = ?
+       site_root_normalized = ?, lyrics = ?, snapshot_refreshed_at = ?
      WHERE id = ?`,
   );
 
@@ -320,7 +544,7 @@ function repairUserPlaylistSnapshots(db) {
     const current = snapshotFieldsFromDbRow(row);
     if (isCompleteCatalogSnapshot(current)) continue;
 
-    const fields = materializePlaylistSnapshot(
+    const repaired = materializePlaylistSnapshot(
       {
         ...current,
         id: songIdFromEntryId(row.id),
@@ -329,6 +553,8 @@ function repairUserPlaylistSnapshots(db) {
       },
       { carryForward: false },
     );
+
+    const fields = mergeSnapshotFieldsFillMissing(current, repaired);
 
     update.run(
       fields.library_song_id,
@@ -347,9 +573,23 @@ function repairUserPlaylistSnapshots(db) {
       fields.external_id,
       fields.duration_seconds,
       fields.site_root_normalized,
+      fields.lyrics ?? '',
+      fields.snapshot_refreshed_at ?? null,
       row.id,
     );
   }
+}
+
+function runRepairUserPlaylistSnapshotsIfNeeded(db) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(USER_PLAYLIST_SNAPSHOT_REPAIR_KEY);
+  const currentVersion = Number(row?.value ?? 0);
+  if (currentVersion >= USER_PLAYLIST_SNAPSHOT_REPAIR_VERSION) return;
+
+  repairUserPlaylistSnapshots(db);
+  db.prepare(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(USER_PLAYLIST_SNAPSHOT_REPAIR_KEY, String(USER_PLAYLIST_SNAPSHOT_REPAIR_VERSION));
 }
 
 function initUserPlaylistsSchema(db) {
@@ -392,7 +632,7 @@ function initUserPlaylistsSchema(db) {
   `);
 
   migratePlaylistSongColumns(db);
-  repairUserPlaylistSnapshots(db);
+  runRepairUserPlaylistSnapshotsIfNeeded(db);
 }
 
 function listUserPlaylists() {
@@ -571,8 +811,8 @@ function insertSongFields(playlistId, fields) {
       `INSERT INTO user_playlist_songs (
          playlist_id, library_song_id, source_artist_id, artist_name, title, album, year, caption,
          cover_url, page_url, playback_url, song_manifest_url, playback_scope, playback_quality,
-         external_id, duration_seconds, site_root_normalized
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         external_id, duration_seconds, site_root_normalized, lyrics, snapshot_refreshed_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
     )
     .run(
       playlistId,
@@ -592,8 +832,13 @@ function insertSongFields(playlistId, fields) {
       fields.external_id,
       fields.duration_seconds,
       fields.site_root_normalized,
+      fields.lyrics ?? '',
     );
-  return insert.lastInsertRowid;
+
+  const entryId = insert.lastInsertRowid;
+  const { appendSongToUserPlaylistCustomOrder } = require('./playlistOrder');
+  appendSongToUserPlaylistCustomOrder(playlistId, songIdFromEntryId(entryId));
+  return entryId;
 }
 
 function addSongToUserPlaylist(playlistId, song) {
@@ -629,6 +874,10 @@ function removeUserPlaylistSong(songId) {
   if (!entry) return { count: 0 };
   const playlistId = entry.playlist_id;
   getDatabase().prepare('DELETE FROM user_playlist_songs WHERE id = ?').run(entry.id);
+
+  const { removeSongFromUserPlaylistCustomOrder } = require('./playlistOrder');
+  removeSongFromUserPlaylistCustomOrder(playlistId, songId);
+
   return { count: getUserPlaylistById(playlistId)?.song_count ?? 0, playlist_id: playlistId };
 }
 
@@ -675,6 +924,12 @@ function moveSongToUserPlaylist({ sourceArtistId, destPlaylistId, song }) {
     return { ok: false, error: 'Song is already on that playlist.' };
   }
 
+  const destFields = materializePlaylistSnapshot(song);
+  if (findDuplicateEntryId(destPlaylistId, destFields)) {
+    return { ok: false, error: 'Song is already on that playlist.' };
+  }
+
+  const sourceSongId = song.id;
   const db = getDatabase();
   const tx = db.transaction(() => {
     if (sourceArtistId === 0) {
@@ -690,7 +945,23 @@ function moveSongToUserPlaylist({ sourceArtistId, destPlaylistId, song }) {
     return addSongToUserPlaylist(destPlaylistId, song);
   });
 
-  return tx();
+  const result = tx();
+  if (!result.ok || result.data?.duplicate) {
+    return result;
+  }
+
+  const {
+    removeSongFromCustomOrderIfExists,
+    removeSongFromUserPlaylistCustomOrder,
+  } = require('./playlistOrder');
+
+  if (sourcePlaylistId) {
+    removeSongFromUserPlaylistCustomOrder(sourcePlaylistId, sourceSongId);
+  } else if (sourceArtistId === 0) {
+    removeSongFromCustomOrderIfExists('liked', sourceSongId);
+  }
+
+  return result;
 }
 
 module.exports = {
@@ -715,4 +986,8 @@ module.exports = {
   isUserPlaylistArtistId,
   USER_PLAYLIST_ARTIST_ID_BASE,
   materializePlaylistSnapshot,
+  isCompleteCatalogSnapshot,
+  mergeSnapshotFieldsFillMissing,
+  repairUserPlaylistSnapshots,
+  USER_PLAYLIST_SNAPSHOT_REPAIR_VERSION,
 };

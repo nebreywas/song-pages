@@ -28,6 +28,27 @@ export function syncCustomPlaylistOrder(storedOrder: number[], currentSongIds: n
   return [...filtered, ...appended];
 }
 
+/**
+ * When a playlist already has custom order, newly added/moved tracks append at the bottom.
+ * Returns null when no custom order exists yet (caller should not create one).
+ */
+export function appendToCustomOrderIfExists(
+  storedOrder: number[],
+  songId: number,
+): number[] | null {
+  if (storedOrder.length === 0) return null;
+  if (storedOrder.includes(songId)) return storedOrder;
+  return [...storedOrder, songId];
+}
+
+/** Remove one song id from a saved custom order; returns null when order becomes empty. */
+export function removeFromCustomOrder(storedOrder: number[], songId: number): number[] | null {
+  if (storedOrder.length === 0) return null;
+  const next = storedOrder.filter((id) => id !== songId);
+  if (next.length === storedOrder.length) return storedOrder;
+  return next.length === 0 ? null : next;
+}
+
 /** Reorder a list by moving one index to another (same splice semantics as kudo presets). */
 export function reorderPlaylistIds<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   if (fromIndex === toIndex) return [...items];

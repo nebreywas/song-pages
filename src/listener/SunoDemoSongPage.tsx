@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { resolveSunoDemoManifestUrl } from '@shared/demo/sunoDemoFeature';
 import { getApp } from '../lib/bridge';
 import { renderLyricsMarkdownPreview } from '../lib/markdownPreview';
 import type { SongRow } from '../types/app';
@@ -21,10 +22,11 @@ export function SunoDemoSongPage({
   lyricsSettings,
   onRemoveBracketsChange,
 }: SunoDemoSongPageProps) {
+  const manifestUrl = useMemo(() => resolveSunoDemoManifestUrl(song), [song]);
   const [lyrics, setLyrics] = useState('');
   const [coverUrl, setCoverUrl] = useState<string | null>(song.cover_url);
   const [coverPopoverOpen, setCoverPopoverOpen] = useState(false);
-  const [loading, setLoading] = useState(Boolean(song.song_manifest_url));
+  const [loading, setLoading] = useState(() => Boolean(resolveSunoDemoManifestUrl(song)));
 
   useEffect(() => {
     setCoverPopoverOpen(false);
@@ -32,7 +34,7 @@ export function SunoDemoSongPage({
 
   useEffect(() => {
     setCoverUrl(song.cover_url);
-    if (!song.song_manifest_url) {
+    if (!manifestUrl) {
       setLyrics('');
       setLoading(false);
       return;
@@ -46,7 +48,7 @@ export function SunoDemoSongPage({
 
     let cancelled = false;
     setLoading(true);
-    void app.listener.fetchSongManifest(song.song_manifest_url).then((result) => {
+    void app.listener.fetchSongManifest(manifestUrl).then((result) => {
       if (cancelled) return;
       setLoading(false);
       if (!result.ok || !result.data || typeof result.data !== 'object') return;
@@ -58,7 +60,7 @@ export function SunoDemoSongPage({
     return () => {
       cancelled = true;
     };
-  }, [song.id, song.cover_url, song.song_manifest_url]);
+  }, [song.id, song.cover_url, manifestUrl]);
 
   const lyricsHtml = useMemo(() => {
     if (!lyrics.trim()) return '';

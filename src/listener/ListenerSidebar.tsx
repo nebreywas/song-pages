@@ -2,15 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { IconAdd, IconRefresh, IconSidebarOrder } from './PlayerIcons';
 import { artistInitials, resolveArtistPhotoUrl } from './artistDisplay';
 import { isLikedSongsArtist } from './likedSongs';
-import { isSunoDemoArtistId, SUNO_DEMO_FEATURE_ENABLED } from '@shared/demo/sunoDemoFeature';
 import { isUserPlaylistArtistId } from '@shared/listener/userPlaylists';
 import type { SidebarLibrarySortColumn, SidebarLibrarySortDirection } from '@shared/listener/sidebarLibraryOrder';
 import {
   sidebarEntryType,
-  sidebarEntryTypeLabel,
+  sidebarLibraryRowLabel,
   isSidebarPlaylistContextTarget,
   isSidebarPlaylistEntry,
 } from './sidebarEntry';
+import { LibraryEntryTypeCell } from './LibraryEntryTypeCell';
 import { formatPlaylistDateAdded } from '@shared/listener/formatPlaylistDate';
 import { LibrarySortHeader } from './LibrarySortHeader';
 import { useSidebarLibraryDragReorder } from './useSidebarLibraryDragReorder';
@@ -46,8 +46,7 @@ type ListenerSidebarProps = {
   onToggleCollapsed: () => void;
   onOpenSettings: () => void;
   onSubscribe: () => void;
-  onAddSunoPlaylist?: () => void;
-  onAddCustomPlaylist?: () => void;
+  onAddPlaylist?: () => void;
   onRefresh: () => void;
   onSelectArtist: (artistId: number) => void;
   /** Double-click any library row — start playback from the first song on its list. */
@@ -91,23 +90,19 @@ function ListenerBrandLabel({ titleRevealed }: { titleRevealed: boolean }) {
   );
 }
 
-/** Small menu opened from the + button — subscribe or create a Suno playlist. */
+/** Small menu opened from the + button — subscribe or create a playlist. */
 function SidebarAddMenu({
   open,
   busy,
-  sunoEnabled,
   onClose,
   onSubscribe,
-  onAddSunoPlaylist,
-  onAddCustomPlaylist,
+  onAddPlaylist,
 }: {
   open: boolean;
   busy: boolean;
-  sunoEnabled: boolean;
   onClose: () => void;
   onSubscribe: () => void;
-  onAddSunoPlaylist?: () => void;
-  onAddCustomPlaylist?: () => void;
+  onAddPlaylist?: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -141,9 +136,9 @@ function SidebarAddMenu({
           onSubscribe();
         }}
       >
-        Add artist
+        Add Artist Pages
       </button>
-      {sunoEnabled && onAddSunoPlaylist ? (
+      {onAddPlaylist ? (
         <button
           type="button"
           className="sidebar-add-menu-item"
@@ -151,24 +146,10 @@ function SidebarAddMenu({
           disabled={busy}
           onClick={() => {
             onClose();
-            onAddSunoPlaylist();
+            onAddPlaylist();
           }}
         >
-          Add Suno playlist
-        </button>
-      ) : null}
-      {onAddCustomPlaylist ? (
-        <button
-          type="button"
-          className="sidebar-add-menu-item"
-          role="menuitem"
-          disabled={busy}
-          onClick={() => {
-            onClose();
-            onAddCustomPlaylist();
-          }}
-        >
-          Add custom playlist
+          Add playlist
         </button>
       ) : null}
     </div>
@@ -190,8 +171,7 @@ export function ListenerSidebar({
   onToggleCollapsed,
   onOpenSettings,
   onSubscribe,
-  onAddSunoPlaylist,
-  onAddCustomPlaylist,
+  onAddPlaylist,
   onRefresh,
   onSelectArtist,
   onPlaylistDoubleClick,
@@ -346,7 +326,7 @@ export function ListenerSidebar({
     busy ||
     selectedArtistId === null ||
     isLikedSongsArtist(selectedArtistId) ||
-    isSunoDemoArtistId(selectedArtistId);
+    isUserPlaylistArtistId(selectedArtistId);
 
   return (
     <aside className={`listener-sidebar${collapsed ? ' collapsed' : ''}`}>
@@ -387,11 +367,9 @@ export function ListenerSidebar({
                   <SidebarAddMenu
                     open={addMenuOpen}
                     busy={busy}
-                    sunoEnabled={SUNO_DEMO_FEATURE_ENABLED}
                     onClose={() => setAddMenuOpen(false)}
                     onSubscribe={onSubscribe}
-                    onAddSunoPlaylist={onAddSunoPlaylist}
-                    onAddCustomPlaylist={onAddCustomPlaylist}
+                    onAddPlaylist={onAddPlaylist}
                   />
                 </div>
                 <button
@@ -501,17 +479,15 @@ export function ListenerSidebar({
               let draggableIndex = -1;
               return artists.map((artist) => {
               const isLikedEntry = isLikedSongsArtist(artist.id);
-              const isSunoEntry = SUNO_DEMO_FEATURE_ENABLED && isSunoDemoArtistId(artist.id);
-              const isCustomEntry = isUserPlaylistArtistId(artist.id);
+              const isPlaylistEntry = isUserPlaylistArtistId(artist.id);
               const rowDraggableIndex = isLikedEntry ? null : ++draggableIndex;
               const isActive = selectedArtistId === artist.id;
               const entryType = sidebarEntryType(artist);
-              const typeLabel = sidebarEntryTypeLabel(entryType);
               const songCount =
                 typeof artist.song_count === 'number' && Number.isFinite(artist.song_count)
                   ? Math.max(0, artist.song_count)
                   : 0;
-              const label = `${artist.artist_name} · ${typeLabel} · ${songCount}`;
+              const label = sidebarLibraryRowLabel(artist.artist_name, entryType, songCount);
               const removable = isSidebarPlaylistContextTarget(entryType);
 
               const handleContextMenu = (event: React.MouseEvent) => {
@@ -535,7 +511,7 @@ export function ListenerSidebar({
                   <div
                     role="button"
                     tabIndex={0}
-                    className={`library-row${isActive ? ' active' : ''}${isLikedEntry ? ' library-row-liked' : ''}${isSunoEntry ? ' library-row-suno' : ''}${isCustomEntry ? ' library-row-custom' : ''}${reorderMode ? ' library-row--reorder-mode' : ''}`}
+                    className={`library-row${isActive ? ' active' : ''}${isLikedEntry ? ' library-row-liked' : ''}${isPlaylistEntry ? ' library-row-custom' : ''}${reorderMode ? ' library-row--reorder-mode' : ''}`}
                     onClick={() => handleLibraryRowClick(artist.id)}
                     onDoubleClick={() => handleLibraryRowDoubleClick(artist)}
                     onContextMenu={handleContextMenu}
@@ -579,7 +555,9 @@ export function ListenerSidebar({
                       ) : null}
                     </span>
                     <span className="library-col-name">{artist.artist_name}</span>
-                    <span className="library-col-type">{typeLabel}</span>
+                    <span className="library-col-type">
+                      <LibraryEntryTypeCell type={entryType} />
+                    </span>
                     <span className="library-col-added">
                       {isLikedEntry ? '' : formatPlaylistDateAdded(artist.created_at)}
                     </span>
@@ -599,17 +577,15 @@ export function ListenerSidebar({
               {(() =>
                 artists.map((artist) => {
                   const isLikedEntry = isLikedSongsArtist(artist.id);
-                  const isSunoEntry = SUNO_DEMO_FEATURE_ENABLED && isSunoDemoArtistId(artist.id);
-                  const isCustomEntry = isUserPlaylistArtistId(artist.id);
+                  const isPlaylistEntry = isUserPlaylistArtistId(artist.id);
                   const entryType = sidebarEntryType(artist);
-                  const typeLabel = sidebarEntryTypeLabel(entryType);
                   const songCount =
                     typeof artist.song_count === 'number' && Number.isFinite(artist.song_count)
                       ? Math.max(0, artist.song_count)
                       : 0;
-                  const label = `${artist.artist_name} · ${typeLabel} · ${songCount}`;
+                  const label = sidebarLibraryRowLabel(artist.artist_name, entryType, songCount);
                   const photoUrl =
-                    isLikedEntry || isSunoEntry || isCustomEntry ? null : resolveArtistPhotoUrl(artist);
+                    isLikedEntry || isPlaylistEntry ? null : resolveArtistPhotoUrl(artist);
                   const isActive = selectedArtistId === artist.id;
 
                   const removable = isSidebarPlaylistContextTarget(entryType);
@@ -627,9 +603,7 @@ export function ListenerSidebar({
                         tabIndex={0}
                         className={`library-row library-row-compact${isActive ? ' active' : ''}${
                           isLikedEntry ? ' library-row-liked' : ''
-                        }${isSunoEntry ? ' library-row-suno' : ''}${
-                          isCustomEntry ? ' library-row-custom' : ''
-                        }`}
+                        }${isPlaylistEntry ? ' library-row-custom' : ''}`}
                         onClick={() => handleCompactRowActivate(artist, entryType)}
                         onContextMenu={handleContextMenu}
                         onKeyDown={(event) => {
@@ -649,11 +623,7 @@ export function ListenerSidebar({
                           >
                             ♥
                           </span>
-                        ) : isSunoEntry ? (
-                          <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
-                            S
-                          </span>
-                        ) : isCustomEntry ? (
+                        ) : isPlaylistEntry ? (
                           <span className="library-row-avatar library-row-avatar-fallback" aria-hidden="true">
                             {artistInitials(artist.artist_name)}
                           </span>

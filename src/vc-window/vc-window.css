@@ -473,6 +473,21 @@
   background: #000;
 }
 
+.vc-soundcloud-player,
+.vc-soundcloud-player .soundcloud-player-shell,
+.vc-soundcloud-player .soundcloud-player-iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.vc-soundcloud-player .soundcloud-player-iframe {
+  border: 0;
+  background: #000;
+}
+
 .youtube-vc-capture-note {
   margin: 0;
   align-self: center;

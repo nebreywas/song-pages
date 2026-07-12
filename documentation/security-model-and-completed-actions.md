@@ -112,7 +112,7 @@ See [archive/specs/Host-content-design.md](./archive/specs/Host-content-design.m
 - [x] Listener Mode: subscribe by URL, fetch `songpages-catalog.json`, SQLite library, HLS playback, canonical song page in webview
 - [x] Artist Mode: ported reference editor/compiler via IPC, ffmpeg compile, three manifest JSON files emitted
 - [x] Manifest schemas documented and implemented (`songpages-artist.json`, `songpages-catalog.json`, `songpages-song.json`)
-- [x] Manual refresh + launch refresh for subscribed artists
+- [x] Manual refresh + stale-catalog launch refresh (30-day window) for subscribed artists
 - [x] App menu: Listener / Artist / Developer / About
 
 ### Listener playback fixes

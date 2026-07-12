@@ -8,7 +8,7 @@
  * all rebinding attacks. Documented limitation; do not expand into a full network framework.
  */
 
-/** @typedef {'subscribe-catalog' | 'refresh-catalog' | 'fetch-song-manifest' | 'probe-song-availability' | 'youtube-oembed'} UrlPurpose */
+/** @typedef {'subscribe-catalog' | 'refresh-catalog' | 'fetch-song-manifest' | 'probe-song-availability' | 'youtube-oembed' | 'soundcloud-oembed' | 'soundcloud-shortlink' | 'flow-song-page' | 'flow-public-clip'} UrlPurpose */
 
 /** @typedef {'user-initiated' | 'catalog-context' | 'song-context' | 'none'} UrlProvenance */
 
@@ -111,6 +111,71 @@ function validateRemoteUrl(url, options) {
         code: 'URL_HOST',
         error: 'YouTube metadata must use the public oEmbed endpoint.',
       };
+    }
+
+    case 'soundcloud-oembed': {
+      const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+      if (host === 'soundcloud.com' && parsed.pathname === '/oembed') {
+        return { ok: true, url: parsed.href, provenance };
+      }
+      return {
+        ok: false,
+        code: 'URL_HOST',
+        error: 'SoundCloud metadata must use the public oEmbed endpoint.',
+      };
+    }
+
+    case 'soundcloud-shortlink': {
+      const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+      if (host === 'on.soundcloud.com') {
+        return { ok: true, url: parsed.href, provenance };
+      }
+      if (host === 'soundcloud.com' || host === 'm.soundcloud.com') {
+        const parts = parsed.pathname.split('/').filter(Boolean);
+        if (parts.length === 2 && parts[0] && parts[1] && parts[1].toLowerCase() !== 'sets') {
+          return { ok: true, url: parsed.href, provenance };
+        }
+      }
+      return {
+        ok: false,
+        code: 'URL_HOST',
+        error: 'SoundCloud short link resolution must land on a public track page.',
+      };
+    }
+
+    case 'flow-song-page': {
+      const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+      if (host === 'flowmusic.app' && /^\/song\/[0-9a-f-]{36}\/?$/i.test(parsed.pathname)) {
+        return { ok: true, url: parsed.href, provenance };
+      }
+      return {
+        ok: false,
+        code: 'URL_HOST',
+        error: 'Google Flow metadata must use a public flowmusic.app song page.',
+      };
+    }
+
+    case 'flow-public-clip': {
+      if (parsed.hostname !== 'storage.googleapis.com') {
+        return { ok: false, code: 'URL_HOST', error: 'Google Flow clip must use storage.googleapis.com.' };
+      }
+      if (!parsed.pathname.startsWith('/producer-app-public/clips/')) {
+        return {
+          ok: false,
+          code: 'URL_HOST',
+          error: 'Google Flow clip must use the public producer-app-public bucket.',
+        };
+      }
+      if (parsed.pathname.includes('producer-app-private')) {
+        return { ok: false, code: 'URL_HOST', error: 'Private Google Flow clips are not supported.' };
+      }
+      if ([...parsed.searchParams.keys()].some((key) => key.startsWith('X-Goog-'))) {
+        return { ok: false, code: 'URL_HOST', error: 'Signed Google Flow URLs are not supported.' };
+      }
+      if (!/^\/producer-app-public\/clips\/[0-9a-f-]{36}\.m4a$/i.test(parsed.pathname)) {
+        return { ok: false, code: 'URL_HOST', error: 'Google Flow clip path must be a public .m4a file.' };
+      }
+      return { ok: true, url: parsed.href, provenance };
     }
 
     default:

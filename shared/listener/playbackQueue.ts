@@ -1,6 +1,6 @@
-import { isSongSkipped } from './playlistKinds';
+import { isQueueEligibleSong } from './playlistKinds';
 
-type QueueSong = { id: number; skipped?: number | boolean | null };
+type QueueSong = { id: number; skipped?: number | boolean | null; unavailable?: number | boolean | null };
 
 export type PlaybackQueueOptions = {
   shuffle: boolean;
@@ -9,7 +9,7 @@ export type PlaybackQueueOptions = {
 
 /** Songs that auto-advance and shuffle may select. */
 export function playableQueueSongs<T extends QueueSong>(songs: T[]): T[] {
-  return songs.filter((song) => !isSongSkipped(song));
+  return songs.filter((song) => isQueueEligibleSong(song));
 }
 
 export function pickNextPlayableSongId(
@@ -24,7 +24,7 @@ export function pickNextPlayableSongId(
 
   const current = sortedSongs.find((song) => song.id === currentSongId);
   if (options.repeatMode === 'one') {
-    return current && !isSongSkipped(current) ? currentSongId : null;
+    return current && isQueueEligibleSong(current) ? currentSongId : null;
   }
 
   const currentIndex = sortedSongs.findIndex((song) => song.id === currentSongId);
@@ -39,13 +39,13 @@ export function pickNextPlayableSongId(
 
   for (let index = currentIndex + 1; index < sortedSongs.length; index += 1) {
     const song = sortedSongs[index];
-    if (song && !isSongSkipped(song)) return song.id;
+    if (song && isQueueEligibleSong(song)) return song.id;
   }
 
   if (options.repeatMode === 'all') {
     for (let index = 0; index <= currentIndex; index += 1) {
       const song = sortedSongs[index];
-      if (song && !isSongSkipped(song)) return song.id;
+      if (song && isQueueEligibleSong(song)) return song.id;
     }
   }
 
@@ -65,7 +65,7 @@ export function pickUpcomingPlayableSongIds(
   if (maxCount <= 0 || !sortedSongs.length) return [];
 
   const current = sortedSongs.find((song) => song.id === currentSongId);
-  if (!current || isSongSkipped(current)) return [];
+  if (!current || !isQueueEligibleSong(current)) return [];
 
   if (options.repeatMode === 'one') {
     return Array.from({ length: maxCount }, () => currentSongId);
@@ -76,7 +76,7 @@ export function pickUpcomingPlayableSongIds(
     const currentIndex = sortedSongs.findIndex((song) => song.id === currentSongId);
     for (let index = currentIndex + 1; index < sortedSongs.length && result.length < maxCount; index += 1) {
       const song = sortedSongs[index];
-      if (song && !isSongSkipped(song)) result.push(song.id);
+      if (song && isQueueEligibleSong(song)) result.push(song.id);
     }
     return result;
   }
@@ -98,7 +98,7 @@ export function pickPreviousPlayableSongId(sortedSongs: QueueSong[], currentSong
 
   for (let index = currentIndex - 1; index >= 0; index -= 1) {
     const song = sortedSongs[index];
-    if (song && !isSongSkipped(song)) return song.id;
+    if (song && isQueueEligibleSong(song)) return song.id;
   }
 
   return null;
@@ -109,19 +109,19 @@ export function resolvePlayableSong<T extends QueueSong>(
   sortedSongs: T[],
   requestedSong: T,
 ): T | null {
-  if (!isSongSkipped(requestedSong)) return requestedSong;
+  if (isQueueEligibleSong(requestedSong)) return requestedSong;
 
   const startIndex = sortedSongs.findIndex((song) => song.id === requestedSong.id);
   if (startIndex < 0) return null;
 
   for (let index = startIndex + 1; index < sortedSongs.length; index += 1) {
     const song = sortedSongs[index];
-    if (song && !isSongSkipped(song)) return song;
+    if (song && isQueueEligibleSong(song)) return song;
   }
 
   for (let index = 0; index < startIndex; index += 1) {
     const song = sortedSongs[index];
-    if (song && !isSongSkipped(song)) return song;
+    if (song && isQueueEligibleSong(song)) return song;
   }
 
   return null;

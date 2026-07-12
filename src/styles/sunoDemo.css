@@ -388,6 +388,28 @@
   margin: 0;
 }
 
+.flow-add-link {
+  margin: 0;
+}
+
+.flow-song-page {
+  gap: 1rem;
+}
+
+.flow-song-section-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted, #aaa);
+}
+
+.flow-song-sound-body {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
 .youtube-song-page {
   display: flex;
   flex-direction: column;
@@ -434,4 +456,55 @@
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.soundcloud-song-page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.soundcloud-song-header {
+  flex: 0 0 auto;
+}
+
+.soundcloud-song-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+  line-height: 1.3;
+}
+
+.soundcloud-song-artist {
+  margin: 0;
+  color: var(--text-muted, #aaa);
+  font-size: 0.95rem;
+}
+
+.soundcloud-song-player-wrap {
+  flex: 1 1 auto;
+  min-height: 5.5rem;
+}
+
+.soundcloud-player-shell,
+.soundcloud-player-iframe {
+  display: block;
+  width: 100%;
+  height: 5rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: #000;
+}
+
+.soundcloud-player-shell {
+  overflow: hidden;
+}
+
+.soundcloud-vc-capture-note {
+  margin: 0;
+  align-self: center;
+  color: var(--text-muted, #aaa);
+  font-size: 0.92rem;
+  text-align: center;
 }

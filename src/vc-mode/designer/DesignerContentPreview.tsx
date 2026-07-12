@@ -261,6 +261,9 @@ export function DesignerContentPreview({
           upcoming: state?.upcoming ?? [],
           catalog: hostCatalog,
           useFallbacks: state?.currentSong ? false : state?.config?.useFallbacks !== false,
+          suppressEmbedProviderLyricsMessages:
+            state?.config?.suppressEmbedProviderLyricsMessages === true,
+          lyricsSourceReady: state?.lyricsSourceReady !== false,
           gridDesign: state?.config?.gridDesign,
         },
         songBinding?.overrides,
@@ -277,6 +280,8 @@ export function DesignerContentPreview({
       state?.artistPhotoUrl,
       state?.upcoming,
       state?.config?.useFallbacks,
+      state?.config?.suppressEmbedProviderLyricsMessages,
+      state?.lyricsSourceReady,
       state?.config?.gridDesign,
     ],
   );

@@ -29,7 +29,6 @@ import {
   LIBRARY_ADDED_COLUMN_MIN_WIDTH,
 } from './ListenerSidebar';
 import { SubscribeArtistModal } from './SubscribeArtistModal';
-import { formatTime } from './formatTime';
 import { useListenerPlayerSettings } from './useListenerPlayerSettings';
 import { useListenerLyricsDisplaySettings } from './useListenerLyricsDisplaySettings';
 import { useListenerSidebarLibraryLayout } from './useListenerSidebarLibraryLayout';
@@ -43,7 +42,6 @@ import {
   reorderPlaylistIds,
 } from '@shared/listener/playlistOrder';
 import {
-  isSongSkipped,
   playlistKindForArtistId,
 } from '@shared/listener/playlistKinds';
 import {
@@ -53,13 +51,12 @@ import {
   resolvePlayableSong,
 } from '@shared/listener/playbackQueue';
 import { usePlaylistDragReorder } from './usePlaylistDragReorder';
-import { SortableColumnHeader } from './SortableColumnHeader';
+import { PlaylistTable } from './PlaylistTable';
+import { usePlaylistColumnWidths } from './usePlaylistColumnWidths';
 import { SongLikeButton } from './SongLikeButton';
 import { LikedSongsPanel } from './LikedSongsPanel';
-import { SunoOnlyPanel } from './SunoOnlyPanel';
 import { SunoDemoSongPage } from './SunoDemoSongPage';
 import { shouldUseDirectAudioPlayback, loadDirectAudioPlayback } from './directAudioPlayback';
-import { LikedSongIndicator } from './LikedSongIndicator';
 import { PlaylistRowContextMenu } from './PlaylistRowContextMenu';
 import { LibrarySidebarContextMenu } from './LibrarySidebarContextMenu';
 import { LibraryPlaylistRemoveConfirm } from './LibraryPlaylistRemoveConfirm';
@@ -67,10 +64,13 @@ import { LibraryPlaylistRenameDialog } from './LibraryPlaylistRenameDialog';
 import { SongToPlaylistModal } from './SongToPlaylistModal';
 import { SharePlaylistModal } from './SharePlaylistModal';
 import { CustomPlaylistPanel } from './CustomPlaylistPanel';
+import type { ExternalSongAddResult } from './AddNewSongPopover';
+import { FlowSongPage } from './FlowSongPage';
 import { YoutubeSongPage } from './YoutubeSongPage';
+import { SoundcloudSongPage } from './SoundcloudSongPage';
 import type { YoutubePlayerHandle } from './youtube/YoutubePlayer';
+import type { SoundcloudPlayerHandle } from './soundcloud/SoundcloudPlayer';
 import { sidebarEntryType, isRenamableSidebarPlaylist, isSidebarPlaylistContextTarget } from './sidebarEntry';
-import { SkippedSongMarker } from './SkippedSongMarker';
 import { shareableSongLink } from './shareableSongPageUrl';
 import { resolveSongAccess } from './resolveSongAccess';
 import {
@@ -87,14 +87,12 @@ import {
   type PlaylistPickerRow,
 } from '@shared/listener/userPlaylists';
 import {
-  buildSunoPlaylistArtistRow,
-  isSunoDemoArtistId,
   isSunoDemoSong,
   isSunoDemoSongId,
-  sunoPlaylistIdFromArtistId,
-  SUNO_DEMO_FEATURE_ENABLED,
 } from '@shared/demo/sunoDemoFeature';
 import { isYoutubeSong } from '@shared/youtube/youtubeFeature';
+import { isSoundcloudSong } from '@shared/soundcloud/soundcloudFeature';
+import { isFlowSong } from '@shared/flow/flowFeature';
 import type { ArtistRow, SongRow } from '../types/app';
 import { EmbeddedVisualizerHost } from '../visualizers/EmbeddedVisualizerHost';
 import { VisualizerSettingsDialog } from '../visualizers/settings/ui/VisualizerSettingsDialog';
@@ -120,6 +118,13 @@ import '../styles/sunoDemo.css';
 
 type MainContentView = 'welcome' | 'artist' | 'song';
 
+function isWidgetTransportSong(song: {
+  playback_scope?: string | null;
+  page_url?: string | null;
+}): boolean {
+  return isYoutubeSong(song) || isSoundcloudSong(song);
+}
+
 const DEFAULT_CONTENT_HEIGHT = 360;
 const MIN_CONTENT_HEIGHT = 160;
 const MIN_PLAYLIST_HEIGHT = 160;
@@ -136,24 +141,6 @@ function clampContentHeight(column: HTMLElement | null, height: number): number 
   return Math.min(maxContentHeight(column), Math.max(MIN_CONTENT_HEIGHT, height));
 }
 
-function songDurationLabel(song: SongRow, runtimeSeconds: number | undefined): string {
-  if (song.unavailable === 1) return '';
-  const seconds = song.duration_seconds ?? runtimeSeconds;
-  return seconds != null && seconds > 0 ? formatTime(seconds) : '—';
-}
-
-/** Red circle X when a liked song has no reachable media. */
-function UnavailableLengthMarker() {
-  return (
-    <span className="unavailable-length-marker" aria-label="Unavailable" title="Unavailable">
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" strokeWidth="1.5" />
-      </svg>
-    </span>
-  );
-}
-
 export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void }) {
   const [artists, setArtists] = useState<ArtistRow[]>([]);
   const [songs, setSongs] = useState<SongRow[]>([]);
@@ -161,8 +148,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [mainContentView, setMainContentView] = useState<MainContentView>('welcome');
   const [siteUrl, setSiteUrl] = useState('');
   const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
-  const [sunoDemoAddOpen, setSunoDemoAddOpen] = useState(false);
-  const [youtubeAddOpen, setYoutubeAddOpen] = useState(false);
+  const [addSongOpen, setAddSongOpen] = useState(false);
   const [sharePlaylistOpen, setSharePlaylistOpen] = useState(false);
   const [vcCloseConfirmOpen, setVcCloseConfirmOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -237,10 +223,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const playingSongIdRef = useRef<number | null>(null);
   const pageAccessGenerationRef = useRef(0);
   const mainColumnRef = useRef<HTMLDivElement>(null);
+  const playlistPanelRef = useRef<HTMLElement>(null);
   const rowClickTimerRef = useRef<number | null>(null);
   const durationProbeRef = useRef<Set<number>>(new Set());
   const playSongRef = useRef<(song: SongRow) => Promise<void>>(async () => {});
   const youtubePlayerRef = useRef<YoutubePlayerHandle | null>(null);
+  const soundcloudPlayerRef = useRef<SoundcloudPlayerHandle | null>(null);
   const playNextRef = useRef<() => void>(() => {});
   /** Last row passed to playSong — visualizer must not depend on the selected playlist's song list. */
   const playingSongRowRef = useRef<SongRow | null>(null);
@@ -253,6 +241,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     playSong: async (_song: SongRow) => {},
     sortedSongs: [] as SongRow[],
     handleYoutubeEnded: () => {},
+    handleSoundcloudEnded: () => {},
     handleYoutubeDuration: (_seconds: number) => {},
     applyYoutubeTiming: (_currentTime: number, _duration: number) => {},
   });
@@ -285,13 +274,21 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   }, [playingSongId, songs]);
   const previewSong = songs.find((song) => song.id === previewSongId) ?? playingSong;
   const isLikedPlaylist = isLikedSongsArtist(selectedArtistId);
-  const isSunoPlaylist = isSunoDemoArtistId(selectedArtistId);
   const isCustomPlaylistSelected = isUserPlaylistArtistId(selectedArtistId);
   const playlistKind = playlistKindForArtistId(selectedArtistId);
-  const showArtistColumn = isLikedPlaylist || isSunoPlaylist || isCustomPlaylistSelected;
+  const showArtistColumn = isLikedPlaylist || isCustomPlaylistSelected;
+  const showSourceColumn = isCustomPlaylistSelected;
+  const playlistColumns = usePlaylistColumnWidths(playlistPanelRef, {
+    hasArtist: showArtistColumn,
+    hasSourceCol: showSourceColumn,
+  });
+  const { columnOrder, columnWidths, isResizing, profile: playlistTableProfile, resizeBetween } =
+    playlistColumns;
   const activeSongPage = previewSong ?? playingSong;
   const showingSunoDemoPage = Boolean(activeSongPage && isSunoDemoSong(activeSongPage));
   const showingYoutubePage = Boolean(activeSongPage && isYoutubeSong(activeSongPage));
+  const showingSoundcloudPage = Boolean(activeSongPage && isSoundcloudSong(activeSongPage));
+  const showingFlowPage = Boolean(activeSongPage && isFlowSong(activeSongPage));
   const canToggleLike = previewSong != null && previewSong.id > 0;
   const playlistKey = useMemo(
     () => (selectedArtistId != null ? playlistKeyForArtistId(selectedArtistId) : null),
@@ -406,13 +403,10 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     const app = getApp();
     if (!app) return;
 
-    const [artistRows, likedCount, likedIds, sunoPlaylists, userPlaylists] = await Promise.all([
+    const [artistRows, likedCount, likedIds, userPlaylists] = await Promise.all([
       app.listener.listArtists(),
       app.listener.countLikedSongs(),
       app.listener.listLikedSongIds(),
-      SUNO_DEMO_FEATURE_ENABLED && app.listener.listSunoDemoPlaylists
-        ? app.listener.listSunoDemoPlaylists().catch(() => [])
-        : Promise.resolve([]),
       app.listener.listUserPlaylists ? app.listener.listUserPlaylists().catch(() => []) : Promise.resolve([]),
     ]);
 
@@ -420,10 +414,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     setLikedSongIds(new Set(likedIds));
 
     let displayArtists = artistRows;
-    if (SUNO_DEMO_FEATURE_ENABLED && sunoPlaylists.length > 0) {
-      const sunoRows = sunoPlaylists.map((playlist) => buildSunoPlaylistArtistRow(playlist));
-      displayArtists = [...sunoRows, ...displayArtists];
-    }
     if (userPlaylists.length > 0) {
       const customRows = userPlaylists.map((playlist) => buildUserPlaylistArtistRow(playlist));
       displayArtists = [...customRows, ...displayArtists];
@@ -435,16 +425,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
     if (isUserPlaylistArtistId(selectedArtistId)) {
       setSongs(await app.listener.listSongs(selectedArtistId!));
-      return;
-    }
-
-    if (isSunoDemoArtistId(selectedArtistId)) {
-      if (SUNO_DEMO_FEATURE_ENABLED) {
-        setSongs(await app.listener.listSongs(selectedArtistId));
-      } else {
-        setSongs([]);
-        setSelectedArtistId(displayArtists[0]?.id ?? null);
-      }
       return;
     }
 
@@ -524,9 +504,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     const app = getApp();
     if (!app) return;
 
-    if (isSunoDemoArtistId(selectedArtistId)) {
-      void app.listener.listSongs(selectedArtistId).then(setSongs);
-    } else if (isLikedSongsArtist(selectedArtistId)) {
+    if (isLikedSongsArtist(selectedArtistId)) {
       void app.listener.listSongs(LIKED_SONGS_ARTIST_ID).then(setSongs);
     } else {
       void app.listener.listSongs(selectedArtistId).then(setSongs);
@@ -566,7 +544,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   }, [hasCustomOrder, sortColumn]);
 
   const handlePlaylistReorder = useCallback(
-    (fromIndex: number, toIndex: number) => {
+    async (fromIndex: number, toIndex: number) => {
       if (!playlistKey) return;
       const reordered = reorderPlaylistIds(
         sortedSongsRef.current.map((song) => song.id),
@@ -577,8 +555,10 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       setSortColumn('custom');
       setSortDirection('asc');
       const app = getApp();
-      if (app?.listener.savePlaylistCustomOrder) {
-        void app.listener.savePlaylistCustomOrder(playlistKey, reordered);
+      if (!app?.listener.savePlaylistCustomOrder) return;
+      const result = await app.listener.savePlaylistCustomOrder(playlistKey, reordered);
+      if (!result.ok) {
+        setError(result.error ?? 'Could not save playlist order.');
       }
     },
     [playlistKey],
@@ -714,21 +694,26 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     [vc.vcOpen, vc.activeConfig, playingSong],
   );
 
-  const prevVcYoutubeCaptureRef = useRef(false);
-  useEffect(() => {
-    const active = vcYoutubeCaptureActive;
-    const wasActive = prevVcYoutubeCaptureRef.current;
-    prevVcYoutubeCaptureRef.current = active;
-    if (
-      !wasActive &&
-      active &&
-      playingSongId != null &&
+  const vcSoundcloudCaptureActive = useMemo(
+    () =>
+      vc.vcOpen &&
+      configUsesVisualizer(vc.activeConfig) &&
       playingSong != null &&
-      isYoutubeSong(playingSong)
-    ) {
+      isSoundcloudSong(playingSong),
+    [vc.vcOpen, vc.activeConfig, playingSong],
+  );
+
+  const vcWidgetCaptureActive = vcYoutubeCaptureActive || vcSoundcloudCaptureActive;
+
+  const prevVcWidgetCaptureRef = useRef(false);
+  useEffect(() => {
+    const active = vcWidgetCaptureActive;
+    const wasActive = prevVcWidgetCaptureRef.current;
+    prevVcWidgetCaptureRef.current = active;
+    if (!wasActive && active && playingSongId != null && playingSong != null && isWidgetTransportSong(playingSong)) {
       setIsPlaying(true);
     }
-  }, [vcYoutubeCaptureActive, playingSong, playingSongId]);
+  }, [vcWidgetCaptureActive, playingSong, playingSongId]);
 
   const handleYoutubeEnded = useCallback(() => {
     if (advancingFromEndedRef.current) return;
@@ -768,6 +753,46 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     vc.activeConfig.specialPlayStyle,
     vc.vcOpen,
     vcYoutubeCaptureActive,
+  ]);
+
+  const handleSoundcloudEnded = useCallback(() => {
+    if (advancingFromEndedRef.current) return;
+
+    setIsPlaying(false);
+    if (repeatMode === 'one') {
+      if (vcSoundcloudCaptureActive) {
+        setCurrentTime(0);
+        setIsPlaying(true);
+      } else {
+        soundcloudPlayerRef.current?.seek(0);
+        soundcloudPlayerRef.current?.play();
+        setIsPlaying(true);
+      }
+      return;
+    }
+
+    const currentSongId = playingSongIdRef.current;
+    if (currentSongId == null) return;
+    if (vc.vcOpen && specialPlay.beginPauseAfterSong(vc.activeConfig.specialPlayStyle)) {
+      return;
+    }
+
+    advancingFromEndedRef.current = true;
+    const nextSongId = pickNextSongId(currentSongId);
+    if (nextSongId == null) {
+      advancingFromEndedRef.current = false;
+      return;
+    }
+    const nextSong = sortedSongsRef.current.find((song) => song.id === nextSongId);
+    if (nextSong) void playSongRef.current(nextSong);
+    advancingFromEndedRef.current = false;
+  }, [
+    pickNextSongId,
+    repeatMode,
+    specialPlay,
+    vc.activeConfig.specialPlayStyle,
+    vc.vcOpen,
+    vcSoundcloudCaptureActive,
   ]);
 
   const applyYoutubeTiming = useCallback((nextTime: number, nextDuration: number) => {
@@ -901,6 +926,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       }
       if (command.type === 'youtubeDuration') {
         handlers.handleYoutubeDuration(command.seconds);
+        return;
+      }
+      if (command.type === 'soundcloudEnded') {
+        handlers.handleSoundcloudEnded();
+        return;
+      }
+      if (command.type === 'soundcloudTiming') {
+        handlers.applyYoutubeTiming(command.currentTime, command.duration);
+        return;
+      }
+      if (command.type === 'soundcloudDuration') {
+        handlers.handleYoutubeDuration(command.seconds);
       }
     });
 
@@ -951,8 +988,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   );
   const probeDurationForSong = useCallback(
     async (song: SongRow) => {
-      // YouTube length is learned from the visible player on first play — not probed at intake.
-      if (isYoutubeSong(song)) return;
+      // YouTube and SoundCloud use embedded widget players — length comes from the widget on first play.
+      if (isWidgetTransportSong(song)) return;
       if (!songNeedsDurationProbe(song, runtimeDurations[song.id])) return;
       if (durationProbeRef.current.has(song.id)) return;
 
@@ -1000,11 +1037,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
       setPlayingSongId(song.id);
       playingSongRowRef.current = song;
-      // YouTube uses the embedded iframe player — no HLS mirror URL for VC.
-      setActivePlaybackUrl(isYoutubeSong(song) ? null : (song.playback_url ?? null));
+      // YouTube / SoundCloud use the embedded widget player — no HLS mirror URL for VC.
+      setActivePlaybackUrl(isWidgetTransportSong(song) ? null : (song.playback_url ?? null));
       setCurrentTime(0);
       setDuration(song.duration_seconds ?? 0);
-      setIsPlaying(isYoutubeSong(song));
+      setIsPlaying(isWidgetTransportSong(song));
       setPreviewSongId(song.id);
       setMainContentView('song');
       setPageLoadError(null);
@@ -1021,7 +1058,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       const audio = audioRef.current;
       if (!audio) return;
 
-      if (isYoutubeSong(song)) {
+      if (isWidgetTransportSong(song)) {
         suppressPlaybackEndedRef.current = true;
         destroyHls();
         audio.pause();
@@ -1174,9 +1211,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => {
-      // playSong pauses the hidden <audio> for YouTube tracks — that must not clear isPlaying.
+      // playSong pauses the hidden <audio> for widget transport tracks — that must not clear isPlaying.
       const row = playingSongRowRef.current;
-      if (row && isYoutubeSong(row) && playingSongIdRef.current === row.id) return;
+      if (row && isWidgetTransportSong(row) && playingSongIdRef.current === row.id) return;
       setIsPlaying(false);
     };
 
@@ -1196,11 +1233,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   }, [persistSongDuration, pickNextSongId, playingSongId, repeatMode, specialPlay.beginPauseAfterSong, vc.activeConfig.specialPlayStyle, vc.vcOpen]);
 
   useEffect(() => {
-    if (vcYoutubeCaptureActive) return;
-    if (!showingYoutubePage || playingSongId == null || !isPlaying) return;
+    if (vcWidgetCaptureActive) return;
+    if ((!showingYoutubePage && !showingSoundcloudPage) || playingSongId == null || !isPlaying) return;
 
     const tick = () => {
-      const player = youtubePlayerRef.current;
+      const player = showingYoutubePage
+        ? youtubePlayerRef.current
+        : soundcloudPlayerRef.current;
       if (!player) return;
       const nextTime = player.getCurrentTime();
       if (Number.isFinite(nextTime)) setCurrentTime(nextTime);
@@ -1213,7 +1252,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     tick();
     const intervalId = window.setInterval(tick, 250);
     return () => window.clearInterval(intervalId);
-  }, [isPlaying, playingSongId, showingYoutubePage, vcYoutubeCaptureActive]);
+  }, [isPlaying, playingSongId, showingSoundcloudPage, showingYoutubePage, vcWidgetCaptureActive]);
 
   useEffect(() => () => destroyHls(), []);
 
@@ -1257,7 +1296,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     if (
       selectedArtistId === null ||
       isLikedSongsArtist(selectedArtistId) ||
-      isSunoDemoArtistId(selectedArtistId) ||
       isUserPlaylistArtistId(selectedArtistId)
     ) {
       return;
@@ -1278,11 +1316,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   };
 
   const handleRemove = async () => {
-    if (
-      selectedArtistId === null ||
-      isLikedSongsArtist(selectedArtistId) ||
-      isSunoDemoArtistId(selectedArtistId)
-    ) {
+    if (selectedArtistId === null || isLikedSongsArtist(selectedArtistId)) {
       return;
     }
     setBusy(true);
@@ -1303,39 +1337,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     await loadLibrary();
   };
 
-  useEffect(() => {
-    if (!SUNO_DEMO_FEATURE_ENABLED) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 's') {
-        if (!isSunoDemoArtistId(selectedArtistId)) return;
-        event.preventDefault();
-        setMainContentView('artist');
-        setSunoDemoAddOpen(true);
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedArtistId]);
-
-  const handleSunoDemoAdded = useCallback(async () => {
-    // Refresh sidebar count and the Suno playlist if it is already open — do not interrupt playback.
-    await loadLibrary();
-  }, [loadLibrary]);
-
-  const handleYoutubeAdded = useCallback(
-    async (result: {
-      duplicate: boolean;
-      intakeNotice?: string | null;
-      song?: SongRow;
-    }) => {
-      const app = getApp();
+  const handleExternalSongAdded = useCallback(
+    async (result: ExternalSongAddResult) => {
       if (
         !result.duplicate &&
         result.song &&
-        isUserPlaylistArtistId(selectedArtistId) &&
-        app
+        isUserPlaylistArtistId(selectedArtistId)
       ) {
         setSongs((prev) => [result.song!, ...prev.filter((row) => row.id !== result.song!.id)]);
       }
@@ -1351,25 +1358,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     },
     [addToast, loadLibrary, selectedArtistId],
   );
-
-  const handleCreateSunoPlaylist = useCallback(async () => {
-    const app = getApp();
-    if (!app?.listener.createSunoDemoPlaylist) return;
-
-    setBusy(true);
-    setError(null);
-    const result = await app.listener.createSunoDemoPlaylist();
-    setBusy(false);
-
-    if (!result.ok || !result.data) {
-      setError(result.error ?? 'Could not create Suno playlist.');
-      return;
-    }
-
-    await loadLibrary();
-    setSelectedArtistId(result.data.artist_id);
-    setMainContentView('artist');
-  }, [loadLibrary]);
 
   const handleCreateCustomPlaylist = useCallback(async () => {
     const app = getApp();
@@ -1425,14 +1413,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       setError(null);
       try {
         let result;
-        if (entryType === 'suno') {
-          const playlistId = sunoPlaylistIdFromArtistId(target.id);
-          if (!playlistId || !app.listener.renameSunoDemoPlaylist) {
-            setError('Restart the app to enable playlist renaming.');
-            return;
-          }
-          result = await app.listener.renameSunoDemoPlaylist(playlistId, name);
-        } else if (entryType === 'custom') {
+        if (entryType === 'playlist') {
           const playlistId = userPlaylistIdFromArtistId(target.id);
           if (!playlistId || !app.listener.renameUserPlaylist) {
             setError('Restart the app to enable playlist renaming.');
@@ -1503,7 +1484,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     if (!target) return;
 
     const entryType = sidebarEntryType(target);
-    if (entryType !== 'suno' && entryType !== 'custom') return;
+    if (entryType !== 'playlist') return;
 
     const app = getApp();
     if (!app) return;
@@ -1511,22 +1492,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     setBusy(true);
     setError(null);
     try {
-      let result: { ok: boolean; data?: { name: string }; error?: string };
-      if (entryType === 'suno') {
-        const playlistId = sunoPlaylistIdFromArtistId(target.id);
-        if (!playlistId || !app.listener.removeSunoDemoPlaylist) {
-          setError('Restart the app to enable playlist removal.');
-          return;
-        }
-        result = await app.listener.removeSunoDemoPlaylist(playlistId);
-      } else {
-        const playlistId = userPlaylistIdFromArtistId(target.id);
-        if (!playlistId || !app.listener.removeUserPlaylist) {
-          setError('Restart the app to enable playlist removal.');
-          return;
-        }
-        result = await app.listener.removeUserPlaylist(playlistId);
+      const playlistId = userPlaylistIdFromArtistId(target.id);
+      if (!playlistId || !app.listener.removeUserPlaylist) {
+        setError('Restart the app to enable playlist removal.');
+        return;
       }
+      const result = await app.listener.removeUserPlaylist(playlistId);
 
       if (!result.ok || !result.data) {
         setError(result.error ?? 'Could not remove that playlist.');
@@ -1550,9 +1521,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     loadLibrary,
   ]);
 
-  const selectedSunoPlaylistId = isSunoDemoArtistId(selectedArtistId)
-    ? sunoPlaylistIdFromArtistId(selectedArtistId) ?? undefined
-    : undefined;
   const selectedCustomPlaylistId = isUserPlaylistArtistId(selectedArtistId)
     ? userPlaylistIdFromArtistId(selectedArtistId) ?? undefined
     : undefined;
@@ -1573,6 +1541,21 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         setIsPlaying(false);
       } else {
         youtubePlayerRef.current?.play();
+        setIsPlaying(true);
+      }
+      return;
+    }
+
+    if (showingSoundcloudPage && playingSongId != null && activeSongPage?.id === playingSongId) {
+      if (vcSoundcloudCaptureActive) {
+        setIsPlaying(!isPlaying);
+        return;
+      }
+      if (isPlaying) {
+        soundcloudPlayerRef.current?.pause();
+        setIsPlaying(false);
+      } else {
+        soundcloudPlayerRef.current?.play();
         setIsPlaying(true);
       }
       return;
@@ -1675,18 +1658,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         return;
       }
 
-      if (kind === 'suno') {
-        const result = await app.listener.removeSunoDemoSong(song.id);
-        if (!result.ok || !result.data) {
-          setError(result.error ?? 'Could not remove that Suno track.');
-          return;
-        }
-        setSongs((prev) => prev.filter((row) => row.id !== song.id));
-        clearPlaybackForRemovedSong(song.id);
-        await loadLibrary();
-        return;
-      }
-
       if (kind === 'custom') {
         if (!app.listener.removeUserPlaylistSong) {
           setError('Restart the app to remove songs from custom playlists.');
@@ -1781,11 +1752,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         }
 
         setSongToPlaylistModal(null);
-        if (result.data?.duplicate) {
-          addToast('Song is already on that playlist.');
-        } else {
-          addToast('Moved to playlist.');
-        }
+        addToast('Moved to playlist.');
 
         const sourceArtistId = modal.sourceArtistId;
         const destArtistId = userPlaylistArtistId(destPlaylistId);
@@ -1944,6 +1911,17 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       return;
     }
 
+    if (showingSoundcloudPage && playingSongId != null && activeSongPage?.id === playingSongId) {
+      const clamped = duration > 0 ? Math.min(duration, Math.max(0, time)) : Math.max(0, time);
+      if (vcSoundcloudCaptureActive) {
+        setCurrentTime(clamped);
+        return;
+      }
+      soundcloudPlayerRef.current?.seek(clamped);
+      setCurrentTime(clamped);
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio || duration <= 0) return;
     audio.currentTime = Math.min(duration, Math.max(0, time));
@@ -1958,6 +1936,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     playSong,
     sortedSongs,
     handleYoutubeEnded,
+    handleSoundcloudEnded,
     handleYoutubeDuration,
     applyYoutubeTiming,
   };
@@ -2057,6 +2036,16 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       );
     }
 
+    if (mainContentView === 'song' && showingFlowPage && activeSongPage) {
+      return (
+        <FlowSongPage
+          song={activeSongPage}
+          lyricsSettings={lyricsDisplaySettings}
+          onRemoveBracketsChange={setLyricsRemoveBrackets}
+        />
+      );
+    }
+
     if (mainContentView === 'song' && showingYoutubePage && activeSongPage) {
       return (
         <YoutubeSongPage
@@ -2069,6 +2058,24 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           onReady={handleYoutubeReady}
           onPlayingChange={setIsPlaying}
           onEnded={handleYoutubeEnded}
+          onDuration={handleYoutubeDuration}
+          onError={handleYoutubeError}
+        />
+      );
+    }
+
+    if (mainContentView === 'song' && showingSoundcloudPage && activeSongPage) {
+      return (
+        <SoundcloudSongPage
+          key={activeSongPage.id}
+          song={activeSongPage}
+          playerRef={soundcloudPlayerRef}
+          playbackGeneration={playbackGenerationRef.current}
+          shouldPlay={playingSongId === activeSongPage.id && isPlaying && !vcSoundcloudCaptureActive}
+          captureInVc={vcSoundcloudCaptureActive}
+          onReady={handleYoutubeReady}
+          onPlayingChange={setIsPlaying}
+          onEnded={handleSoundcloudEnded}
           onDuration={handleYoutubeDuration}
           onError={handleYoutubeError}
         />
@@ -2098,32 +2105,16 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         return <LikedSongsPanel songCount={likedSongCount} />;
       }
 
-      if (isSunoDemoArtistId(selectedArtist.id)) {
-        return (
-          <SunoOnlyPanel
-            playlistName={selectedArtist.artist_name}
-            dateAdded={selectedArtist.created_at}
-            songCount={selectedArtist.song_count ?? songs.length}
-            addTrackOpen={sunoDemoAddOpen}
-            busy={busy}
-            playlistId={selectedSunoPlaylistId}
-            onAddTrackOpenChange={setSunoDemoAddOpen}
-            onTrackAdded={() => void handleSunoDemoAdded()}
-            onSharePlaylist={() => setSharePlaylistOpen(true)}
-          />
-        );
-      }
-
       if (isUserPlaylistArtistId(selectedArtist.id)) {
         return (
           <CustomPlaylistPanel
             playlistName={selectedArtist.artist_name}
             songCount={selectedArtist.song_count ?? songs.length}
             playlistId={selectedCustomPlaylistId}
-            addYoutubeOpen={youtubeAddOpen}
+            addSongOpen={addSongOpen}
             busy={busy}
-            onAddYoutubeOpenChange={setYoutubeAddOpen}
-            onYoutubeAdded={(result) => void handleYoutubeAdded(result)}
+            onAddSongOpenChange={setAddSongOpen}
+            onSongAdded={(result) => void handleExternalSongAdded(result)}
             onSharePlaylist={() => setSharePlaylistOpen(true)}
           />
         );
@@ -2166,8 +2157,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         onToggleCollapsed={toggleSidebarCollapsed}
         onOpenSettings={onOpenSettings}
         onSubscribe={() => setSubscribeModalOpen(true)}
-        onAddSunoPlaylist={() => void handleCreateSunoPlaylist()}
-        onAddCustomPlaylist={() => void handleCreateCustomPlaylist()}
+        onAddPlaylist={() => void handleCreateCustomPlaylist()}
         onRefresh={() => void handleRefresh()}
         onSelectArtist={selectArtist}
         onPlaylistDoubleClick={(artistId) => void handlePlaylistDoubleClick(artistId)}
@@ -2234,7 +2224,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         <div className="listener-main" ref={mainColumnRef}>
           <section className="song-page-panel panel" style={{ height: contentHeight, flex: 'none' }}>
             <h2 className="sr-only">Listener content</h2>
-            {mainContentView === 'song' && pageUrl && !showingSunoDemoPage && !coverModalOpen && !visualizer.embeddedActive ? (
+            {mainContentView === 'song' && pageUrl && !showingSunoDemoPage && !showingFlowPage && !coverModalOpen && !visualizer.embeddedActive ? (
               <SongLikeButton
                 liked={currentSongLiked}
                 disabled={!canToggleLike || likeBusy}
@@ -2246,147 +2236,43 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
           <VerticalResizeHandle onResizeDelta={handleContentResize} />
 
-          <section className={`playlist-panel panel${isLikedPlaylist ? ' liked-playlist' : ''}${isSunoPlaylist ? ' suno-playlist' : ''}${isCustomPlaylistSelected ? ' custom-playlist' : ''}`}>
-            <table className={`song-table${playlistDrag.isDragging ? ' is-dragging-playlist' : ''}`}>
-            <thead>
-              <tr>
-                <SortableColumnHeader
-                  label="#"
-                  column="order"
-                  activeColumn={sortColumn}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                  className="col-order"
-                />
-                <SortableColumnHeader
-                  label="*"
-                  column="custom"
-                  activeColumn={sortColumn}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                  disabled={!hasCustomOrder}
-                  className="col-custom"
-                />
-                <SortableColumnHeader
-                  label="Title"
-                  column="title"
-                  activeColumn={sortColumn}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                />
-                {showArtistColumn ? (
-                  <SortableColumnHeader
-                    label="Artist"
-                    column="artist"
-                    activeColumn={sortColumn}
-                    direction={sortDirection}
-                    onSort={toggleSort}
-                    className="col-artist"
-                  />
-                ) : null}
-                <SortableColumnHeader
-                  label="Album"
-                  column="album"
-                  activeColumn={sortColumn}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                  className={showArtistColumn ? 'col-album' : undefined}
-                />
-                <SortableColumnHeader
-                  label="Year"
-                  column="year"
-                  activeColumn={sortColumn}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                />
-                <SortableColumnHeader
-                  label="Length"
-                  column="length"
-                  activeColumn={sortColumn}
-                  direction={sortDirection}
-                  onSort={toggleSort}
-                  className="col-duration"
-                />
-              </tr>
-            </thead>
-            <tbody>
-              {sortedSongs.map((song, index) => {
-                const dragClassName = playlistDrag.rowDragClassName(song.id, index);
-                return (
-                <tr
-                  key={song.id}
-                  ref={(node) => playlistDrag.setRowRef(index, node)}
-                  className={`song-row${song.id === playingSongId ? ' playing-row' : ''}${
-                    song.id === previewSongId ? ' selected-row' : ''
-                  }${song.unavailable === 1 ? ' unavailable-row' : ''}${
-                    isSongSkipped(song) ? ' skipped-row' : ''
-                  }${dragClassName ? ` ${dragClassName}` : ''}`}
-                  onClick={() => handleRowClick(song)}
-                  onDoubleClick={() => handleRowDoubleClick(song)}
-                  onContextMenu={(event) => handleRowContextMenu(event, song)}
-                >
-                  <td className="col-order">
-                    <span className="playlist-order-cell">
-                      <button
-                        type="button"
-                        className="playlist-drag-handle"
-                        aria-label={`Drag to reorder ${song.title}`}
-                        onPointerDown={(event) => {
-                          event.stopPropagation();
-                          playlistDrag.startDrag(song.id, index, event.pointerId);
-                        }}
-                      >
-                        <span aria-hidden="true">⋮⋮</span>
-                      </button>
-                      {isSongSkipped(song) ? <SkippedSongMarker /> : null}
-                      <span className="playlist-order-index">{catalogOrderBySongId.get(song.id) ?? '—'}</span>
-                    </span>
-                  </td>
-                  <td className="col-custom">
-                    <span className="playlist-custom-index">
-                      {customOrderBySongId.get(song.id) ?? '—'}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="song-title-cell">
-                      {!isLikedPlaylist && song.id > 0 && likedSongIds.has(song.id) ? (
-                        <LikedSongIndicator />
-                      ) : null}
-                      <span
-                        className={
-                          song.unavailable === 1 || isSongSkipped(song) ? 'unavailable-title' : undefined
-                        }
-                      >
-                        {song.title}
-                      </span>
-                    </span>
-                  </td>
-                  {showArtistColumn ? <td className="col-artist">{song.artist_name || '—'}</td> : null}
-                  <td className={showArtistColumn ? 'col-album' : undefined}>{song.album || '—'}</td>
-                  <td>{song.year || '—'}</td>
-                  <td className="col-duration">
-                    {song.unavailable === 1 ? (
-                      <UnavailableLengthMarker />
-                    ) : (
-                      songDurationLabel(song, runtimeDurations[song.id])
-                    )}
-                  </td>
-                </tr>
-                );
-              })}
-              {!songs.length ? (
-                <tr>
-                  <td colSpan={showArtistColumn ? 7 : 6} className="empty">
-                    {isLikedPlaylist
-                      ? 'No liked songs yet.'
-                      : isSunoPlaylist
-                        ? 'No Suno tracks yet. Open the playlist home and choose Add Suno Track.'
-                        : 'No songs in library.'}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+          <section
+            ref={playlistPanelRef}
+            className={`playlist-panel panel${isLikedPlaylist ? ' liked-playlist' : ''}${isCustomPlaylistSelected ? ' custom-playlist' : ''}`}
+          >
+            <PlaylistTable
+              songs={sortedSongs}
+              profile={playlistTableProfile}
+              columnOrder={columnOrder}
+              columnWidths={columnWidths}
+              isResizing={isResizing}
+              resizeBetween={resizeBetween}
+              isDragging={playlistDrag.isDragging}
+              hasArtistCol={showArtistColumn}
+              hasSourceCol={showSourceColumn}
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={toggleSort}
+              hasCustomOrder={hasCustomOrder}
+              emptyMessage={
+                isLikedPlaylist
+                  ? 'No liked songs yet.'
+                  : isCustomPlaylistSelected
+                    ? 'No tracks yet. Open the playlist home and choose Add New Song.'
+                    : 'No songs in library.'
+              }
+              playingSongId={playingSongId}
+              previewSongId={previewSongId}
+              likedSongIds={likedSongIds}
+              isLikedPlaylist={isLikedPlaylist}
+              catalogOrderBySongId={catalogOrderBySongId}
+              customOrderBySongId={customOrderBySongId}
+              runtimeDurations={runtimeDurations}
+              playlistDrag={playlistDrag}
+              onRowClick={handleRowClick}
+              onRowDoubleClick={handleRowDoubleClick}
+              onRowContextMenu={handleRowContextMenu}
+            />
           </section>
         </div>
       </div>

@@ -3,7 +3,9 @@ import { test } from 'node:test';
 
 import {
   applyCustomPlaylistOrder,
+  appendToCustomOrderIfExists,
   buildCatalogOrderMap,
+  removeFromCustomOrder,
   reorderPlaylistIds,
   syncCustomPlaylistOrder,
 } from './playlistOrder.ts';
@@ -12,6 +14,18 @@ test('syncCustomPlaylistOrder removes deleted songs and appends new ones', () =>
   assert.deepEqual(syncCustomPlaylistOrder([10, 20, 30], [10, 30, 40]), [10, 30, 40]);
   assert.deepEqual(syncCustomPlaylistOrder([10, 20, 30], [40, 50]), [40, 50]);
   assert.deepEqual(syncCustomPlaylistOrder([], [1, 2, 3]), [1, 2, 3]);
+});
+
+test('appendToCustomOrderIfExists appends only when custom order already exists', () => {
+  assert.equal(appendToCustomOrderIfExists([], 99), null);
+  assert.deepEqual(appendToCustomOrderIfExists([1, 2], 3), [1, 2, 3]);
+  assert.deepEqual(appendToCustomOrderIfExists([1, 2], 2), [1, 2]);
+});
+
+test('removeFromCustomOrder drops one id and clears when empty', () => {
+  assert.deepEqual(removeFromCustomOrder([1, 2, 3], 2), [1, 3]);
+  assert.equal(removeFromCustomOrder([5], 5), null);
+  assert.deepEqual(removeFromCustomOrder([1, 2], 9), [1, 2]);
 });
 
 test('buildCatalogOrderMap assigns stable catalog positions', () => {
