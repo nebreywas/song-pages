@@ -2,8 +2,9 @@
  * Electron main process — window lifecycle, menu, IPC, SQLite, logging.
  * @see documentation/README.md — project index for agents and contributors
  */
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, nativeImage } = require('electron');
 const path = require('path');
+const pkg = require('../package.json');
 const logger = require('./logger');
 const database = require('./database');
 const { registerIpcHandlers } = require('./ipc');
@@ -29,8 +30,43 @@ if (process.platform === 'darwin') {
   app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
 }
 
+/** Round logo — Dock, About panel (macOS), and window icon. */
+const APP_ROUND_LOGO_PATH = path.resolve(__dirname, '..', 'images', 'song-pages-round-logo.png');
+
 /** Display name for menu bar / Dock — does not control the data folder when userData is pinned below. */
 app.setName('Song Pages');
+
+/** macOS About text — native panel icon is bundle-bound; use electron/aboutPanel.js on macOS. */
+function configureAboutPanel() {
+  if (process.platform !== 'darwin' && process.platform !== 'win32' && process.platform !== 'linux') {
+    return;
+  }
+  const options = {
+    applicationName: 'Song Pages',
+    applicationVersion: pkg.version,
+    version: pkg.version,
+    copyright: 'Song Pages © Ben Sawyer, 2026.',
+  };
+  if (process.platform === 'win32' || process.platform === 'linux') {
+    options.iconPath = APP_ROUND_LOGO_PATH;
+  }
+  app.setAboutPanelOptions(options);
+}
+
+/** NSApplication icon — drives Dock and the native About panel graphic on macOS. */
+function applyMacAppIcon() {
+  if (process.platform !== 'darwin') return;
+  const logo = nativeImage.createFromPath(APP_ROUND_LOGO_PATH);
+  if (logo.isEmpty()) {
+    logger.warn('macOS app icon missing', { path: APP_ROUND_LOGO_PATH });
+    return;
+  }
+  if (app.dock) {
+    app.dock.setIcon(logo);
+  }
+}
+
+configureAboutPanel();
 
 /**
  * Pin userData to a stable folder name. Without this, `app.setName()` or product renames
@@ -65,6 +101,7 @@ function createMainWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'Song Pages',
+    ...(process.platform === 'darwin' ? { icon: APP_ROUND_LOGO_PATH } : {}),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -122,6 +159,7 @@ async function refreshArtistsOnLaunch() {
 }
 
 app.whenReady().then(async () => {
+  applyMacAppIcon();
   logger.initLogger();
   registerCacheProtocol();
   configureSongPageGuestSession();

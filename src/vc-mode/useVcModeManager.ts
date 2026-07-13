@@ -55,6 +55,8 @@ type UseVcModeManagerOptions = {
   repeatMode: 'off' | 'one' | 'all';
   shuffle: boolean;
   artists: ArtistRow[];
+  /** VC-session auto-skips — cleared when VC Mode ends. */
+  sessionSkippedIds?: ReadonlySet<number>;
   isPlaying: boolean;
   currentTime: number;
   duration: number;
@@ -137,6 +139,7 @@ export function useVcModeManager({
   repeatMode,
   shuffle,
   artists,
+  sessionSkippedIds,
   isPlaying,
   currentTime,
   duration,
@@ -147,6 +150,9 @@ export function useVcModeManager({
 }: UseVcModeManagerOptions) {
   const [modalOpen, setModalOpen] = useState(false);
   const [vcOpen, setVcOpen] = useState(false);
+  const [playLockEnabled, setPlayLockEnabled] = useState(false);
+  const [playLockReleaseOnNextSong, setPlayLockReleaseOnNextSong] = useState(false);
+  const playLockReleaseOnNextRef = useRef(false);
   const [activeConfig, setActiveConfig] = useState<VcModeConfig>(() => createDefaultVcConfig());
   const [canvasMirrorFrame, setCanvasMirrorFrame] = useState<string | null>(null);
   const [songManifest, setSongManifest] = useState<SongPagesSongManifest | null>(null);
@@ -203,6 +209,10 @@ export function useVcModeManager({
   );
 
   useEffect(() => {
+    playLockReleaseOnNextRef.current = playLockReleaseOnNextSong;
+  }, [playLockReleaseOnNextSong]);
+
+  useEffect(() => {
     activeConfigRef.current = activeConfig;
   }, [activeConfig]);
 
@@ -256,8 +266,12 @@ export function useVcModeManager({
   const queueAnchorSongId = playingSongId ?? previewSong?.id ?? null;
 
   const queueOptions = useMemo(
-    (): { shuffle: boolean; repeatMode: 'off' | 'one' | 'all' } => ({ shuffle, repeatMode }),
-    [repeatMode, shuffle],
+    (): { shuffle: boolean; repeatMode: 'off' | 'one' | 'all'; sessionSkippedIds?: ReadonlySet<number> } => ({
+      shuffle,
+      repeatMode,
+      sessionSkippedIds,
+    }),
+    [repeatMode, sessionSkippedIds, shuffle],
   );
 
   const nextSongPreview = useMemo(() => {
@@ -384,6 +398,8 @@ export function useVcModeManager({
       specialPlayPause,
       surfaceDesigns: getVcSurfaceDesignPickerState(),
       lyricsSourceReady: lyricsSourceReadyForSong(displaySong, loadedManifestUrl),
+      playLockEnabled,
+      playLockReleaseOnNextSong,
     };
   }, [
     activeConfig,
@@ -395,6 +411,8 @@ export function useVcModeManager({
     hostGraphicPopupUrl,
     kudos.presets,
     nextSongPreview,
+    playLockEnabled,
+    playLockReleaseOnNextSong,
     playingSong,
     previewSong,
     songManifest,
@@ -594,6 +612,41 @@ export function useVcModeManager({
     };
   }, [switchVcSurface, vcOpen]);
 
+  // Play Lock toggle from VC controller or keybinding.
+  useEffect(() => {
+    const app = getApp();
+    if (!vcOpen || !app?.vc?.onTogglePlayLock) return;
+
+    const off = app.vc.onTogglePlayLock(() => {
+      setPlayLockEnabled((on) => {
+        const next = !on;
+        if (!next) setPlayLockReleaseOnNextSong(false);
+        return next;
+      });
+    });
+
+    return () => off();
+  }, [vcOpen]);
+
+  // Release-on-next convenience mode from the VC controller.
+  useEffect(() => {
+    const app = getApp();
+    if (!vcOpen || !app?.vc?.onSetPlayLockReleaseOnNext) return;
+
+    const off = app.vc.onSetPlayLockReleaseOnNext((enabled) => {
+      setPlayLockReleaseOnNextSong(enabled);
+    });
+
+    return () => off();
+  }, [vcOpen]);
+
+  const releasePlayLockIfScheduled = useCallback(() => {
+    if (!playLockReleaseOnNextRef.current) return;
+    playLockReleaseOnNextRef.current = false;
+    setPlayLockReleaseOnNextSong(false);
+    setPlayLockEnabled(false);
+  }, []);
+
   useEffect(() => {
     const app = getApp();
     if (!vcOpen || !app?.vc) return;
@@ -682,6 +735,9 @@ export function useVcModeManager({
         flushPendingVcPersistRef.current();
         await awaitVcPersistIdle();
         vcSessionDesignIdRef.current = null;
+        playLockReleaseOnNextRef.current = false;
+        setPlayLockReleaseOnNextSong(false);
+        setPlayLockEnabled(false);
         setVcOpen(false);
         setModalOpen(true);
       })();
@@ -724,6 +780,9 @@ export function useVcModeManager({
       activeConfigSourceRef.current = 'start';
       activeConfigRef.current = normalized;
       setActiveConfig(normalized);
+      playLockReleaseOnNextRef.current = false;
+      setPlayLockReleaseOnNextSong(false);
+      setPlayLockEnabled(false);
       await persistVcModeConfig(normalized);
       setModalOpen(false);
       setVcOpen(true);
@@ -741,6 +800,9 @@ export function useVcModeManager({
     await app.vc.close();
     await awaitVcPersistIdle();
     vcSessionDesignIdRef.current = null;
+    playLockReleaseOnNextRef.current = false;
+    setPlayLockReleaseOnNextSong(false);
+    setPlayLockEnabled(false);
     setVcOpen(false);
     setCanvasMirrorFrame(null);
     setModalOpen(true);
@@ -758,6 +820,11 @@ export function useVcModeManager({
   return {
     modalOpen,
     vcOpen,
+    playLockEnabled,
+    setPlayLockEnabled,
+    playLockReleaseOnNextSong,
+    setPlayLockReleaseOnNextSong,
+    releasePlayLockIfScheduled,
     activeConfig,
     analyserEnabled,
     vcVisualizerId,

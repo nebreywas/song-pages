@@ -27,6 +27,8 @@ export interface CommandAvailability {
   requiresPlaybackTiming?: boolean;
   /** Play Next Song — only while a special play-style pause is active. */
   requiresSpecialPlayPause?: boolean;
+  /** Blocked while VC Play Lock protects live playback. */
+  blockedWhilePlayLock?: boolean;
 }
 
 /** Dev-level rules for whether a host can remove or clear bindings. */

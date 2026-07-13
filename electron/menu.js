@@ -2,6 +2,7 @@
  * Application menu — Listener, Artist, Developer, About modes.
  */
 const { app, BrowserWindow, Menu, shell } = require('electron');
+const { showAboutPanel } = require('./aboutPanel');
 
 /** @type {import('electron').BrowserWindow | null} */
 let mainWindowRef = null;
@@ -37,7 +38,10 @@ function buildAppMenu(isDev) {
     template.push({
       label: app.name,
       submenu: [
-        { role: 'about' },
+        {
+          label: `About ${app.name}`,
+          click: () => showAboutPanel(mainWindowRef),
+        },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },

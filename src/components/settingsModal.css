@@ -32,3 +32,42 @@
   color: var(--text-muted);
   font-size: 0.85rem;
 }
+
+.settings-checkbox-row {
+  margin: 0.35rem 0 0.65rem;
+}
+
+.settings-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.settings-checkbox-label input[type='checkbox'] {
+  flex-shrink: 0;
+}
+
+.settings-minutes-input {
+  width: 3.25rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+
+.settings-minutes-input:disabled {
+  opacity: 0.55;
+}
+
+.settings-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  max-width: 42rem;
+}

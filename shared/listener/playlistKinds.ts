@@ -76,6 +76,15 @@ export function isSongSkipped(song: { skipped?: number | boolean | null }): bool
   return song.skipped === 1 || song.skipped === true;
 }
 
+/** Permanent skip or a VC-session-only skip overlay (not persisted). */
+export function isSongSkippedForPlaylist(
+  song: { id?: number; skipped?: number | boolean | null },
+  sessionSkippedIds?: ReadonlySet<number> | null,
+): boolean {
+  if (isSongSkipped(song)) return true;
+  return song.id != null && sessionSkippedIds?.has(song.id) === true;
+}
+
 /** Liked Songs availability probe — NULL = unchecked, 1 = unavailable. */
 export function isSongUnavailable(song: { unavailable?: number | boolean | null }): boolean {
   return song.unavailable === 1 || song.unavailable === true;

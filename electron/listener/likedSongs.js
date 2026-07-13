@@ -23,6 +23,15 @@ function initLikedSongsSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_liked_songs_liked_at ON liked_songs(liked_at DESC);
   `);
+
+  migrateLikedSongColumns(db);
+}
+
+function migrateLikedSongColumns(db) {
+  const cols = db.prepare('PRAGMA table_info(liked_songs)').all().map((col) => col.name);
+  if (!cols.includes('skipped')) {
+    db.exec('ALTER TABLE liked_songs ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0');
+  }
 }
 
 function countLikedSongs() {
@@ -98,6 +107,7 @@ function listLikedSongs() {
       `SELECT
          ls.id AS liked_id,
          ls.unavailable,
+         COALESCE(ls.skipped, 0) AS skipped,
          CASE WHEN s.id IS NOT NULL THEN s.id ELSE -ls.id END AS id,
          COALESCE(s.artist_id, ls.source_artist_id) AS artist_id,
          COALESCE(s.external_id, ls.external_id) AS external_id,
@@ -150,6 +160,22 @@ function removeLikedSong({ songId, likedId }) {
   return { count: countLikedSongs() };
 }
 
+/** User-marked skip on a liked-songs row — song stays in the list. */
+function setLikedSongSkipped({ songId, likedId }, skipped) {
+  const db = getDatabase();
+  const value = skipped ? 1 : 0;
+
+  if (songId > 0) {
+    return db.prepare('UPDATE liked_songs SET skipped = ? WHERE song_id = ?').run(value, songId).changes > 0;
+  }
+
+  if (likedId != null) {
+    return db.prepare('UPDATE liked_songs SET skipped = ? WHERE id = ?').run(value, likedId).changes > 0;
+  }
+
+  throw new Error('Cannot update liked song skip without a library or liked row id.');
+}
+
 module.exports = {
   initLikedSongsSchema,
   countLikedSongs,
@@ -158,5 +184,6 @@ module.exports = {
   toggleLikeSong,
   listLikedSongs,
   setLikedSongAvailability,
+  setLikedSongSkipped,
   removeLikedSong,
 };

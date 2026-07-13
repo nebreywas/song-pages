@@ -162,7 +162,14 @@ export const BUILTIN_COMMAND_CATALOG: CommandDefinition[] = [
     label: 'Play Next Song',
     description: 'Skip the between-song pause and start the next track.',
     category: 'playback',
-    availability: { vcMode: true, requiresSpecialPlayPause: true },
+    availability: { vcMode: true, requiresSpecialPlayPause: true, blockedWhilePlayLock: true },
+  },
+  {
+    id: 'toggle-play-lock',
+    label: 'Toggle Play Lock',
+    description: 'Protect live playback from accidental song changes while editing playlists.',
+    category: 'playback',
+    availability: { vcMode: true },
   },
   {
     id: 'toggle-vc-command-gate',

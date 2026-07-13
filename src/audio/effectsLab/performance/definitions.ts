@@ -20,12 +20,6 @@ export const PERFORMANCE_EFFECT_DEFINITIONS: PerformanceEffectDefinition[] = [
     hold: true,
   },
   {
-    id: 'momentary-highpass',
-    label: 'Momentary High-Pass',
-    concept: 'Hold for quick vocal-emphasis lift — release to recover (whole-song: Vocal Emphasis).',
-    hold: true,
-  },
-  {
     id: 'reverb-throw',
     label: 'Reverb Throw',
     concept: 'Audible plate burst on the current moment — dry stays up.',

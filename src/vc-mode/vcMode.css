@@ -2231,6 +2231,21 @@
   margin-bottom: 0;
 }
 
+.vc-settings-minutes-input {
+  width: 3.1rem;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+
+.vc-settings-minutes-input:disabled {
+  opacity: 0.55;
+}
+
 .vc-settings-section-divider {
   border: none;
   border-top: 1px solid var(--border);

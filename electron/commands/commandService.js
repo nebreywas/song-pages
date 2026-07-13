@@ -244,6 +244,19 @@ function dispatchCommand(invocation) {
     return { ok: true, result: 'executed' };
   }
 
+  if (commandId === 'toggle-play-lock') {
+    if (!vcModeActive) return { ok: false, result: 'vc-inactive' };
+    sendToWindow(mainWindowRef, 'vc:toggle-play-lock');
+    broadcast('command:invoke', {
+      commandId,
+      source,
+      binding,
+      result: 'executed',
+      timestamp: Date.now(),
+    });
+    return { ok: true, result: 'executed' };
+  }
+
   const kudoPresetId = parseKudoPresetId(commandId);
   if (kudoPresetId) {
     if (!vcModeActive) return { ok: false, result: 'vc-inactive' };

@@ -13,6 +13,7 @@ files:
   - compiler/**/*
   - artist-page-templates/**/*
   - shared/**/*
+  - images/song-pages-round-logo.png
   - node_modules/hls.js/**/*
   - package.json
 
@@ -24,6 +25,7 @@ asarUnpack:
 
 mac:
   category: public.app-category.music
+  icon: images/song-pages-round-logo.png
   extendInfo:
     CFBundleDisplayName: Song Pages
     CFBundleName: Song Pages

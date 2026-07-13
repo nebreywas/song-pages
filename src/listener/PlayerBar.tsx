@@ -16,6 +16,9 @@ import {
   IconMenu,
   IconMinifyBar,
 } from './PlayerIcons';
+import { PlayerOnDeckInfo } from './PlayerOnDeckIndicator';
+import { SongHistoryPopover } from './SongHistoryPopover';
+import type { SongHistoryEntry } from '@shared/listener/songHistory';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -47,16 +50,24 @@ type PlayerBarProps = {
   onVcLiveClick?: () => void;
   vcLive?: boolean;
   vcDisabled?: boolean;
-  bassBoost?: boolean;
-  lofi?: boolean;
-  onToggleBassBoost?: () => void;
-  onToggleLofi?: () => void;
-  crossfades?: boolean;
-  onToggleCrossfades?: () => void;
+  audioEffectsOpen?: boolean;
+  onToggleAudioEffects?: () => void;
   seekTimeDisplay?: SeekTimeDisplay;
   onToggleSeekTimeDisplay?: () => void;
   chromeMinified?: boolean;
   onToggleChromeMinified?: () => void;
+  onDeck?: PlayerOnDeckInfo | null;
+  onClearOnDeck?: () => void;
+  songHistoryOpen?: boolean;
+  onSongHistoryOpenChange?: (open: boolean) => void;
+  songHistoryEntries?: SongHistoryEntry[];
+  songHistoryLoading?: boolean;
+  onSongHistoryClearRequest?: () => void;
+  onSongHistoryAddToPlaylist?: (entry: SongHistoryEntry) => void;
+  onSongHistoryPutOnDeck?: (entry: SongHistoryEntry) => void;
+  onSongHistoryPlayNow?: (entry: SongHistoryEntry) => void;
+  onSongHistoryGoToSong?: (entry: SongHistoryEntry) => void;
+  playerWindowRef?: React.RefObject<HTMLElement | null>;
 };
 
 const MENU_IDLE_MS = 60_000;
@@ -98,16 +109,24 @@ export function PlayerBar({
   onVcLiveClick,
   vcLive,
   vcDisabled,
-  bassBoost = false,
-  lofi = false,
-  onToggleBassBoost,
-  onToggleLofi,
-  crossfades = false,
-  onToggleCrossfades,
+  audioEffectsOpen = false,
+  onToggleAudioEffects,
   seekTimeDisplay = 'remaining',
   onToggleSeekTimeDisplay,
   chromeMinified = false,
   onToggleChromeMinified,
+  onDeck = null,
+  onClearOnDeck,
+  songHistoryOpen = false,
+  onSongHistoryOpenChange,
+  songHistoryEntries = [],
+  songHistoryLoading = false,
+  onSongHistoryClearRequest,
+  onSongHistoryAddToPlaylist,
+  onSongHistoryPutOnDeck,
+  onSongHistoryPlayNow,
+  onSongHistoryGoToSong,
+  playerWindowRef,
 }: PlayerBarProps) {
   const progressRef = useRef<HTMLDivElement>(null);
   const menuIdleTimerRef = useRef<number | null>(null);
@@ -184,16 +203,6 @@ export function PlayerBar({
   const visualizerHighlighted = Boolean(embeddedVisualizerActive);
   const projectionHighlighted = projectionActive;
 
-  const toggleBassBoost = () => {
-    touchMenuActivity();
-    onToggleBassBoost?.();
-  };
-
-  const toggleLofi = () => {
-    touchMenuActivity();
-    onToggleLofi?.();
-  };
-
   const handleMenuToggle = () => {
     setMenuOpen((open) => {
       if (open) {
@@ -234,7 +243,8 @@ export function PlayerBar({
   });
 
   return (
-    <div className="player-bar">
+    <>
+      <div className="player-bar">
       <div className="player-transport-controls">
         <button
           type="button"
@@ -277,6 +287,11 @@ export function PlayerBar({
         title={nowPlayingTitle}
         artist={nowPlayingArtist}
         coverUrl={nowPlayingCoverUrl}
+        onDeck={onDeck}
+        onClearOnDeck={onClearOnDeck}
+        onCoverDoubleActivate={
+          onSongHistoryOpenChange ? () => onSongHistoryOpenChange(true) : undefined
+        }
       />
 
       <div className="player-volume">
@@ -302,16 +317,18 @@ export function PlayerBar({
       </div>
 
       <div className="player-secondary-row">
-        <button
-          type="button"
-          className={`player-menu-btn${menuOpen ? ' active' : ''}`}
-          onClick={handleMenuToggle}
-          aria-pressed={menuOpen}
-          aria-label={menuOpen ? 'Show seek bar' : 'Show options menu'}
-          title={menuOpen ? 'Show seek bar' : 'Show options menu'}
-        >
-          <IconMenu />
-        </button>
+        <div className="player-secondary-leading">
+          <button
+            type="button"
+            className={`player-menu-btn${menuOpen ? ' active' : ''}`}
+            onClick={handleMenuToggle}
+            aria-pressed={menuOpen}
+            aria-label={menuOpen ? 'Show seek bar' : 'Show options menu'}
+            title={menuOpen ? 'Show seek bar' : 'Show options menu'}
+          >
+            <IconMenu />
+          </button>
+        </div>
 
         <div className={`player-secondary-panel${menuOpen ? ' player-secondary-panel-menu' : ''}`}>
           {menuOpen ? (
@@ -363,36 +380,12 @@ export function PlayerBar({
                 <OptionsSeparator />
                 <button
                   type="button"
-                  className={`player-option-btn${bassBoost ? ' active' : ''}`}
-                  onClick={toggleBassBoost}
-                  disabled={!onToggleBassBoost}
-                  title="Bass boost"
+                  className={`player-option-btn player-option-btn-effects-lab${audioEffectsOpen ? ' active' : ''}`}
+                  onClick={() => handleMenuOption(() => onToggleAudioEffects?.())}
+                  disabled={!onToggleAudioEffects}
+                  title="Audio & Effects"
                 >
-                  Bass boost
-                </button>
-              </span>
-              <span className="player-options-item">
-                <OptionsSeparator />
-                <button
-                  type="button"
-                  className={`player-option-btn${lofi ? ' active' : ''}`}
-                  onClick={toggleLofi}
-                  disabled={!onToggleLofi}
-                  title="Lo-fi"
-                >
-                  Lo-fi
-                </button>
-              </span>
-              <span className="player-options-item">
-                <OptionsSeparator />
-                <button
-                  type="button"
-                  className={`player-option-btn${crossfades ? ' active' : ''}`}
-                  onClick={() => handleMenuOption(() => onToggleCrossfades?.())}
-                  disabled={!onToggleCrossfades}
-                  title="Crossfades"
-                >
-                  Crossfades
+                  Audio &amp; Effects
                 </button>
               </span>
             </nav>
@@ -463,6 +456,26 @@ export function PlayerBar({
           </div>
         </div>
       </div>
-    </div>
+      </div>
+      {onSongHistoryOpenChange &&
+      onSongHistoryClearRequest &&
+      onSongHistoryAddToPlaylist &&
+      onSongHistoryPutOnDeck &&
+      onSongHistoryPlayNow &&
+      onSongHistoryGoToSong ? (
+        <SongHistoryPopover
+          open={songHistoryOpen}
+          onOpenChange={onSongHistoryOpenChange}
+          entries={songHistoryEntries}
+          loading={songHistoryLoading}
+          playerWindowRef={playerWindowRef}
+          onRequestClear={onSongHistoryClearRequest}
+          onAddToPlaylist={onSongHistoryAddToPlaylist}
+          onPutOnDeck={onSongHistoryPutOnDeck}
+          onPlayNow={onSongHistoryPlayNow}
+          onGoToSong={onSongHistoryGoToSong}
+        />
+      ) : null}
+    </>
   );
 }

@@ -57,7 +57,7 @@ export const LAB_EFFECT_DEFINITIONS: LabEffectDefinition[] = [
   },
   {
     id: 'bass-boost',
-    label: 'Bass Boost (production)',
+    label: 'Bass Boost',
     tier: 'production',
     concept: 'Existing production lowshelf boost.',
     params: {
@@ -67,7 +67,7 @@ export const LAB_EFFECT_DEFINITIONS: LabEffectDefinition[] = [
   },
   {
     id: 'lo-fi',
-    label: 'Lo-Fi (production)',
+    label: 'Lo-fi',
     tier: 'production',
     concept: 'Existing production lowpass + gentle drive.',
     params: {
@@ -346,8 +346,7 @@ export const LAB_EFFECT_DEFINITIONS: LabEffectDefinition[] = [
     id: 'tape',
     label: 'Tape',
     tier: 'phase-d',
-    concept:
-      'Warm density, softened highs, gentle saturation — native baseline; toggle worklet enhance to A/B wow/flutter.',
+    concept: 'Warm density, softened highs, gentle saturation with tape wow/flutter.',
     params: withCompressor(
       {
         ...bypassParams(-0.5),
@@ -410,6 +409,28 @@ export const LAB_EFFECT_DEFINITIONS: LabEffectDefinition[] = [
     ),
   },
 ];
+
+/** Whole-song dropdown order in Audio & Effects (bypass omitted — use Activate off). */
+export const WHOLE_SONG_EFFECT_MENU_ORDER = [
+  'bass-boost',
+  'lo-fi',
+  'wide',
+  'warm',
+  'club',
+  'radio',
+  'vocal-emphasis',
+  'mix-emphasis',
+  'tape',
+  'night-drive',
+  'late-night',
+  'dream',
+  'arena',
+  'air',
+  'alive',
+  'punch',
+  'mono-punch',
+  'underwater',
+] as const satisfies readonly LabEffectDefinition['id'][];
 
 const BY_ID = new Map(LAB_EFFECT_DEFINITIONS.map((row) => [row.id, row]));
 

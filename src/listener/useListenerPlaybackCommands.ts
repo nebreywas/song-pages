@@ -67,6 +67,8 @@ type UseListenerPlaybackCommandsOptions = {
   onPlayNextSong?: () => void;
   onVolumeDelta?: (delta: number) => void;
   onVisualizerStep?: (direction: 1 | -1) => void;
+  /** When true, play-next-song hotkeys are ignored (VC Play Lock). */
+  isPlayLockBlocking?: () => boolean;
 };
 
 /** Handle DJ-style playback commands dispatched from VC hotkeys / controller. */
@@ -75,6 +77,7 @@ export function useListenerPlaybackCommands({
   onPlayNextSong,
   onVolumeDelta,
   onVisualizerStep,
+  isPlayLockBlocking,
 }: UseListenerPlaybackCommandsOptions) {
   const seekBackHistoryRef = useRef<number[]>([]);
   const stutterCancelRef = useRef<(() => void) | null>(null);
@@ -86,6 +89,9 @@ export function useListenerPlaybackCommands({
 
   const onVisualizerStepRef = useRef(onVisualizerStep);
   onVisualizerStepRef.current = onVisualizerStep;
+
+  const isPlayLockBlockingRef = useRef(isPlayLockBlocking);
+  isPlayLockBlockingRef.current = isPlayLockBlocking;
 
   useEffect(() => {
     const app = getApp();
@@ -103,6 +109,7 @@ export function useListenerPlaybackCommands({
       }
 
       if (command.type === 'playNextSong') {
+        if (isPlayLockBlockingRef.current?.()) return;
         onPlayNextSongRef.current?.();
         return;
       }

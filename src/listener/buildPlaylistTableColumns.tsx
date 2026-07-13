@@ -5,7 +5,9 @@ import {
   type PlaylistColumnId,
   type PlaylistLayoutProfile,
 } from '@shared/listener/playlistColumnLayout';
-import { isSongSkipped } from '@shared/listener/playlistKinds';
+import { isSongSkipped, isSongSkippedForPlaylist } from '@shared/listener/playlistKinds';
+import type { PlaylistLengthSettings } from '@shared/listener/playlistLengthSettings';
+import { isSongLongerThanMinutes } from '@shared/listener/songDuration';
 import type { SongRow } from '../types/app';
 import { formatTime } from './formatTime';
 import { LikedSongIndicator } from './LikedSongIndicator';
@@ -32,7 +34,23 @@ export type PlaylistTableColumnContext = {
   customOrderBySongId: Map<number, number>;
   runtimeDurations: Record<number, number>;
   playlistDrag: PlaylistDragHandles;
+  playlistLengthSettings: PlaylistLengthSettings;
+  sessionSkippedIds: ReadonlySet<number>;
 };
+
+function skippedValueClass(song: SongRow, sessionSkippedIds: ReadonlySet<number>): string {
+  return isSongSkippedForPlaylist(song, sessionSkippedIds) ? ' playlist-skipped-value' : '';
+}
+
+function isLongSongCaution(song: SongRow, ctx: PlaylistTableColumnContext): boolean {
+  if (!ctx.playlistLengthSettings.cautionLongSongsEnabled) return false;
+  if (song.unavailable === 1) return false;
+  return isSongLongerThanMinutes(
+    song,
+    ctx.playlistLengthSettings.cautionMinutes,
+    ctx.runtimeDurations,
+  );
+}
 
 function songDurationLabel(song: SongRow, runtimeSeconds: number | undefined): string {
   if (song.unavailable === 1) return '';
@@ -42,7 +60,11 @@ function songDurationLabel(song: SongRow, runtimeSeconds: number | undefined): s
 
 function UnavailableLengthMarker() {
   return (
-    <span className="unavailable-length-marker" aria-label="Unavailable" title="Unavailable">
+    <span
+      className="unavailable-length-marker"
+      aria-label="Unavailable"
+      title="Unavailable — source could not be reached"
+    >
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.5" />
         <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" strokeWidth="1.5" />
@@ -90,8 +112,8 @@ function buildColumn(
             >
               <span aria-hidden="true">⋮⋮</span>
             </button>
-            {isSongSkipped(row.original) ? <SkippedSongMarker /> : null}
-            <span className="playlist-order-index">
+            {isSongSkippedForPlaylist(row.original, ctx.sessionSkippedIds) ? <SkippedSongMarker /> : null}
+            <span className={`playlist-order-index${skippedValueClass(row.original, ctx.sessionSkippedIds)}`}>
               {ctx.catalogOrderBySongId.get(row.original.id) ?? '—'}
             </span>
           </span>
@@ -111,7 +133,7 @@ function buildColumn(
           />
         ),
         cell: ({ row }) => (
-          <span className="playlist-custom-index">
+          <span className={`playlist-custom-index${skippedValueClass(row.original, ctx.sessionSkippedIds)}`}>
             {ctx.customOrderBySongId.get(row.original.id) ?? '—'}
           </span>
         ),
@@ -135,10 +157,8 @@ function buildColumn(
             ) : null}
             <span
               className={`song-title-text${
-                row.original.unavailable === 1 || isSongSkipped(row.original)
-                  ? ' unavailable-title'
-                  : ''
-              }`}
+                row.original.unavailable === 1 ? ' unavailable-title' : ''
+              }${skippedValueClass(row.original, ctx.sessionSkippedIds)}`}
               title={row.original.title}
             >
               {row.original.title}
@@ -159,7 +179,12 @@ function buildColumn(
           />
         ),
         cell: ({ row }) => (
-          <span title={row.original.artist_name || undefined}>{row.original.artist_name || '—'}</span>
+          <span
+            className={skippedValueClass(row.original, ctx.sessionSkippedIds).trim() || undefined}
+            title={row.original.artist_name || undefined}
+          >
+            {row.original.artist_name || '—'}
+          </span>
         ),
       };
     case 'album':
@@ -175,7 +200,12 @@ function buildColumn(
           />
         ),
         cell: ({ row }) => (
-          <span title={row.original.album || undefined}>{row.original.album || '—'}</span>
+          <span
+            className={skippedValueClass(row.original, ctx.sessionSkippedIds).trim() || undefined}
+            title={row.original.album || undefined}
+          >
+            {row.original.album || '—'}
+          </span>
         ),
       };
     case 'year':
@@ -190,7 +220,11 @@ function buildColumn(
             onSort={ctx.onSort}
           />
         ),
-        cell: ({ row }) => row.original.year || '—',
+        cell: ({ row }) => (
+          <span className={skippedValueClass(row.original, ctx.sessionSkippedIds).trim() || undefined}>
+            {row.original.year || '—'}
+          </span>
+        ),
       };
     case 'source':
       return {
@@ -222,12 +256,22 @@ function buildColumn(
             <IconClock className="playlist-duration-header-icon" />
           </SortableColumnHeader>
         ),
-        cell: ({ row }) =>
-          row.original.unavailable === 1 ? (
-            <UnavailableLengthMarker />
-          ) : (
-            songDurationLabel(row.original, ctx.runtimeDurations[row.original.id])
-          ),
+        cell: ({ row }) => {
+          if (row.original.unavailable === 1) {
+            return <UnavailableLengthMarker />;
+          }
+
+          const label = songDurationLabel(row.original, ctx.runtimeDurations[row.original.id]);
+          const caution = isLongSongCaution(row.original, ctx);
+
+          return (
+            <span
+              className={`playlist-duration-value${caution ? ' playlist-duration-caution' : ''}${skippedValueClass(row.original, ctx.sessionSkippedIds)}`}
+            >
+              {label}
+            </span>
+          );
+        },
       };
     default:
       return {

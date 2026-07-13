@@ -115,6 +115,18 @@ export function isEffectsLabAudible(state: EffectsLabState): boolean {
   return state.effectId !== 'bypass';
 }
 
+/**
+ * Closing the panel stops whole-song FX unless another surface keeps them live
+ * (e.g. future VC control surface — gate deactivation there when that ships).
+ */
+export function deactivateEffectsOnPanelClose(
+  prev: EffectsLabState,
+  next: EffectsLabState,
+): EffectsLabState {
+  if (!prev.panelVisible || next.panelVisible) return next;
+  return { ...next, enabled: false, abBypass: false };
+}
+
 export function isWorkletEnhanceActive(state: EffectsLabState): boolean {
   if (!isEffectsLabAudible(state) || !state.workletEnhance) return false;
   return state.effectId === 'tape' || state.effectId === 'alive' || state.effectId === 'punch';

@@ -79,6 +79,9 @@ contextBridge.exposeInMainWorld('app', {
       ipcRenderer.invoke('listener:clearPlaylistCustomOrder', playlistKey),
     setCatalogSongSkipped: (artistId, externalId, skipped) =>
       ipcRenderer.invoke('listener:setCatalogSongSkipped', artistId, externalId, skipped),
+    setUserPlaylistSongSkipped: (entryId, skipped) =>
+      ipcRenderer.invoke('listener:setUserPlaylistSongSkipped', entryId, skipped),
+    setLikedSongSkipped: (payload) => ipcRenderer.invoke('listener:setLikedSongSkipped', payload),
     removeLikedSong: (payload) => ipcRenderer.invoke('listener:removeLikedSong', payload),
     removeSunoDemoSong: (songId) => ipcRenderer.invoke('listener:removeSunoDemoSong', songId),
     cacheStats: () => ipcRenderer.invoke('listener:cacheStats'),
@@ -90,7 +93,17 @@ contextBridge.exposeInMainWorld('app', {
       ipcRenderer.on('listener:playback-command', handler);
       return () => ipcRenderer.removeListener('listener:playback-command', handler);
     },
+    onSubmissionPlaylistUpdated: (callback) => {
+      const handler = (_event, playlistId) => callback(playlistId);
+      ipcRenderer.on('listener:submission-playlist-updated', handler);
+      return () => ipcRenderer.removeListener('listener:submission-playlist-updated', handler);
+    },
     setChromeMinified: (payload) => ipcRenderer.invoke('listener:setChromeMinified', payload),
+    recordSongHistoryStart: (input) => ipcRenderer.invoke('listener:recordSongHistoryStart', input),
+    updateSongHistoryEntry: (entryId, patch) =>
+      ipcRenderer.invoke('listener:updateSongHistoryEntry', entryId, patch),
+    listSongHistory: (limit) => ipcRenderer.invoke('listener:listSongHistory', limit),
+    clearSongHistory: () => ipcRenderer.invoke('listener:clearSongHistory'),
   },
 
   artist: {
@@ -162,6 +175,10 @@ contextBridge.exposeInMainWorld('app', {
     reportActiveVisualizer: (id) => ipcRenderer.send('vc:reportActiveVisualizer', id),
     syncActiveVisualizer: (id) => ipcRenderer.send('vc:syncActiveVisualizer', id),
     switchSurface: (designId) => ipcRenderer.send('vc:switchSurface', designId),
+    togglePlayLock: () => ipcRenderer.send('vc:togglePlayLock'),
+    setPlayLockReleaseOnNext: (enabled) => ipcRenderer.send('vc:setPlayLockReleaseOnNext', enabled === true),
+    notifySubmissionPlaylistUpdated: (playlistId) =>
+      ipcRenderer.send('vc:notifySubmissionPlaylistUpdated', playlistId),
     onState: (callback) => {
       const handler = (_event, payload) => callback(payload);
       ipcRenderer.on('vc:state', handler);
@@ -236,6 +253,16 @@ contextBridge.exposeInMainWorld('app', {
       const handler = (_event, designId) => callback(designId);
       ipcRenderer.on('vc:switch-surface', handler);
       return () => ipcRenderer.removeListener('vc:switch-surface', handler);
+    },
+    onTogglePlayLock: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('vc:toggle-play-lock', handler);
+      return () => ipcRenderer.removeListener('vc:toggle-play-lock', handler);
+    },
+    onSetPlayLockReleaseOnNext: (callback) => {
+      const handler = (_event, enabled) => callback(enabled === true);
+      ipcRenderer.on('vc:set-play-lock-release-on-next', handler);
+      return () => ipcRenderer.removeListener('vc:set-play-lock-release-on-next', handler);
     },
   },
 

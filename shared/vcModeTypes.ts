@@ -1,6 +1,7 @@
 /** VC Mode — listening party visual mixer types (shared main ↔ VC window). */
 
 import type { KudoPreset } from './kudos';
+import { clampCautionMinutes, DEFAULT_CAUTION_MINUTES } from './listener/playlistLengthSettings';
 import { VC_MAX_BASE_AREAS, VC_SAFE_TEMPLATE_ID } from './vcSurface/constants';
 import { sanitizeFloats, type VcFloatGeometry } from './vcSurface/floats';
 import { resolveDividers } from './vcSurface/geometry';
@@ -210,6 +211,10 @@ export type VcModeConfig = {
   useFallbacks: boolean;
   /** When true, YouTube/SoundCloud tracks show blank lyrics instead of the embed-provider notice. */
   suppressEmbedProviderLyricsMessages?: boolean;
+  /** When true, songs longer than the threshold are marked skipped before VC starts. */
+  autoSkipLongSongsEnabled?: boolean;
+  /** Whole minutes — songs strictly longer than this are auto-skipped for VC. */
+  autoSkipLongSongsMinutes?: number;
   /** Surface background, divider lines, and default text typography. */
   gridDesign: VcGridDesignSettings;
   /** Between-song pacing for VC hosts (pause / countdown). */
@@ -218,6 +223,8 @@ export type VcModeConfig = {
   hostGraphicPopupId: string | null;
   /** Hotkey upcoming queue overlay — placement and list length. */
   upcomingOverlay: VcUpcomingOverlaySettings;
+  /** Custom playlist that receives VC Controller link pastes (null = hidden field). */
+  defaultSubmissionPlaylistId?: number | null;
   /** Last VC projection window bounds for this surface design. */
   projectionWindow?: VcProjectionWindowBounds;
 };
@@ -313,6 +320,10 @@ export type VcStatePayload = {
   specialPlayPause?: VcSpecialPlayPauseState | null;
   /** Saved surface designs — lets the host switch layouts from the VC controller. */
   surfaceDesigns?: VcSurfaceDesignPickerState;
+  /** When true, playback trajectory changes from the host UI are ignored. */
+  playLockEnabled?: boolean;
+  /** When true with Play Lock on, lock auto-releases after the current song ends naturally. */
+  playLockReleaseOnNextSong?: boolean;
   /**
    * False while the current song's manifest is still loading — lyrics fallbacks wait
    * so a prior track's empty manifest cannot trigger the humorous placeholder.
@@ -624,6 +635,11 @@ export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
     visualizerAlsoClickToChange: migratedClick.visualizerAlsoClickToChange,
     useFallbacks: config.useFallbacks !== false,
     suppressEmbedProviderLyricsMessages: config.suppressEmbedProviderLyricsMessages === true,
+    autoSkipLongSongsEnabled: config.autoSkipLongSongsEnabled === true,
+    autoSkipLongSongsMinutes: clampCautionMinutes(
+      config.autoSkipLongSongsMinutes,
+      DEFAULT_CAUTION_MINUTES,
+    ),
     gridDesign,
     specialPlayStyle: sanitizeSpecialPlayStyleSettings(config.specialPlayStyle),
     hostGraphicPopupId:
@@ -631,6 +647,12 @@ export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
         ? config.hostGraphicPopupId.trim()
         : null,
     upcomingOverlay: sanitizeUpcomingOverlaySettings(config.upcomingOverlay),
+    defaultSubmissionPlaylistId:
+      typeof config.defaultSubmissionPlaylistId === 'number' &&
+      Number.isFinite(config.defaultSubmissionPlaylistId) &&
+      config.defaultSubmissionPlaylistId > 0
+        ? Math.trunc(config.defaultSubmissionPlaylistId)
+        : null,
     ...(projectionWindow ? { projectionWindow } : {}),
   };
 }

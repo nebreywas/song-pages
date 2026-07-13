@@ -315,6 +315,15 @@ declare global {
           externalId: string,
           skipped: boolean,
         ) => Promise<{ ok: boolean; error?: string }>;
+        setUserPlaylistSongSkipped: (
+          entryId: number,
+          skipped: boolean,
+        ) => Promise<{ ok: boolean; error?: string }>;
+        setLikedSongSkipped: (payload: {
+          songId: number;
+          likedId?: number | null;
+          skipped: boolean;
+        }) => Promise<{ ok: boolean; error?: string }>;
         removeLikedSong: (payload: {
           songId: number;
           likedId?: number | null;
@@ -341,11 +350,35 @@ declare global {
         onPlaybackCommand: (
           callback: (payload: import('@shared/listener/playbackCommands').ListenerPlaybackCommand) => void,
         ) => () => void;
+        onSubmissionPlaylistUpdated: (callback: (playlistId: number) => void) => () => void;
         setChromeMinified: (payload: {
           minified: boolean;
           contentWidth?: number;
           contentHeight?: number;
         }) => Promise<{ ok: boolean; error?: string }>;
+        recordSongHistoryStart: (input: {
+          songId: number;
+          songTitle: string;
+          artistName?: string | null;
+          playlistId?: number | null;
+          playlistName?: string | null;
+          playbackType?: 'normal' | 'on-deck' | 'play-now';
+          interruptedPrevious?: boolean;
+          vcMode?: boolean;
+          vcModeLabel?: string | null;
+          durationSeconds?: number | null;
+        }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+        updateSongHistoryEntry: (
+          entryId: number,
+          patch: {
+            completed?: boolean;
+            playbackSeconds?: number;
+            durationSeconds?: number | null;
+            interrupted?: boolean;
+          },
+        ) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+        listSongHistory: (limit?: number) => Promise<unknown[]>;
+        clearSongHistory: () => Promise<{ ok: boolean; error?: string }>;
       };
       artist: {
         pickAudio: () => Promise<string | null>;
@@ -430,6 +463,11 @@ declare global {
         onActiveVisualizerReport: (callback: (id: string) => void) => () => void;
         onSyncActiveVisualizer: (callback: (id: string) => void) => () => void;
         onSwitchSurface: (callback: (designId: string) => void) => () => void;
+        togglePlayLock: () => void;
+        setPlayLockReleaseOnNext: (enabled: boolean) => void;
+        notifySubmissionPlaylistUpdated: (playlistId: number) => void;
+        onTogglePlayLock: (callback: () => void) => () => void;
+        onSetPlayLockReleaseOnNext: (callback: (enabled: boolean) => void) => () => void;
       };
       hostContent: {
         pickAndImportMedia: (payload: {

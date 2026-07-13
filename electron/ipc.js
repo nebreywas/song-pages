@@ -575,6 +575,36 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle('listener:setUserPlaylistSongSkipped', (_event, entryId, skipped) => {
+    const userPlaylists = require('./listener/userPlaylists');
+    try {
+      if (typeof entryId !== 'number') {
+        return { ok: false, error: 'Invalid playlist entry id.' };
+      }
+      const changed = userPlaylists.setUserPlaylistSongSkipped(entryId, Boolean(skipped));
+      return { ok: changed };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:setLikedSongSkipped', (_event, payload) => {
+    const likedSongs = require('./listener/likedSongs');
+    try {
+      const songId = payload?.songId;
+      const likedId = payload?.likedId;
+      if (typeof songId !== 'number') {
+        return { ok: false, error: 'Invalid liked song id.' };
+      }
+      const changed = likedSongs.setLikedSongSkipped({ songId, likedId }, Boolean(payload?.skipped));
+      return { ok: changed };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
   ipcMain.handle('listener:removeLikedSong', (_event, payload) => {
     const likedSongs = require('./listener/likedSongs');
     try {
@@ -611,6 +641,50 @@ function registerIpcHandlers() {
       return { ok: false, error: 'Invalid chrome minify payload.' };
     }
     return setListenerChromeMinified(mainWindow, payload);
+  });
+
+  ipcMain.handle('listener:recordSongHistoryStart', (_event, input) => {
+    const songHistory = require('./listener/songHistory');
+    try {
+      if (!input || typeof input.songId !== 'number' || typeof input.songTitle !== 'string') {
+        return { ok: false, error: 'Invalid song history start payload.' };
+      }
+      const data = songHistory.recordSongHistoryStart(input);
+      return { ok: true, data };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:updateSongHistoryEntry', (_event, entryId, patch) => {
+    const songHistory = require('./listener/songHistory');
+    try {
+      return songHistory.updateSongHistoryEntry(entryId, patch ?? {});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:listSongHistory', (_event, limit) => {
+    const songHistory = require('./listener/songHistory');
+    try {
+      return songHistory.listSongHistory(typeof limit === 'number' ? limit : undefined);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:clearSongHistory', () => {
+    const songHistory = require('./listener/songHistory');
+    try {
+      return songHistory.clearSongHistory();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
   });
 
   // --- Artist Mode (compile) ---
@@ -832,6 +906,24 @@ function registerIpcHandlers() {
     const mainWindow = vcWindow.getMainWindowRef();
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send('vc:switch-surface', designId.trim());
+  });
+
+  ipcMain.on('vc:togglePlayLock', () => {
+    const mainWindow = vcWindow.getMainWindowRef();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('vc:toggle-play-lock');
+  });
+
+  ipcMain.on('vc:setPlayLockReleaseOnNext', (_event, enabled) => {
+    const mainWindow = vcWindow.getMainWindowRef();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('vc:set-play-lock-release-on-next', enabled === true);
+  });
+
+  ipcMain.on('vc:notifySubmissionPlaylistUpdated', (_event, playlistId) => {
+    const mainWindow = vcWindow.getMainWindowRef();
+    if (!mainWindow || mainWindow.isDestroyed() || typeof playlistId !== 'number') return;
+    mainWindow.webContents.send('listener:submission-playlist-updated', playlistId);
   });
 
   // --- Command input system ---

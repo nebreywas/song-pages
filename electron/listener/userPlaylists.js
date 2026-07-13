@@ -215,6 +215,9 @@ function migratePlaylistSongColumns(db) {
        WHERE snapshot_refreshed_at IS NULL`,
     );
   }
+  if (!cols.includes('skipped')) {
+    db.exec('ALTER TABLE user_playlist_songs ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0');
+  }
   repairSunoPlaylistSnapshotPointers(db);
   repairLegacySunoCoverSnapshots(db);
 }
@@ -808,6 +811,7 @@ function rowToSongRow(row, playlistArtistId) {
     site_root_normalized: row.site_root_normalized ?? '',
     library_song_id: row.library_song_id ?? null,
     added_at: row.added_at ?? null,
+    skipped: row.skipped ? 1 : 0,
   };
 }
 
@@ -1010,6 +1014,14 @@ function moveSongToUserPlaylist({ sourceArtistId, destPlaylistId, song }) {
   return result;
 }
 
+function setUserPlaylistSongSkipped(entryId, skipped) {
+  const db = getDatabase();
+  const result = db
+    .prepare('UPDATE user_playlist_songs SET skipped = ? WHERE id = ?')
+    .run(skipped ? 1 : 0, entryId);
+  return result.changes > 0;
+}
+
 module.exports = {
   initUserPlaylistsSchema,
   listUserPlaylists,
@@ -1023,6 +1035,7 @@ module.exports = {
   addSongToUserPlaylist,
   moveSongToUserPlaylist,
   removeUserPlaylistSong,
+  setUserPlaylistSongSkipped,
   getEntryBySongId,
   getPlaylistSongRow,
   findDuplicateEntryId,

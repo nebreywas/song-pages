@@ -87,6 +87,10 @@ export function migrateVcConfig(raw: unknown, visualizerIdFallback: string = DEF
           ? value.hostGraphicPopupId.trim()
           : null,
       upcomingOverlay: value.upcomingOverlay,
+      defaultSubmissionPlaylistId:
+        typeof value.defaultSubmissionPlaylistId === 'number'
+          ? value.defaultSubmissionPlaylistId
+          : null,
       projectionWindow: value.projectionWindow,
     });
   }

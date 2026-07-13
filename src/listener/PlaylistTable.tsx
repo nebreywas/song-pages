@@ -1,4 +1,4 @@
-import { memo, useMemo, type CSSProperties } from 'react';
+import { memo, useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -15,7 +15,9 @@ import {
   type PlaylistGridSlot,
   type PlaylistLayoutProfile,
 } from '@shared/listener/playlistColumnLayout';
-import { isSongSkipped } from '@shared/listener/playlistKinds';
+import { isSongSkippedForPlaylist } from '@shared/listener/playlistKinds';
+import type { PlaylistLengthSettings } from '@shared/listener/playlistLengthSettings';
+import { isSongLongerThanMinutes } from '@shared/listener/songDuration';
 import type { SongRow } from '../types/app';
 import { buildPlaylistTableColumns } from './buildPlaylistTableColumns';
 import { PlaylistColumnResizeHandle } from './PlaylistColumnResizeHandle';
@@ -47,11 +49,14 @@ type PlaylistTableProps = {
   ) => (event: React.PointerEvent<HTMLDivElement>) => void;
   playingSongId: number | null;
   previewSongId: number | null;
+  scrollToSongId?: number | null;
   likedSongIds: Set<number>;
   isLikedPlaylist: boolean;
   catalogOrderBySongId: Map<number, number>;
   customOrderBySongId: Map<number, number>;
   runtimeDurations: Record<number, number>;
+  playlistLengthSettings: PlaylistLengthSettings;
+  sessionSkippedIds: ReadonlySet<number>;
   playlistDrag: PlaylistDrag;
   onRowClick: (song: SongRow) => void;
   onRowDoubleClick: (song: SongRow) => void;
@@ -65,6 +70,10 @@ type PlaylistTableBodyProps = {
   gridSlots: PlaylistGridSlot[];
   playingSongId: number | null;
   previewSongId: number | null;
+  scrollToSongId?: number | null;
+  playlistLengthSettings: PlaylistLengthSettings;
+  sessionSkippedIds: ReadonlySet<number>;
+  runtimeDurations: Record<number, number>;
   playlistDrag: PlaylistDrag;
   onRowClick: (song: SongRow) => void;
   onRowDoubleClick: (song: SongRow) => void;
@@ -78,6 +87,9 @@ function playlistBodyPropsEqual(prev: PlaylistTableBodyProps, next: PlaylistTabl
     prev.gridStyle.gridTemplateColumns === next.gridStyle.gridTemplateColumns &&
     prev.playingSongId === next.playingSongId &&
     prev.previewSongId === next.previewSongId &&
+    prev.playlistLengthSettings === next.playlistLengthSettings &&
+    prev.sessionSkippedIds === next.sessionSkippedIds &&
+    prev.runtimeDurations === next.runtimeDurations &&
     prev.playlistDrag.draggingSongId === next.playlistDrag.draggingSongId &&
     prev.onRowClick === next.onRowClick &&
     prev.onRowDoubleClick === next.onRowDoubleClick &&
@@ -92,6 +104,9 @@ const PlaylistTableBody = memo(function PlaylistTableBody({
   gridSlots,
   playingSongId,
   previewSongId,
+  playlistLengthSettings,
+  sessionSkippedIds,
+  runtimeDurations,
   playlistDrag,
   onRowClick,
   onRowDoubleClick,
@@ -112,15 +127,21 @@ const PlaylistTableBody = memo(function PlaylistTableBody({
           row.getVisibleCells().map((cell) => [cell.column.id as PlaylistColumnId, cell]),
         );
 
+        const longSongCaution =
+          playlistLengthSettings.cautionLongSongsEnabled &&
+          song.unavailable !== 1 &&
+          isSongLongerThanMinutes(song, playlistLengthSettings.cautionMinutes, runtimeDurations);
+
         return (
           <div
             key={row.id}
+            data-song-id={song.id}
             ref={(node) => playlistDrag.setRowRef(row.index, node)}
             className={`playlist-grid-row song-row${song.id === playingSongId ? ' playing-row' : ''}${
               song.id === previewSongId ? ' selected-row' : ''
             }${song.unavailable === 1 ? ' unavailable-row' : ''}${
-              isSongSkipped(song) ? ' skipped-row' : ''
-            }${dragClassName ? ` ${dragClassName}` : ''}`}
+              isSongSkippedForPlaylist(song, sessionSkippedIds) ? ' skipped-row' : ''
+            }${longSongCaution ? ' long-song-caution-row' : ''}${dragClassName ? ` ${dragClassName}` : ''}`}
             style={gridStyle}
             onClick={() => onRowClick(song)}
             onDoubleClick={() => onRowDoubleClick(song)}
@@ -268,17 +289,27 @@ export function PlaylistTable({
   resizeBetween,
   playingSongId,
   previewSongId,
+  scrollToSongId = null,
   likedSongIds,
   isLikedPlaylist,
   catalogOrderBySongId,
   customOrderBySongId,
   runtimeDurations,
+  playlistLengthSettings,
+  sessionSkippedIds,
   playlistDrag,
   onRowClick,
   onRowDoubleClick,
   onRowContextMenu,
 }: PlaylistTableProps) {
   const { startDrag, setRowRef } = playlistDrag;
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollToSongId == null) return;
+    const row = gridRef.current?.querySelector(`[data-song-id="${scrollToSongId}"]`);
+    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [scrollToSongId, songs]);
 
   const columns = useMemo(
     () =>
@@ -294,6 +325,8 @@ export function PlaylistTable({
         customOrderBySongId,
         runtimeDurations,
         playlistDrag: { startDrag, setRowRef },
+        playlistLengthSettings,
+        sessionSkippedIds,
       }),
     [
       profile,
@@ -306,6 +339,8 @@ export function PlaylistTable({
       catalogOrderBySongId,
       customOrderBySongId,
       runtimeDurations,
+      playlistLengthSettings,
+      sessionSkippedIds,
       startDrag,
       setRowRef,
     ],
@@ -332,6 +367,7 @@ export function PlaylistTable({
 
   return (
     <div
+      ref={gridRef}
       className={`playlist-grid${isDragging ? ' is-dragging-playlist' : ''}${
         isResizing ? ' is-resizing-columns' : ''
       }${hasArtistCol ? ' has-artist-col' : ' no-artist-col'}${hasSourceCol ? ' has-source-col' : ''}`}
@@ -381,6 +417,9 @@ export function PlaylistTable({
         gridSlots={gridSlots}
         playingSongId={playingSongId}
         previewSongId={previewSongId}
+        playlistLengthSettings={playlistLengthSettings}
+        sessionSkippedIds={sessionSkippedIds}
+        runtimeDurations={runtimeDurations}
         playlistDrag={playlistDrag}
         onRowClick={onRowClick}
         onRowDoubleClick={onRowDoubleClick}

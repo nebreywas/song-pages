@@ -1,15 +1,27 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { PlayerOnDeckTitleSuffix, type PlayerOnDeckInfo } from './PlayerOnDeckIndicator';
 
 type ScrollingNowPlayingProps = {
   title: string;
   artist: string;
   coverUrl: string | null;
+  onDeck?: PlayerOnDeckInfo | null;
+  onClearOnDeck?: () => void;
+  onCoverDoubleActivate?: () => void;
 };
 
 /** Mini cover + stacked now playing / title / artist; title marquees when it overflows. */
-export function ScrollingNowPlaying({ title, artist, coverUrl }: ScrollingNowPlayingProps) {
+export function ScrollingNowPlaying({
+  title,
+  artist,
+  coverUrl,
+  onDeck = null,
+  onClearOnDeck,
+  onCoverDoubleActivate,
+}: ScrollingNowPlayingProps) {
   const titleWrapRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLSpanElement>(null);
+  const lastCoverTapRef = useRef(0);
   const displayTitle = title.trim() || '—';
   const displayArtist = artist.trim() || '—';
 
@@ -42,17 +54,59 @@ export function ScrollingNowPlaying({ title, artist, coverUrl }: ScrollingNowPla
     return () => observer.disconnect();
   }, [displayTitle, syncScroll]);
 
+  const handleCoverDoubleActivate = useCallback(() => {
+    onCoverDoubleActivate?.();
+  }, [onCoverDoubleActivate]);
+
+  const handleCoverClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!onCoverDoubleActivate) return;
+    if (event.detail === 2) {
+      event.preventDefault();
+      handleCoverDoubleActivate();
+    }
+  };
+
+  const handleCoverPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!onCoverDoubleActivate || event.pointerType === 'mouse') return;
+
+    const now = Date.now();
+    if (now - lastCoverTapRef.current <= 300) {
+      lastCoverTapRef.current = 0;
+      event.preventDefault();
+      handleCoverDoubleActivate();
+    } else {
+      lastCoverTapRef.current = now;
+    }
+  };
+
   return (
     <div className="player-now-playing" aria-live="polite">
-      <div className="player-now-playing-art" aria-hidden="true">
+      <button
+        type="button"
+        className="player-now-playing-art-btn"
+        onClick={handleCoverClick}
+        onPointerUp={handleCoverPointerUp}
+        aria-label="Double-click cover art to view song history"
+        title="Double-click for song history"
+      >
         {coverUrl ? (
-          <img className="player-now-playing-cover" src={coverUrl} alt="" />
+          <img
+            className="player-now-playing-cover"
+            src={coverUrl}
+            alt=""
+            draggable={false}
+          />
         ) : (
           <div className="player-now-playing-cover player-now-playing-cover-fallback" />
         )}
-      </div>
+      </button>
       <div className="player-now-playing-meta">
-        <span className="player-now-playing-label">Now playing</span>
+        <div className="player-now-playing-label-row">
+          <span className="player-now-playing-label">Now playing</span>
+          {onDeck && onClearOnDeck ? (
+            <PlayerOnDeckTitleSuffix onDeck={onDeck} onCancel={onClearOnDeck} />
+          ) : null}
+        </div>
         <div ref={titleWrapRef} className="player-now-playing-title-wrap">
           <span ref={titleRef} className="player-now-playing-title">
             {displayTitle}
@@ -62,6 +116,7 @@ export function ScrollingNowPlaying({ title, artist, coverUrl }: ScrollingNowPla
       </div>
       <span className="sr-only">
         Now playing: {displayTitle} by {displayArtist}
+        {onDeck ? `; on deck: ${onDeck.songTitle}` : ''}
       </span>
     </div>
   );

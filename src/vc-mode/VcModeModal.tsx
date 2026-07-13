@@ -71,6 +71,8 @@ type VcModeModalProps = {
   onClose: () => void;
   onStart: (config: VcModeConfig) => void;
   previewState?: VcStatePayload | null;
+  /** When true, the submission playlist setting cannot be changed or cleared. */
+  vcLive?: boolean;
   kudos?: {
     presets: KudoPreset[];
     addPreset: (preset: KudoPreset) => Promise<unknown>;
@@ -215,11 +217,21 @@ function applyCellPatch(
   return normalizeVcConfig(next);
 }
 
-export function VcModeModal({ open, onClose, onStart, previewState = null, kudos }: VcModeModalProps) {
+export function VcModeModal({
+  open,
+  onClose,
+  onStart,
+  previewState = null,
+  vcLive = false,
+  kudos,
+}: VcModeModalProps) {
   const [config, setConfig] = useState<VcModeConfig>(() => createDefaultVcConfig());
   const configRef = useRef(config);
   configRef.current = config;
   const [hostCatalog, setHostCatalog] = useState<HostContentCatalog>(() => createDefaultHostContentCatalog());
+  const [userPlaylists, setUserPlaylists] = useState<
+    Array<{ id: number; name: string; song_count: number }>
+  >([]);
   const [designerTab, setDesignerTab] = useState<DesignerTab>('surface');
   const [selection, setSelection] = useState<DesignerSelection>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
@@ -264,6 +276,10 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
     void app.getSettings(HOST_CONTENT_SETTINGS_KEY).then((raw) => {
       if (cancelled) return;
       setHostCatalog(migrateHostContentCatalog(raw));
+    });
+    void app.listener?.listUserPlaylists?.().then((rows) => {
+      if (cancelled) return;
+      setUserPlaylists(rows.map((row) => ({ id: row.id, name: row.name, song_count: row.song_count })));
     });
 
     return () => {
@@ -646,6 +662,49 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                 <section className="vc-settings-section">
                   <h3>VC Mode Settings</h3>
 
+                  <div className="vc-field vc-settings-submission-playlist">
+                    <label htmlFor="vc-default-submission-playlist">
+                      Default Submission Playlist
+                    </label>
+                    <select
+                      id="vc-default-submission-playlist"
+                      value={config.defaultSubmissionPlaylistId ?? ''}
+                      disabled={
+                        vcLive &&
+                        config.defaultSubmissionPlaylistId != null &&
+                        config.defaultSubmissionPlaylistId > 0
+                      }
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const nextId = raw === '' ? null : Number.parseInt(raw, 10);
+                        if (
+                          vcLive &&
+                          config.defaultSubmissionPlaylistId != null &&
+                          nextId !== config.defaultSubmissionPlaylistId
+                        ) {
+                          return;
+                        }
+                        setConfig((prev) =>
+                          normalizeVcConfig({
+                            ...prev,
+                            defaultSubmissionPlaylistId:
+                              nextId != null && Number.isFinite(nextId) && nextId > 0
+                                ? nextId
+                                : null,
+                          }),
+                        );
+                      }}
+                    >
+                      <option value="">None</option>
+                      {userPlaylists.map((playlist) => (
+                        <option key={playlist.id} value={playlist.id}>
+                          {playlist.name}
+                          {playlist.song_count > 0 ? ` (${playlist.song_count})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="vc-settings-checkbox-row">
                     <label className="vc-field vc-field-inline vc-settings-checkbox-label">
                       <input
@@ -685,6 +744,48 @@ export function VcModeModal({ open, onClose, onStart, previewState = null, kudos
                     <HelpTooltip ariaLabel="About suppressing embed lyrics messages">
                       When enabled, lyrics cells stay blank for YouTube and SoundCloud tracks instead of
                       showing the platform notice about captions or missing lyrics.
+                    </HelpTooltip>
+                  </div>
+
+                  <div className="vc-settings-checkbox-row">
+                    <label className="vc-field vc-field-inline vc-settings-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={config.autoSkipLongSongsEnabled === true}
+                        onChange={(e) => {
+                          setConfig((prev) =>
+                            normalizeVcConfig({
+                              ...prev,
+                              autoSkipLongSongsEnabled: e.target.checked,
+                            }),
+                          );
+                        }}
+                      />
+                      <span>
+                        Set all songs longer than{' '}
+                        <input
+                          type="number"
+                          className="vc-settings-minutes-input"
+                          min={1}
+                          max={120}
+                          step={1}
+                          value={config.autoSkipLongSongsMinutes ?? 8}
+                          disabled={config.autoSkipLongSongsEnabled !== true}
+                          onChange={(e) => {
+                            setConfig((prev) =>
+                              normalizeVcConfig({
+                                ...prev,
+                                autoSkipLongSongsMinutes: Number.parseInt(e.target.value, 10),
+                              }),
+                            );
+                          }}
+                        />{' '}
+                        minutes to skip status
+                      </span>
+                    </label>
+                    <HelpTooltip ariaLabel="About auto-skipping long songs in VC">
+                      Applied when VC Mode starts and when new tracks are added during a session. Skipped
+                      songs stay in the playlist but are excluded from playback until you restore them.
                     </HelpTooltip>
                   </div>
 

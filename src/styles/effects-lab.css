@@ -30,8 +30,44 @@
   background: rgba(14, 18, 24, 0.98);
 }
 
-.effects-lab-header strong {
+.effects-lab-header strong,
+.effects-lab-title {
   flex: 1;
+}
+
+.effects-lab-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.effects-lab-offline-pill {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #ff6b6b;
+  background: rgba(255, 80, 80, 0.14);
+  border: 1px solid rgba(255, 100, 100, 0.45);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  letter-spacing: 0.02em;
+}
+
+.effects-lab-active-pill {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: rgba(160, 220, 175, 0.98);
+  background: rgba(120, 200, 140, 0.2);
+  border: 1px solid rgba(120, 200, 140, 0.45);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  letter-spacing: 0.02em;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .effects-lab-shortcut {
@@ -119,6 +155,15 @@
 }
 
 .effects-lab-performance {
+  margin-top: 0.25rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(120, 200, 140, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.effects-lab-audio-settings {
   margin-top: 0.25rem;
   padding-top: 0.55rem;
   border-top: 1px solid rgba(120, 200, 140, 0.2);

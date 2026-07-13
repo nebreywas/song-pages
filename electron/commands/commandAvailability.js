@@ -53,6 +53,14 @@ function isCommandAvailableForDispatch(commandId, context) {
     return context.vcModeActive !== false;
   }
 
+  if (commandId === 'toggle-play-lock') {
+    return context.vcModeActive !== false;
+  }
+
+  if (commandId === 'play-next-song' && context.playLockActive === true) {
+    return false;
+  }
+
   const presetPrefix = 'trigger-kudo-';
   if (commandId.startsWith(presetPrefix)) {
     return context.vcModeActive !== false;

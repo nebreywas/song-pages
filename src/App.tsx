@@ -4,6 +4,7 @@ import { BridgeRequired } from './components/BridgeRequired';
 import { SettingsModal } from './components/SettingsModal';
 import { getApp } from './lib/bridge';
 import { useAppTheme } from './lib/useAppTheme';
+import { usePlaylistLengthSettings } from './listener/usePlaylistLengthSettings';
 import { useAudioDebugHotkey } from './audio/debug/AudioDebugPanel';
 import { useEffectsLabHotkey } from './audio/effectsLab/effectsLabStore';
 import { ListenerMode } from './listener/ListenerMode';
@@ -15,6 +16,7 @@ export default function App() {
   const [mode, setMode] = useState<AppMode>('listener');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { theme, setTheme } = useAppTheme();
+  const playlistLength = usePlaylistLengthSettings();
 
   useEffect(() => {
     const app = getApp();
@@ -52,6 +54,8 @@ export default function App() {
         open={settingsOpen}
         theme={theme}
         onThemeChange={setTheme}
+        playlistLengthSettings={playlistLength.settings}
+        onPlaylistLengthSettingsChange={playlistLength.persist}
         onClose={() => setSettingsOpen(false)}
       />
     </div>

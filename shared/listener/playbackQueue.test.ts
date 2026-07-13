@@ -62,7 +62,23 @@ test('resolvePlayableSong advances past a skipped request', () => {
   assert.equal(resolvePlayableSong(songs, songs[1]!)?.id, 3);
 });
 
-test('pickNextPlayableSongId skips unavailable liked rows', () => {
+test('pickNextPlayableSongId skips session-only VC rows', () => {
+  const sessionSkippedIds = new Set([3]);
+  assert.equal(
+    pickNextPlayableSongId(songs, 1, { shuffle: false, repeatMode: 'off', sessionSkippedIds }),
+    5,
+  );
+});
+
+test('pickNextPlayableSongId skips detour-consumed rows', () => {
+  const skipSongIds = new Set([4]);
+  assert.equal(
+    pickNextPlayableSongId(songs, 2, { shuffle: false, repeatMode: 'off', skipSongIds }),
+    5,
+  );
+});
+
+test('pickNextPlayableSongId skips unavailable liked songs', () => {
   const likedSongs = [
     { id: 1, skipped: 0, unavailable: 0 },
     { id: 2, skipped: 0, unavailable: 1 },

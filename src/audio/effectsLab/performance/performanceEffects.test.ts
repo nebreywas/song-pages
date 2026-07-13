@@ -8,26 +8,23 @@ import {
 } from './definitions.ts';
 import { performanceEffectRestoreMs } from './types.ts';
 
-test('Phase C performance list has sweep variants and no echo-out', () => {
-  assert.equal(PERFORMANCE_EFFECT_DEFINITIONS.length, 5);
+test('performance effect list has sweep variants and no echo-out', () => {
+  assert.equal(PERFORMANCE_EFFECT_DEFINITIONS.length, 4);
   assert.ok(getPerformanceEffectDefinition('filter-sweep-short'));
   assert.ok(getPerformanceEffectDefinition('filter-sweep-long'));
   assert.ok(getPerformanceEffectDefinition('momentary-lowpass'));
-  assert.ok(getPerformanceEffectDefinition('momentary-highpass'));
   assert.ok(getPerformanceEffectDefinition('reverb-throw'));
+  assert.equal(getPerformanceEffectDefinition('momentary-highpass'), undefined);
   assert.equal(getPerformanceEffectDefinition('echo-out'), undefined);
 });
 
-test('Phase C hold effects are momentary low-pass and high-pass', () => {
+test('momentary low-pass is a hold effect', () => {
   const lp = getPerformanceEffectDefinition('momentary-lowpass');
-  const hp = getPerformanceEffectDefinition('momentary-highpass');
   assert.ok(lp?.hold);
-  assert.ok(hp?.hold);
   assert.equal(lp?.trigger, undefined);
-  assert.equal(hp?.trigger, undefined);
 });
 
-test('Phase C sweep variants are one-shot triggers', () => {
+test('sweep variants are one-shot triggers', () => {
   const shortSweep = getPerformanceEffectDefinition('filter-sweep-short');
   const longSweep = getPerformanceEffectDefinition('filter-sweep-long');
   assert.ok(shortSweep?.trigger);

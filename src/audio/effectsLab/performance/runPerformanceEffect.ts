@@ -84,28 +84,6 @@ function runMomentaryLowPass(
   filter.frequency.setTargetAtTime(22050, t, 0.035);
 }
 
-function runMomentaryHighPass(
-  nodes: LabPerformanceNodes,
-  context: AudioContext,
-  phase: PerformanceEffectPhase,
-): void {
-  const t = context.currentTime;
-  const { filter } = nodes;
-
-  if (phase === 'hold') {
-    holdCount += 1;
-    filter.type = 'highpass';
-    filter.Q.setTargetAtTime(0.82, t, 0.01);
-    filter.frequency.setTargetAtTime(340, t, 0.015);
-    return;
-  }
-
-  holdCount = Math.max(0, holdCount - 1);
-  filter.type = 'lowpass';
-  filter.Q.setValueAtTime(0.7, t);
-  filter.frequency.setTargetAtTime(22050, t, 0.03);
-}
-
 function runReverbThrow(nodes: LabPerformanceNodes, context: AudioContext): void {
   const t = context.currentTime;
   const { throwSend, throwConvolver, throwReturn } = nodes;
@@ -128,7 +106,7 @@ function runReverbThrow(nodes: LabPerformanceNodes, context: AudioContext): void
 export function runPerformanceEffect(options: RunPerformanceEffectOptions): boolean {
   const { mirrorAudio, mainAudio, mainVolume, keepMirrorAudible, effectId, phase } = options;
 
-  if (phase === 'release' && effectId !== 'momentary-lowpass' && effectId !== 'momentary-highpass') {
+  if (phase === 'release' && effectId !== 'momentary-lowpass') {
     return false;
   }
 
@@ -151,9 +129,6 @@ export function runPerformanceEffect(options: RunPerformanceEffectOptions): bool
     case 'momentary-lowpass':
       runMomentaryLowPass(nodes, context, phase);
       break;
-    case 'momentary-highpass':
-      runMomentaryHighPass(nodes, context, phase);
-      break;
     case 'reverb-throw':
       if (phase !== 'trigger') return false;
       runReverbThrow(nodes, context);
@@ -164,11 +139,7 @@ export function runPerformanceEffect(options: RunPerformanceEffectOptions): bool
 
   if (phase === 'release') {
     maybeRestoreMainPath(mainAudio, mainVolume, keepMirrorAudible);
-  } else if (
-    phase === 'trigger' &&
-    effectId !== 'momentary-lowpass' &&
-    effectId !== 'momentary-highpass'
-  ) {
+  } else if (phase === 'trigger' && effectId !== 'momentary-lowpass') {
     const restoreMs = performanceEffectRestoreMs(effectId);
     window.setTimeout(() => {
       resetLabPerformanceNodes(nodes, context);

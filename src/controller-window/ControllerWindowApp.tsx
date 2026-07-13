@@ -6,6 +6,10 @@ import {
   parseKudoPresetIdFromCommandId,
   type CommandRuntimeContext,
 } from '@shared/commands';
+import {
+  detectExternalSongProvider,
+  EXTERNAL_SONG_INTAKE_PLACEHOLDER,
+} from '@shared/listener/externalSongIntake';
 import { KUDOS_SETTINGS_KEY, migrateKudosState, type KudoPreset } from '@shared/kudos';
 import type { VcStatePayload } from '@shared/vcModeTypes';
 
@@ -36,6 +40,9 @@ export function ControllerWindowApp() {
   const [vcState, setVcState] = useState<VcStatePayload | null>(null);
   const [surfaceSwitching, setSurfaceSwitching] = useState(false);
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [submissionBusy, setSubmissionBusy] = useState(false);
+  const submissionInputRef = useRef<HTMLInputElement>(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
 
   const showInvokeFeedback = (message: string) => {
@@ -156,6 +163,7 @@ export function ControllerWindowApp() {
   };
 
   const playNextSong = () => {
+    if (vcState?.playLockEnabled) return;
     void getApp()?.commands?.dispatch?.({
       commandId: 'play-next-song',
       source: 'controller-ui',
@@ -184,7 +192,53 @@ export function ControllerWindowApp() {
     });
   };
 
+  const togglePlayLock = () => {
+    getApp()?.vc?.togglePlayLock?.();
+  };
+
+  const setPlayLockReleaseOnNext = (enabled: boolean) => {
+    getApp()?.vc?.setPlayLockReleaseOnNext?.(enabled);
+  };
+
+  const submissionPlaylistId = vcState?.config.defaultSubmissionPlaylistId ?? null;
+
+  const handleSubmissionPaste = async (event: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = event.clipboardData.getData('text').trim();
+    if (!text || submissionPlaylistId == null || submissionBusy) return;
+
+    event.preventDefault();
+    const detection = detectExternalSongProvider(text);
+    if (!detection.ok) {
+      setSubmissionError(detection.error);
+      return;
+    }
+
+    const app = getApp();
+    if (!app?.listener.addExternalSongToUserPlaylist) {
+      setSubmissionError('Song import is unavailable in this build. Restart the app.');
+      return;
+    }
+
+    setSubmissionBusy(true);
+    setSubmissionError(null);
+    const result = await app.listener.addExternalSongToUserPlaylist(submissionPlaylistId, text);
+    setSubmissionBusy(false);
+
+    if (!result.ok || !result.data) {
+      setSubmissionError(result.error ?? 'Could not add that song.');
+      return;
+    }
+
+    app.vc?.notifySubmissionPlaylistUpdated?.(submissionPlaylistId);
+    event.currentTarget.value = '';
+    showInvokeFeedback(
+      result.data.duplicate ? 'Song already in submission playlist' : 'Song added to submission playlist',
+    );
+  };
+
   const specialPause = vcState?.specialPlayPause;
+  const playLockActive = vcState?.playLockEnabled === true;
+  const playLockReleaseOnNext = vcState?.playLockReleaseOnNextSong === true;
   const showSpecialPauseCountdown =
     specialPause?.active === true &&
     vcState?.config.specialPlayStyle.showCountdownOnController === true;
@@ -221,7 +275,47 @@ export function ControllerWindowApp() {
             </select>
           </label>
         ) : null}
+        <button
+          type="button"
+          className={`btn controller-play-lock-btn${playLockActive ? ' is-active' : ''}`}
+          onClick={togglePlayLock}
+          aria-pressed={playLockActive}
+          title="Protect live playback from accidental song changes"
+        >
+          🔒 Play Lock
+        </button>
+        {playLockActive ? (
+          <label className="controller-play-lock-release">
+            <input
+              type="checkbox"
+              checked={playLockReleaseOnNext}
+              onChange={(event) => setPlayLockReleaseOnNext(event.target.checked)}
+            />
+            <span>Release on next song</span>
+          </label>
+        ) : null}
       </header>
+
+      {submissionPlaylistId != null ? (
+        <section className="controller-submission">
+          <label className="controller-submission-field">
+            <span className="controller-submission-label">Paste Song Link…</span>
+            <input
+              ref={submissionInputRef}
+              type="text"
+              className="controller-submission-input"
+              placeholder={EXTERNAL_SONG_INTAKE_PLACEHOLDER}
+              disabled={submissionBusy}
+              onPaste={(event) => void handleSubmissionPaste(event)}
+            />
+          </label>
+          {submissionError ? (
+            <p className="controller-submission-error" role="alert">
+              {submissionError}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       {gateState.open ? (
         <section className="controller-gate-overlay" aria-live="polite">
@@ -235,7 +329,7 @@ export function ControllerWindowApp() {
         </section>
       ) : null}
 
-      {specialPause?.active ? (
+      {specialPause?.active && !playLockActive ? (
         <section className="controller-play-next">
           <button type="button" className="btn controller-play-next-btn" onClick={playNextSong}>
             Play Next Song

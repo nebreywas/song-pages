@@ -4,7 +4,6 @@ export type PerformanceEffectId =
   | 'filter-sweep-short'
   | 'filter-sweep-long'
   | 'momentary-lowpass'
-  | 'momentary-highpass'
   | 'reverb-throw';
 
 export type PerformanceEffectPhase = 'trigger' | 'hold' | 'release';

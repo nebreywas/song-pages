@@ -106,6 +106,9 @@ function initListenerSchema() {
   const { initSongSkipsSchema } = require('./songSkips');
   initSongSkipsSchema(db);
 
+  const { initSongHistorySchema } = require('./songHistory');
+  initSongHistorySchema(db);
+
   const { initSongCacheSchema } = require('./cache/schema');
   initSongCacheSchema(db);
 

@@ -13,6 +13,7 @@ export type CommandRuntimeContext = {
   hasHostGraphic?: boolean;
   hasPlaybackTiming?: boolean;
   specialPlayPauseActive?: boolean;
+  playLockActive?: boolean;
 };
 
 export const DEFAULT_COMMAND_RUNTIME_CONTEXT: CommandRuntimeContext = {
@@ -37,6 +38,7 @@ export function deriveCommandRuntimeContextFromVcState(
     hasHostGraphic: Boolean(payload.hostGraphicUrl) || Boolean(payload.config.hostGraphicPopupId),
     hasPlaybackTiming: payload.playback.duration > 0,
     specialPlayPauseActive: payload.specialPlayPause?.active === true,
+    playLockActive: payload.playLockEnabled === true,
   };
 }
 
@@ -63,5 +65,6 @@ function passesContextualAvailability(
   if (availability.requiresHostGraphic && context.hasHostGraphic === false) return false;
   if (availability.requiresPlaybackTiming && context.hasPlaybackTiming === false) return false;
   if (availability.requiresSpecialPlayPause && context.specialPlayPauseActive === false) return false;
+  if (availability.blockedWhilePlayLock && context.playLockActive === true) return false;
   return true;
 }
