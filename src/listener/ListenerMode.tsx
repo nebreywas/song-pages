@@ -1619,7 +1619,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       if (detoursRef.current.primary) {
         detoursRef.current.primary.anchorSongId = nextSong.id;
       }
-      await playSong(nextSong, { detour: true, role: 'primary' });
+      const restartCurrent =
+        nextSong.id === playingSongIdRef.current && primaryQueueOptions().repeatMode === 'one';
+      await playSong(nextSong, {
+        detour: true,
+        role: 'primary',
+        startAt: restartCurrent ? 0 : undefined,
+      });
     },
     [playSong, primaryQueueOptions, selectedArtistId],
   );
@@ -2610,6 +2616,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     if (queueAnchorSongId == null) return;
     const previousSongId = pickPreviousPlayableSongId(sortedSongs, queueAnchorSongId, {
       sessionSkippedIds: vcSessionSkippedIds,
+      repeatMode,
     });
     if (previousSongId == null) return;
     const previousSong = sortedSongs.find((song) => song.id === previousSongId);
@@ -2999,6 +3006,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       return;
     }
 
+    const primary = detoursRef.current.primary;
+    if (role === 'primary' && primary) {
+      const anchorId = playingSongIdRef.current ?? primary.anchorSongId;
+      void advancePrimaryPlaylist(anchorId, []);
+      return;
+    }
+
     if (queueAnchorSongId == null) return;
     const nextSongId = pickNextPlayableSongId(sortedSongs, queueAnchorSongId, {
       shuffle,
@@ -3007,7 +3021,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     });
     if (nextSongId == null) return;
     const nextSong = sortedSongs.find((song) => song.id === nextSongId);
-    if (nextSong) void playSong(nextSong, { userInitiated: true });
+    if (nextSong) {
+      void playSong(nextSong, {
+        userInitiated: true,
+        startAt: nextSong.id === playingSongId ? 0 : undefined,
+      });
+    }
   };
   playNextRef.current = playNext;
 

@@ -914,6 +914,12 @@ function registerIpcHandlers() {
     mainWindow.webContents.send('vc:toggle-play-lock');
   });
 
+  ipcMain.on('vc:togglePlayLockReleaseOnNext', () => {
+    const mainWindow = vcWindow.getMainWindowRef();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('vc:toggle-play-lock-release-on-next');
+  });
+
   ipcMain.on('vc:setPlayLockReleaseOnNext', (_event, enabled) => {
     const mainWindow = vcWindow.getMainWindowRef();
     if (!mainWindow || mainWindow.isDestroyed()) return;

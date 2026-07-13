@@ -26,6 +26,26 @@ test('pickNextPlayableSongId wraps on repeat all', () => {
   assert.equal(pickNextPlayableSongId(songs, 5, { shuffle: false, repeatMode: 'all' }), 1);
 });
 
+test('pickNextPlayableSongId repeat all wrap ignores detour-consumed rows', () => {
+  const skipSongIds = new Set([1, 3]);
+  assert.equal(
+    pickNextPlayableSongId(songs, 5, { shuffle: false, repeatMode: 'all', skipSongIds }),
+    1,
+  );
+});
+
+test('pickNextPlayableSongId shuffle repeat all wraps from last song', () => {
+  const result = pickNextPlayableSongId(songs, 5, { shuffle: true, repeatMode: 'all' });
+  assert.ok(result === 1 || result === 3);
+});
+
+test('pickPreviousPlayableSongId wraps on repeat all', () => {
+  assert.equal(
+    pickPreviousPlayableSongId(songs, 1, { repeatMode: 'all' }),
+    5,
+  );
+});
+
 test('pickNextPlayableSongId returns current song on repeat one', () => {
   assert.equal(pickNextPlayableSongId(songs, 3, { shuffle: false, repeatMode: 'one' }), 3);
   assert.equal(pickNextPlayableSongId(songs, 5, { shuffle: false, repeatMode: 'one' }), 5);
@@ -73,7 +93,7 @@ test('pickNextPlayableSongId skips session-only VC rows', () => {
 test('pickNextPlayableSongId skips detour-consumed rows', () => {
   const skipSongIds = new Set([4]);
   assert.equal(
-    pickNextPlayableSongId(songs, 2, { shuffle: false, repeatMode: 'off', skipSongIds }),
+    pickNextPlayableSongId(songs, 3, { shuffle: false, repeatMode: 'off', skipSongIds }),
     5,
   );
 });

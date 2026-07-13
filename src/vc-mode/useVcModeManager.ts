@@ -620,7 +620,10 @@ export function useVcModeManager({
     const off = app.vc.onTogglePlayLock(() => {
       setPlayLockEnabled((on) => {
         const next = !on;
-        if (!next) setPlayLockReleaseOnNextSong(false);
+        if (!next) {
+          playLockReleaseOnNextRef.current = false;
+          setPlayLockReleaseOnNextSong(false);
+        }
         return next;
       });
     });
@@ -628,13 +631,36 @@ export function useVcModeManager({
     return () => off();
   }, [vcOpen]);
 
-  // Release-on-next convenience mode from the VC controller.
+  // Release-on-next toggles from the VC controller (main process owns truth).
+  useEffect(() => {
+    const app = getApp();
+    if (!vcOpen || !app?.vc?.onTogglePlayLockReleaseOnNext) return;
+
+    const off = app.vc.onTogglePlayLockReleaseOnNext(() => {
+      setPlayLockReleaseOnNextSong((on) => {
+        const next = !on;
+        playLockReleaseOnNextRef.current = next;
+        if (next) {
+          setPlayLockEnabled(true);
+        }
+        return next;
+      });
+    });
+
+    return () => off();
+  }, [vcOpen]);
+
+  // Absolute setter kept for tests or future callers.
   useEffect(() => {
     const app = getApp();
     if (!vcOpen || !app?.vc?.onSetPlayLockReleaseOnNext) return;
 
     const off = app.vc.onSetPlayLockReleaseOnNext((enabled) => {
+      playLockReleaseOnNextRef.current = enabled;
       setPlayLockReleaseOnNextSong(enabled);
+      if (enabled) {
+        setPlayLockEnabled(true);
+      }
     });
 
     return () => off();
@@ -668,6 +694,18 @@ export function useVcModeManager({
       offSync?.();
     };
   }, [buildStatePayload, vcOpen]);
+
+  /** Push play-lock flags immediately so the controller reflects toggles without interval lag. */
+  useEffect(() => {
+    const app = getApp();
+    if (!vcOpen || !app?.vc) return;
+
+    const payload = buildStatePayload();
+    app.vc.sendState(payload);
+    app.commands?.setRuntimeContext?.(
+      deriveCommandRuntimeContextFromVcState(payload, { vcModeActive: true }),
+    );
+  }, [buildStatePayload, playLockEnabled, playLockReleaseOnNextSong, vcOpen]);
 
   /** Push VC state when the host popup URL resolves so Toggle Host Graphic Display stays available. */
   useEffect(() => {

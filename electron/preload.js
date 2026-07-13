@@ -176,6 +176,7 @@ contextBridge.exposeInMainWorld('app', {
     syncActiveVisualizer: (id) => ipcRenderer.send('vc:syncActiveVisualizer', id),
     switchSurface: (designId) => ipcRenderer.send('vc:switchSurface', designId),
     togglePlayLock: () => ipcRenderer.send('vc:togglePlayLock'),
+    togglePlayLockReleaseOnNext: () => ipcRenderer.send('vc:togglePlayLockReleaseOnNext'),
     setPlayLockReleaseOnNext: (enabled) => ipcRenderer.send('vc:setPlayLockReleaseOnNext', enabled === true),
     notifySubmissionPlaylistUpdated: (playlistId) =>
       ipcRenderer.send('vc:notifySubmissionPlaylistUpdated', playlistId),
@@ -258,6 +259,11 @@ contextBridge.exposeInMainWorld('app', {
       const handler = () => callback();
       ipcRenderer.on('vc:toggle-play-lock', handler);
       return () => ipcRenderer.removeListener('vc:toggle-play-lock', handler);
+    },
+    onTogglePlayLockReleaseOnNext: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('vc:toggle-play-lock-release-on-next', handler);
+      return () => ipcRenderer.removeListener('vc:toggle-play-lock-release-on-next', handler);
     },
     onSetPlayLockReleaseOnNext: (callback) => {
       const handler = (_event, enabled) => callback(enabled === true);

@@ -196,8 +196,8 @@ export function ControllerWindowApp() {
     getApp()?.vc?.togglePlayLock?.();
   };
 
-  const setPlayLockReleaseOnNext = (enabled: boolean) => {
-    getApp()?.vc?.setPlayLockReleaseOnNext?.(enabled);
+  const togglePlayLockReleaseOnNext = () => {
+    getApp()?.vc?.togglePlayLockReleaseOnNext?.();
   };
 
   const submissionPlaylistId = vcState?.config.defaultSubmissionPlaylistId ?? null;
@@ -275,25 +275,28 @@ export function ControllerWindowApp() {
             </select>
           </label>
         ) : null}
-        <button
-          type="button"
-          className={`btn controller-play-lock-btn${playLockActive ? ' is-active' : ''}`}
-          onClick={togglePlayLock}
-          aria-pressed={playLockActive}
-          title="Protect live playback from accidental song changes"
-        >
-          🔒 Play Lock
-        </button>
-        {playLockActive ? (
-          <label className="controller-play-lock-release">
-            <input
-              type="checkbox"
-              checked={playLockReleaseOnNext}
-              onChange={(event) => setPlayLockReleaseOnNext(event.target.checked)}
-            />
-            <span>Release on next song</span>
-          </label>
-        ) : null}
+        <div className="controller-play-lock-row">
+          <button
+            type="button"
+            className={`btn controller-play-lock-btn${playLockActive ? ' is-active' : ''}`}
+            onClick={togglePlayLock}
+            aria-pressed={playLockActive}
+            title="Protect live playback from accidental song changes"
+          >
+            🔒 Play Lock
+          </button>
+          <button
+            type="button"
+            className={`btn controller-play-lock-btn controller-play-lock-release-btn${
+              playLockReleaseOnNext ? ' is-active' : ''
+            }`}
+            onClick={togglePlayLockReleaseOnNext}
+            aria-pressed={playLockReleaseOnNext}
+            title="Lock playback for this song only — auto-releases when it ends (also enables Play Lock)"
+          >
+            1 Song
+          </button>
+        </div>
       </header>
 
       {submissionPlaylistId != null ? (

@@ -464,9 +464,11 @@ declare global {
         onSyncActiveVisualizer: (callback: (id: string) => void) => () => void;
         onSwitchSurface: (callback: (designId: string) => void) => () => void;
         togglePlayLock: () => void;
+        togglePlayLockReleaseOnNext: () => void;
         setPlayLockReleaseOnNext: (enabled: boolean) => void;
         notifySubmissionPlaylistUpdated: (playlistId: number) => void;
         onTogglePlayLock: (callback: () => void) => () => void;
+        onTogglePlayLockReleaseOnNext: (callback: () => void) => () => void;
         onSetPlayLockReleaseOnNext: (callback: (enabled: boolean) => void) => () => void;
       };
       hostContent: {

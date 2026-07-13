@@ -47,15 +47,28 @@ export function pickNextPlayableSongId(
 
   const currentIndex = sortedSongs.findIndex((song) => song.id === currentSongId);
 
+  if (currentIndex < 0) {
+    if (options.repeatMode === 'all') {
+      return playable[0]?.id ?? null;
+    }
+    return null;
+  }
+
   if (options.shuffle) {
     if (playable.length === 1) return playable[0]?.id ?? null;
     const candidates = playable.filter(
       (song) => song.id !== currentSongId && !options.skipSongIds?.has(song.id),
     );
-    const pool = candidates.length > 0 ? candidates : playable.filter((song) => song.id !== currentSongId);
-    const finalPool = pool.length > 0 ? pool : playable;
-    const pick = finalPool[Math.floor(Math.random() * finalPool.length)];
-    return pick?.id ?? null;
+    if (candidates.length > 0) {
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      return pick?.id ?? null;
+    }
+    if (options.repeatMode === 'all') {
+      const wrapPool = playable.filter((song) => !options.skipSongIds?.has(song.id));
+      const pick = wrapPool[Math.floor(Math.random() * wrapPool.length)];
+      return pick?.id ?? null;
+    }
+    return null;
   }
 
   for (let index = currentIndex + 1; index < sortedSongs.length; index += 1) {
@@ -64,9 +77,11 @@ export function pickNextPlayableSongId(
   }
 
   if (options.repeatMode === 'all') {
+    // New playlist cycle — ignore detour-consumed ids so repeat wraps to the start.
+    const wrapOptions = { sessionSkippedIds: options.sessionSkippedIds };
     for (let index = 0; index <= currentIndex; index += 1) {
       const song = sortedSongs[index];
-      if (song && isEligibleForPlayback(song, options)) return song.id;
+      if (song && isEligibleForPlayback(song, wrapOptions)) return song.id;
     }
   }
 
@@ -116,7 +131,7 @@ export function pickUpcomingPlayableSongIds(
 export function pickPreviousPlayableSongId(
   sortedSongs: QueueSong[],
   currentSongId: number,
-  options?: Pick<PlaybackQueueOptions, 'sessionSkippedIds'>,
+  options?: Pick<PlaybackQueueOptions, 'sessionSkippedIds' | 'repeatMode'>,
 ): number | null {
   const currentIndex = sortedSongs.findIndex((song) => song.id === currentSongId);
   if (currentIndex < 0) return null;
@@ -124,6 +139,15 @@ export function pickPreviousPlayableSongId(
   for (let index = currentIndex - 1; index >= 0; index -= 1) {
     const song = sortedSongs[index];
     if (song && isEligibleForPlayback(song, options)) return song.id;
+  }
+
+  if (options?.repeatMode === 'all') {
+    for (let index = sortedSongs.length - 1; index > currentIndex; index -= 1) {
+      const song = sortedSongs[index];
+      if (song && isEligibleForPlayback(song, { sessionSkippedIds: options.sessionSkippedIds })) {
+        return song.id;
+      }
+    }
   }
 
   return null;

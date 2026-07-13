@@ -60,8 +60,14 @@
   background: rgba(120, 170, 255, 0.14);
 }
 
+.controller-play-lock-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .controller-play-lock-btn {
-  align-self: flex-start;
   font-size: 0.85rem;
   padding: 0.4rem 0.75rem;
   border-radius: 999px;
@@ -76,18 +82,11 @@
   box-shadow: 0 0 0 1px rgba(255, 196, 64, 0.35);
 }
 
-.controller-play-lock-release {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.8rem;
-  color: rgba(255, 232, 163, 0.92);
-  cursor: pointer;
-  user-select: none;
-}
-
-.controller-play-lock-release input {
-  accent-color: #ffc440;
+.controller-play-lock-release-btn.is-active {
+  border-color: rgba(120, 210, 255, 0.85);
+  background: rgba(120, 210, 255, 0.18);
+  color: #d4eeff;
+  box-shadow: 0 0 0 1px rgba(120, 210, 255, 0.35);
 }
 
 .controller-submission {
