@@ -17,6 +17,8 @@ When you add a new cross-cutting helper under `shared/`, export it from a small 
 | `stripBracketedLyricsText` | `shared/lyricsText.ts` | Display-time removal of `[Chorus]`-style annotations from lyrics |
 | `stripMarkdownLyricsText` | `shared/lyricsText.ts` | Basic Markdown marker removal for ALARE plain-text normalization |
 | `normalizeAlareLyricsText` | `shared/lyricsText.ts` | ALARE pipeline: brackets then Markdown (derived text only) |
+| Lyric presentation effects | `shared/lyricEffects/` | Agnostic Beat Pulse / Matrix Reveal / Clarity / Audio-Reactive Type (no timing semantics) |
+| Pretty Lyrics compiler | `shared/prettyLyrics/` | Text-analysis typography manifest (lab prototype; recurrence-first) |
 | `formatPlaybackTime` | `shared/formatPlaybackTime.ts` | Format seconds as `m:ss` for player and VC surfaces |
 | `renderMarkdownToHtml` | `shared/markdown.ts` | Compile or preview markdown from manifests/drafts → sanitized HTML |
 

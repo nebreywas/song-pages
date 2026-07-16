@@ -13,13 +13,21 @@ type VcYoutubePlayerProps = {
   songId: number;
   playback: VcStatePayload['playback'];
   mirrorSongId: number | null;
+  /** Player volume (0–1) from audioMirror — applied to the VC YouTube iframe. */
+  volume: number;
 };
 
 /**
  * YouTube embed for the VC visualizer slot — window capture hears the iframe while
  * the main listener stays the queue/timing authority via transport IPC.
  */
-export function VcYoutubePlayer({ videoId, songId, playback, mirrorSongId }: VcYoutubePlayerProps) {
+export function VcYoutubePlayer({
+  videoId,
+  songId,
+  playback,
+  mirrorSongId,
+  volume,
+}: VcYoutubePlayerProps) {
   const playerRef = useRef<YoutubePlayerHandle | null>(null);
   const shouldPlayRef = useRef(false);
   const isActiveTrack = mirrorSongId === songId;
@@ -80,6 +88,7 @@ export function VcYoutubePlayer({ videoId, songId, playback, mirrorSongId }: VcY
         videoId={videoId}
         playbackGeneration={songId}
         shouldPlay={shouldPlay}
+        volume={volume}
         onReady={tryStartPlayback}
         onEnded={() => sendVcTransport({ type: 'youtubeEnded' })}
         onDuration={(seconds) => {

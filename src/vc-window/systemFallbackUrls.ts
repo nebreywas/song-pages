@@ -7,18 +7,22 @@ const rawUrls = import.meta.glob<string>('../assets/fallbacks/*', {
   import: 'default',
 });
 
-const FILE_TO_KEY: Record<string, keyof typeof SYSTEM_FALLBACK_ASSETS> = {
-  'cover-fallback.png': 'cover',
-  'artistimage-fallback.png': 'artist-image',
-  'videocover-fallback.mp4': 'video-cover',
+/** One bundled file may back multiple system fallback slots. */
+const FILE_TO_KEYS: Record<string, Array<keyof typeof SYSTEM_FALLBACK_ASSETS>> = {
+  'cover-fallback.png': ['cover'],
+  'artistimage-fallback.png': ['artist-image'],
+  'videocover-fallback.mp4': ['video-cover', 'lyrics-video'],
 };
 
 const FALLBACK_URLS: Partial<Record<keyof typeof SYSTEM_FALLBACK_ASSETS, string>> = {};
 
 for (const [path, url] of Object.entries(rawUrls)) {
   const filename = path.split('/').pop() ?? '';
-  const key = FILE_TO_KEY[filename];
-  if (key) FALLBACK_URLS[key] = url;
+  const keys = FILE_TO_KEYS[filename];
+  if (!keys) continue;
+  for (const key of keys) {
+    FALLBACK_URLS[key] = url;
+  }
 }
 
 export function systemFallbackUrl(key: keyof typeof SYSTEM_FALLBACK_ASSETS): string | null {

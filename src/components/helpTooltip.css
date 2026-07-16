@@ -14,11 +14,14 @@
   font-size: 0.68rem;
   font-weight: 600;
   line-height: 1;
-  cursor: help;
+  /* Pointer + tap both open help; help cursor would under-signal clickability. */
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .help-tooltip:hover,
-.help-tooltip:focus-visible {
+.help-tooltip:focus-visible,
+.help-tooltip.is-pinned {
   color: var(--text);
   border-color: color-mix(in srgb, var(--border) 70%, var(--text));
   outline: none;
@@ -40,4 +43,9 @@
   text-align: left;
   box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
   pointer-events: none;
+}
+
+/* Pinned (tap) popovers accept hits so outside-dismiss can ignore them. */
+.help-tooltip-popover.is-pinned {
+  pointer-events: auto;
 }

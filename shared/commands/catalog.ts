@@ -5,6 +5,11 @@ import {
   RESERVE_KUDO_SLOT_TEMPLATE_ID,
   reserveKudoSlotDefinition,
 } from './kudoReserve';
+import {
+  parseSurfaceDesignIdFromCommandId,
+  surfaceCommandDefinition,
+  type SurfaceDesignCatalogRow,
+} from './surfaceCommands';
 
 /** Built-in commands shipped with MVP 1.0 (Kudo presets add dynamic entries). */
 export const BUILTIN_COMMAND_CATALOG: CommandDefinition[] = [
@@ -86,6 +91,22 @@ export const BUILTIN_COMMAND_CATALOG: CommandDefinition[] = [
     category: 'vc-surface',
     availability: { vcMode: true },
     legacyAction: 'changeVisualizer',
+  },
+  {
+    id: 'show-visualizer-name',
+    label: 'Show Visualizer Name',
+    description:
+      'Reveal the active visualizer name on a bottom bar for about 10 seconds.',
+    category: 'vc-surface',
+    availability: { vcMode: true },
+    legacyAction: 'showVisualizerName',
+  },
+  {
+    id: 'toggle-live-debug',
+    label: 'Toggle Live Debug',
+    description:
+      'Show or hide the Live Debug HUD (ALARE trim/speed and other realtime diagnostics).',
+    category: 'vc-surface',
   },
   {
     id: 'visualizer-next',
@@ -228,6 +249,7 @@ export function listCommandsWithKudos(
 export function getCommandDefinition(
   commandId: string,
   kudoPresets: Array<{ id: string; name: string }> = [],
+  surfaceDesigns: SurfaceDesignCatalogRow[] = [],
 ): CommandDefinition | undefined {
   if (isReserveKudoSlotCommandId(commandId)) {
     return reserveKudoSlotDefinition(commandId);
@@ -235,8 +257,14 @@ export function getCommandDefinition(
   const builtin = getBuiltinCommand(commandId);
   if (builtin) return builtin;
   const presetId = parseKudoPresetIdFromCommandId(commandId);
-  if (!presetId) return undefined;
-  const preset = kudoPresets.find((row) => row.id === presetId);
-  if (!preset) return undefined;
-  return kudoCommandDefinition(preset.id, preset.name);
+  if (presetId) {
+    const preset = kudoPresets.find((row) => row.id === presetId);
+    if (!preset) return undefined;
+    return kudoCommandDefinition(preset.id, preset.name);
+  }
+  const designId = parseSurfaceDesignIdFromCommandId(commandId);
+  if (!designId) return undefined;
+  const design = surfaceDesigns.find((row) => row.id === designId);
+  if (!design) return undefined;
+  return surfaceCommandDefinition(design.id, design.name);
 }

@@ -1,5 +1,5 @@
 /**
- * VC Mode projection window — visual mixer for listening parties.
+ * Projector: VC Mode — visual mixer for listening parties.
  * Playback audio is mirrored here so window-only screen share includes music.
  */
 const { BrowserWindow, screen } = require('electron');
@@ -160,6 +160,11 @@ function sendVcFrame(payload) {
   sendToVc('vc:frame', payload);
 }
 
+/** Forward Effects Lab performance pads from the main player onto the VC audio graph. */
+function sendVcPerformanceEffect(payload) {
+  return sendToVc('vc:performance-effect', payload);
+}
+
 function syncCommandWindowRefs() {
   commandService.setWindowRefs({
     mainWindow: mainWindowRef,
@@ -253,7 +258,7 @@ function openVcWindow(mainWindow, options = {}) {
     height: savedBounds?.height ?? height,
     minWidth: VC_MIN_WIDTH,
     minHeight: VC_MIN_HEIGHT,
-    title: 'Song Pages — VC Mode',
+    title: 'Projector: VC Mode',
     backgroundColor: '#000000',
     show: false,
     autoHideMenuBar: true,
@@ -373,6 +378,7 @@ module.exports = {
   syncCommandWindowRefs,
   sendVcState,
   sendVcFrame,
+  sendVcPerformanceEffect,
   hostGraphicUrlFromPath,
   forwardVcPlaybackStatus,
   forwardVcTransport,

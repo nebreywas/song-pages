@@ -3,6 +3,7 @@ import { addCommandToConfiguredSet } from './configuredSet';
 import { isReserveKudoSlotCommandId, syncReservedKudoKeysFromSlots } from './kudoReserve';
 import { isExtendedFunctionKey, normalizeExtendedFunctionKey } from './extendedKeys';
 import { isGatedKeyAllowed, normalizeGatedKey, parseReservedBindingKey, reservedBindingKey } from './gatedKeys';
+import { parseSurfaceDesignIdFromCommandId, surfaceCommandIdForDesign } from './surfaceCommands';
 import { isSafeDirectBinding } from './safeHotkeys';
 import type { CommandBindingSlot, CommandInputSource, CommandMappingState } from './types';
 import { findBindingConflict, validateBindingAssignment } from './resolve';
@@ -35,13 +36,15 @@ function bindingsMatch(
   return leftNorm != null && leftNorm === rightNorm;
 }
 
-/** Human label for conflict prompts — builtin catalog or Kudo preset id. */
+/** Human label for conflict prompts — builtin catalog, Kudo, or surface design id. */
 export function commandLabelForConflict(commandId: string): string {
   if (isReserveKudoSlotCommandId(commandId)) return 'Reserve for Kudos';
   const builtin = getBuiltinCommand(commandId);
   if (builtin) return builtin.label;
   const presetId = parseKudoPresetIdFromCommandId(commandId);
   if (presetId) return `Kudo (${presetId})`;
+  const designId = parseSurfaceDesignIdFromCommandId(commandId);
+  if (designId) return `Surface (${designId})`;
   return commandId;
 }
 
@@ -77,6 +80,7 @@ function clearBindingEverywhere(
   const field = slotFieldForSource(source);
   const commands = { ...state.commands };
   const kudoPresetBindings = { ...state.kudoPresetBindings };
+  const surfaceDesignBindings = { ...state.surfaceDesignBindings };
   let reservedKudoKeys = [...state.reservedKudoKeys];
   const kudoPresetByReservedKey = { ...state.kudoPresetByReservedKey };
 
@@ -97,6 +101,15 @@ function clearBindingEverywhere(
     kudoPresetBindings[presetId] = nextSlot;
   }
 
+  for (const [designId, slot] of Object.entries(surfaceDesignBindings)) {
+    const ownerId = surfaceCommandIdForDesign(designId);
+    if (exceptCommandId && ownerId === exceptCommandId) continue;
+    if (!bindingsMatch(source, slot[field] ?? '', binding)) continue;
+    const nextSlot = { ...slot };
+    delete nextSlot[field];
+    surfaceDesignBindings[designId] = nextSlot;
+  }
+
   const reservedKey = reservedBindingKey(source, binding);
   if (reservedKudoKeys.includes(reservedKey)) {
     const ownerId = kudoPresetByReservedKey[reservedKey]
@@ -112,6 +125,7 @@ function clearBindingEverywhere(
     ...state,
     commands,
     kudoPresetBindings,
+    surfaceDesignBindings,
     reservedKudoKeys,
     kudoPresetByReservedKey,
   };
@@ -120,6 +134,8 @@ function clearBindingEverywhere(
 function readBindingSlot(state: CommandMappingState, commandId: string): CommandBindingSlot {
   const presetId = parseKudoPresetIdFromCommandId(commandId);
   if (presetId) return state.kudoPresetBindings[presetId] ?? {};
+  const designId = parseSurfaceDesignIdFromCommandId(commandId);
+  if (designId) return state.surfaceDesignBindings[designId] ?? {};
   return state.commands[commandId] ?? {};
 }
 
@@ -136,6 +152,19 @@ function writeBindingSlot(
         kudoPresetBindings: {
           ...state.kudoPresetBindings,
           [presetId]: slot,
+        },
+      },
+      commandId,
+    );
+  }
+  const designId = parseSurfaceDesignIdFromCommandId(commandId);
+  if (designId) {
+    return addCommandToConfiguredSet(
+      {
+        ...state,
+        surfaceDesignBindings: {
+          ...state.surfaceDesignBindings,
+          [designId]: slot,
         },
       },
       commandId,
@@ -211,6 +240,7 @@ export function normalizeUniqueBindings(state: CommandMappingState): CommandMapp
     ...state,
     commands: { ...state.commands },
     kudoPresetBindings: { ...state.kudoPresetBindings },
+    surfaceDesignBindings: { ...(state.surfaceDesignBindings ?? {}) },
     reservedKudoKeys: [...state.reservedKudoKeys],
     kudoPresetByReservedKey: { ...state.kudoPresetByReservedKey },
   };
@@ -247,6 +277,14 @@ export function normalizeUniqueBindings(state: CommandMappingState): CommandMapp
     if (!keepBinding('gated', cleaned.gated)) delete cleaned.gated;
     if (!keepBinding('extended-function', cleaned.extendedFunction)) delete cleaned.extendedFunction;
     next.kudoPresetBindings[presetId] = cleaned;
+  }
+
+  for (const [designId, slot] of Object.entries(next.surfaceDesignBindings)) {
+    const cleaned: CommandBindingSlot = { ...slot };
+    if (!keepBinding('direct', cleaned.direct)) delete cleaned.direct;
+    if (!keepBinding('gated', cleaned.gated)) delete cleaned.gated;
+    if (!keepBinding('extended-function', cleaned.extendedFunction)) delete cleaned.extendedFunction;
+    next.surfaceDesignBindings[designId] = cleaned;
   }
 
   next.reservedKudoKeys = next.reservedKudoKeys.filter((reservedKey) => {

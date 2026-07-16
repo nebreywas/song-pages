@@ -25,6 +25,18 @@ export const PERFORMANCE_EFFECT_DEFINITIONS: PerformanceEffectDefinition[] = [
     concept: 'Audible plate burst on the current moment — dry stays up.',
     trigger: true,
   },
+  {
+    id: 'rate-dive',
+    label: 'Rate Dive',
+    concept: 'Coupled speed+pitch slowdown burst — eases down then recovers (~2.8s).',
+    trigger: true,
+  },
+  {
+    id: 'rate-climb',
+    label: 'Rate Climb',
+    concept: 'Coupled speed+pitch speed-up burst — lifts then settles (~2.2s).',
+    trigger: true,
+  },
 ];
 
 const BY_ID = new Map(PERFORMANCE_EFFECT_DEFINITIONS.map((row) => [row.id, row]));

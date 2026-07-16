@@ -8,13 +8,17 @@ const {
   fetchStudioClip,
   lyricsFromClip,
   artistFromClip,
-  coverFromClip,
+  yearFromClip,
   playbackFromClip,
   sunoDemoPageUrlFromClipUuid,
   sunoDemoManifestUrlFromClipUuid,
   SUNO_DEMO_PLAYBACK_SCOPE,
   resolveSunoCoverUrl,
 } = require('../sunoDemo/feature');
+const {
+  metadataFromSunoClip,
+  serializeSunoProviderMetadata,
+} = require('../sunoDemo/clipMetadata');
 
 async function addSunoSongToUserPlaylist(playlistId, input) {
   if (!isFeatureEnabled()) {
@@ -70,10 +74,14 @@ async function addSunoSongToUserPlaylist(playlistId, input) {
   const title = String(clip.title || 'Untitled').trim() || 'Untitled';
   const artistName = String(artistFromClip(clip) || 'Suno').trim() || 'Suno';
   const lyrics = lyricsFromClip(clip);
+  const providerMetadata = metadataFromSunoClip(clip);
   const durationSeconds =
     typeof clip.metadata?.duration === 'number' && clip.metadata.duration > 0
       ? Math.round(clip.metadata.duration)
       : null;
+
+  // Style tags go in caption (playlist column + song-page style section fallback).
+  const caption = providerMetadata.tags || null;
 
   const fields = {
     library_song_id: null,
@@ -81,8 +89,8 @@ async function addSunoSongToUserPlaylist(playlistId, input) {
     artist_name: artistName,
     title,
     album: null,
-    year: null,
-    caption: null,
+    year: yearFromClip(clip) || providerMetadata.year,
+    caption,
     cover_url: resolveSunoCoverUrl(clip, clipUuid, null),
     page_url: pageUrl,
     playback_url: playbackFromClip(clip, clipUuid),
@@ -93,6 +101,7 @@ async function addSunoSongToUserPlaylist(playlistId, input) {
     duration_seconds: durationSeconds,
     site_root_normalized: '',
     lyrics,
+    provider_metadata_json: serializeSunoProviderMetadata(providerMetadata),
   };
 
   const entryId = userPlaylists.insertSongFields(playlistId, fields);

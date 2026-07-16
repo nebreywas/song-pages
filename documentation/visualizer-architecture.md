@@ -30,14 +30,14 @@ Main <audio> (audible HLS — native path, Discord capture when FX off)
 Mirror <audio> (hidden HLS duplicate — Web Audio graph ONLY)
        │
        ▼
-audioGraph.ts (one graph per mirror element)
+src/audio/graph/registry.ts (one graph per mirror element)
        │
        ├── tap: source → bass → lo-fi → analyser → speakerGain(0) → destination
        ├── playback (FX): same chain, speakerGain(1), main ducked
        └── Butterchurn tap (parallel): sensitivity → bass emphasis → butterchurnTap
                     │
                     ▼
-         useAudioAnalyser → useVisualizerManager
+         useAnalyserBus → useVisualizerManager
                     │
        ┌────────────┴────────────┐
        ▼                         ▼
@@ -51,10 +51,10 @@ EmbeddedVisualizerHost    useVisualizerIpcSender
 
 | Area | Path |
 |------|------|
-| Web Audio graph | `src/visualizers/audioGraph.ts` |
-| Analyser hook | `src/visualizers/useAudioAnalyser.ts` |
-| Mirror HLS | `src/listener/useAnalyserPlaybackMirror.ts` |
-| Audio debug | `src/visualizers/debug/*` |
+| Web Audio graph | `src/audio/graph/registry.ts` |
+| Analyser bus | `src/audio/AnalyserBus.ts`, `hooks/useAnalyserBus.ts` |
+| Mirror HLS | `src/audio/hooks/useAnalyserPlaybackMirror.ts` |
+| Audio debug | `src/audio/debug/*` |
 | Session manager | `src/visualizers/useVisualizerManager.ts` |
 | Experience registry | `src/visualizers/registry.ts`, `native/registry.ts`, `butterchurn/*` |
 | Core types / context | `src/visualizers/core/*` |
@@ -72,7 +72,7 @@ EmbeddedVisualizerHost    useVisualizerIpcSender
 
 **Full detail:** [audio-pipeline.md](./audio-pipeline.md#web-audio-graph-audiographts).
 
-`audioGraph.ts` maintains a **WeakMap** from the **mirror** `<audio>` to graph nodes. The main audible player never gets Web Audio.
+`src/audio/graph/registry.ts` maintains a **WeakMap** from the **mirror** `<audio>` to graph nodes. The main audible player never gets Web Audio.
 
 ### Tap mode (visualizers — default)
 

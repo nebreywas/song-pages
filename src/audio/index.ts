@@ -36,8 +36,18 @@ export { measureFrequencyBins } from './analysis/frequencyBins';
 export { snapshotAudioElement } from './analysis/snapshotElement';
 
 export { useAudioAnalyser } from './hooks/useAudioAnalyser';
+export { useAnalyserBus } from './hooks/useAnalyserBus';
 export { useAnalyserPlaybackMirror } from './hooks/useAnalyserPlaybackMirror';
 export { usePlaybackEffects } from './hooks/usePlaybackEffects';
+
+export { MediaCoordinator } from './MediaCoordinator';
+export { applyMainMirrorRouting, applyVcAudibleRouting } from './AudioEffectsEngine';
+export {
+  createEmptyAnalyserBusState,
+  getAnalyserBusPublishedState,
+  scheduleAnalyserBusSync,
+  type AnalyserBusState,
+} from './AnalyserBus';
 
 export {
   EffectsLabPanel,
@@ -48,6 +58,15 @@ export {
   isEffectsLabAudible,
 } from './effectsLab';
 export type { EffectsLabState, LabEffectId } from './effectsLab';
+
+export {
+  MeydaLabPanel,
+  useMeydaLabHotkey,
+  meydaLabStore,
+  MEYDA_CORE_FEATURES,
+  MEYDA_EXTRA_FEATURES,
+} from './meydaLab';
+export type { MeydaLabFeatureId } from './meydaLab';
 
 export { audioDebug, emptyAudioDebugSnapshot } from './debug/audioDebug';
 export { AudioDebugPanel, useAudioDebugHotkey } from './debug/AudioDebugPanel';

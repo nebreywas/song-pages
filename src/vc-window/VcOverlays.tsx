@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import type { HostContentCatalog } from '@shared/hostContent';
 import type { VcOverlayId, VcStatePayload } from '@shared/vcModeTypes';
 
-import { formatTime } from '../listener/formatTime';
+import { formatTime } from '@shared/listener/formatTime';
 import { useHostGraphicPopupUrl } from '../vc-mode/useHostGraphicPopupUrl';
 import { VcUpcomingOverlay } from './VcUpcomingOverlay';
 
@@ -11,9 +11,10 @@ type VcOverlaysProps = {
   state: VcStatePayload;
   activeOverlay: VcOverlayId | null;
   hostCatalog: HostContentCatalog;
+  onDismissOverlay: () => void;
 };
 
-export function VcOverlays({ state, activeOverlay, hostCatalog }: VcOverlaysProps) {
+export function VcOverlays({ state, activeOverlay, hostCatalog, onDismissOverlay }: VcOverlaysProps) {
   const song = state.currentSong;
   const playback = state.playback;
   const hostPopupId = state.config.hostGraphicPopupId;
@@ -86,7 +87,11 @@ export function VcOverlays({ state, activeOverlay, hostCatalog }: VcOverlaysProp
       ) : null}
 
       {activeOverlay === 'upcoming' ? (
-        <VcUpcomingOverlay songs={state.upcoming} settings={state.config.upcomingOverlay} />
+        <VcUpcomingOverlay
+          songs={state.upcoming}
+          settings={state.config.upcomingOverlay}
+          onDismiss={onDismissOverlay}
+        />
       ) : null}
     </>
   );

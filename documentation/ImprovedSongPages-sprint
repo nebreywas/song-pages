@@ -1,0 +1,1062 @@
+# Response to Player Architecture Review
+
+This is a strong review, and I agree with the central conclusion:
+
+- We do not need a ground-up rewrite.
+- The existing foundation of pure shared playback rules, one authoritative orchestrator, and typed commands is worth preserving.
+- `ListenerMode` has become too large and now presents the primary structural risk.
+- We should incrementally extract and unify rather than replace the architecture.
+
+I want to move toward the proposed Playback Session model, with several refinements.
+
+## 1. The session should not ultimately be a React hook
+
+A hook may be useful as an adapter, but the authoritative playback session should be framework-independent and testable without React.
+
+Preferred shape:
+
+```ts
+interface PlaybackSession {
+  dispatch(command: PlaybackCommand): PlaybackCommandResult;
+  getSnapshot(): PlaybackSnapshot;
+  subscribe(listener: PlaybackListener): Unsubscribe;
+}
+```
+
+React may consume this through a thin `usePlaybackSnapshot()` hook.
+
+For now, the session can remain instantiated and owned by the main renderer. We are not moving playback into the Electron main process.
+
+## 2. Define commands, results, events, and snapshots distinctly
+
+Before major extraction, define canonical types for:
+
+- `PlaybackCommand`
+- `PlaybackCommandSource`
+- `PlaybackCommandResult`
+- `PlaybackEvent`
+- `PlaybackSnapshot`
+
+A requested command is not the same as an event that actually occurred.
+
+For example, a `NEXT` command rejected by Play Lock should return a structured rejection and must not emit a track-change event.
+
+Commands should include their source, such as:
+
+```ts
+"player-ui"
+"vc-controller"
+"keyboard"
+"context-menu"
+"system"
+"external"
+```
+
+## 3. Establish one command authorization and transition path
+
+All playback-changing inputs should eventually route through one dispatcher:
+
+- Player UI
+- VC controller
+- Keyboard shortcuts
+- Context menus
+- Existing command service
+- Listener playback commands
+
+The dispatcher should handle:
+
+1. Validation
+2. Policy/authorization
+3. Transition planning
+4. State commit
+5. Effects
+6. Domain event emission
+
+Play Lock, repeat, detours, and source limitations should no longer be guarded independently at numerous call sites.
+
+Avoid making generic middleware a new dumping ground. Separate:
+
+- command guards
+- transition rules
+- effects
+
+## 4. Inventory state ownership before moving code
+
+Please produce a concise inventory showing:
+
+- each playback-related state field
+- its current owner
+- duplicate refs/state
+- intended future owner
+- persistence needs
+- update frequency
+
+This should include at least:
+
+- active track
+- queue and cursor
+- playback role
+- playback position
+- repeat
+- detours
+- On Deck
+- Play Lock
+- pause state
+- VC-specific state
+- source/widget state
+- analyser/frame state
+
+The goal is to remove duplicated ownership, not merely move it.
+
+## 5. Create an audio topology report before audio refactoring
+
+Please map:
+
+- every audio/video element
+- every HLS instance
+- which output is audible in each mode
+- which element owns authoritative timing
+- which element owns authoritative completion
+- analyser sources
+- mirror paths
+- widget behavior
+- generation guards
+- drift correction
+- teardown behavior
+
+The desired outcome is one authoritative media lifecycle. This does not necessarily require exactly one technical media element if VC, analysis, or widgets require more than one.
+
+Do not begin major audio consolidation until this topology is documented.
+
+## 6. Account for deterministic command/event ordering
+
+The session should eventually serialize playback commands and media events.
+
+Please preserve or add:
+
+- media load generations
+- stale event rejection
+- protection against duplicate `ended` events
+- deterministic transition ordering
+- command IDs or equivalent diagnostic IDs where useful
+
+A callback from an obsolete media load must not mutate the current session.
+
+## 7. Separate slow state, timing state, and analyser frames
+
+Do not treat all playback information as one update stream.
+
+We should distinguish:
+
+- durable/change-driven session state
+- moderate-frequency timing state
+- high-frequency analyser/frame data
+
+`VcStatePayload` should become a projection from authoritative state, but we should not replace the current IPC collection with a single giant high-frequency snapshot.
+
+## 8. Add a source capability model
+
+Native audio, YouTube, SoundCloud, and other source types do not necessarily support identical operations.
+
+Introduce or plan for a capability model such as:
+
+```ts
+interface PlaybackCapabilities {
+  canSeek: boolean;
+  canResumePrecisely: boolean;
+  canPreload: boolean;
+  canReadCurrentTime: boolean;
+  canDetectEndedReliably: boolean;
+  canMirrorAudio: boolean;
+}
+```
+
+Playback policy should use capabilities rather than scattered source checks.
+
+## 9. Refactor in shippable phases
+
+Proposed sequence:
+
+### Phase 0 — Inventory and characterization
+
+- State ownership map
+- Command and IPC map
+- Audio topology map
+- Characterization tests for current playback behavior
+
+### Phase 1 — Canonical contracts
+
+- Commands
+- Command results
+- Events
+- Snapshots
+- Command sources
+
+Route existing controls through one front door while retaining existing internals temporarily.
+
+### Phase 2 — Centralize policy
+
+Move Play Lock, repeat, next/previous calculation, detours, On Deck, and natural-end rules into the command/transition layer.
+
+### Phase 3 — Extract framework-independent PlaybackSession
+
+Move authoritative playback state out of `ListenerMode`.
+
+Expose snapshots to React through thin hooks.
+
+### Phase 4 — Extract command adapters
+
+Convert VC IPC, keyboard, player UI, menus, and command service into thin dispatch adapters.
+
+### Phase 5 — Extract projections
+
+Build VC/controller state from the session snapshot and remove duplicate state ownership.
+
+### Phase 6 — Rationalize audio
+
+Centralize the media lifecycle, source adapters, end authority, and analyser paths.
+
+### Phase 7 — Remove legacy paths
+
+Delete obsolete IPC channels, refs, guards, handlers, and duplicate state.
+
+## 10. Break up `ListenerMode` by responsibility
+
+The objective is not simply smaller files. Each extracted module should have one coherent responsibility.
+
+Expected areas include:
+
+- playback session/state
+- commands and events
+- transition policy
+- audio runtime and source adapters
+- analyser bus
+- VC transport adapter
+- keyboard transport adapter
+- VC state projection
+- library/playlist editing
+- React subscription hooks
+
+`ListenerMode` should become primarily a screen composition/orchestration component rather than the implementation site for all playback behavior.
+
+## 11. Preserve behavior during the infrastructure work
+
+This pass should not be used to redesign user-facing playback behavior.
+
+Please first establish tests for:
+
+- next/previous
+- repeat modes
+- Play Lock
+- natural track completion
+- Play Now interruptions
+- On Deck
+- same-playlist detours
+- failed loads
+- stale media events
+- widget completion
+- normal user-selected playback
+- playlist edits around the active item
+- VC opening/closing during playback
+
+The refactor is successful when existing behavior remains stable while there is one clear place to answer:
+
+> What happens when this playback command is requested?
+
+Please begin with Phase 0 and return:
+
+1. State ownership inventory  
+2. Playback command/IPC inventory  
+3. Audio topology report  
+4. Proposed target file/module tree  
+5. Characterization test plan  
+6. A low-risk extraction sequence with explicit deletion points  
+
+
+
+RESPONSES & REVISIONS
+
+# Response to Player Architecture Review
+
+Thank you. This is a strong review and I agree with the central conclusions.
+
+The current architecture is fundamentally sound:
+
+- Pure playback rules in `shared/listener/`
+- One authoritative playback orchestrator
+- Typed command flows instead of ad-hoc callbacks
+
+This is the correct foundation to preserve.
+
+The current problem is not architectural direction—it is that too much responsibility has accumulated inside `ListenerMode`, resulting in growing coupling, duplicated state ownership, and increasing difficulty understanding playback flow.
+
+The goal of this refactor is **incremental extraction**, **clear ownership**, and **future maintainability**, **not** a rewrite.
+
+---
+
+# Overall Architectural Principle
+
+One design principle I'd like us to explicitly adopt going forward:
+
+> **Subsystems communicate through commands, snapshots, and events—not by directly modifying each other's state.**
+
+That should become one of the core architectural rules for the player.
+
+---
+
+# 1. Playback Session Lifetime
+
+PlaybackSession should become an application-lifetime object.
+
+It should **not** be recreated simply because ListenerMode rerenders or because VC Mode opens or closes.
+
+Entering or exiting VC Mode should activate or deactivate VC-specific behavior, but it should not reset playback.
+
+Examples of VC-specific state:
+
+- Play Lock
+- Submission playlist
+- Playlist focus
+- Controller bindings
+- VC-specific UI state
+
+Examples of playback state that should remain intact whenever possible:
+
+- Current song
+- Queue
+- Queue cursor
+- Repeat mode
+- Playback position
+- Detours
+- General playback context
+
+Playback should survive VC Mode transitions.
+
+---
+
+# 2. VC Mode Ownership
+
+I think VC Mode should own **VC-specific presentation and workflow**, not playback itself.
+
+Examples of VC responsibilities:
+
+- VC surface
+- Kudos
+- Submission playlist configuration
+- Visual presentation
+- Controller window lifecycle
+- VC-specific settings
+- Future VC-only workflows
+
+Playback remains owned by PlaybackSession.
+
+VC Mode may:
+
+- issue playback commands
+- activate policies (Play Lock, etc.)
+- request playlist protection
+- expose transport controls
+
+But PlaybackSession remains the authority that decides whether those commands succeed.
+
+Likewise, VC Mode may request application behaviors (for example protecting the active submission playlist from deletion), but those protections should ultimately be enforced by the application/playback layer rather than by VC Mode directly.
+
+---
+
+# 3. Audio Effects Ownership
+
+Audio effects belong to the audio engine, not the playback session.
+
+PlaybackSession should express user intent such as:
+
+- Bass Boost enabled
+- Effect preset selected
+- Effect bypass
+
+The actual DSP processing should belong to a dedicated audio subsystem.
+
+Conceptually:
+
+```
+Input Audio
+
+↓
+
+Audio Effects Engine
+
+↓
+
+Processed Audio
+
+↓
+
+Output
+```
+
+A centralized `AudioEffectsState` (or equivalent) makes architectural sense because it provides one authoritative location for all DSP processing and future audio enhancements.
+
+---
+
+# 4. Song History
+
+Please preserve the current Song History design.
+
+Architecturally I am happy if history becomes event-driven as part of the Playback Session model.
+
+More importantly, I want history to capture interesting playback behaviors rather than only completed songs.
+
+Examples include:
+
+- Started
+- Completed
+- Interrupted
+- Played via On Deck
+- Play Now interruptions
+- Partial playback duration
+
+My general philosophy is:
+
+> Capture interesting discrete behaviors first.
+
+Useful user-facing features can then be discovered from that data later.
+
+---
+
+# 5. Command Service
+
+I agree with moving toward one canonical playback dispatch path.
+
+Eventually I would like:
+
+- Player UI
+- VC Controller
+- Keyboard shortcuts
+- Context menus
+- Command Service
+- Future controller surfaces
+
+to all issue the same playback commands.
+
+We do not need to complete that immediately, but it should be the architectural target.
+
+---
+
+# 6. Playlist Order Authority
+
+Playback order should always respect the playlist ordering that exists **at the moment the next-track decision is made.**
+
+Example:
+
+Song 4 is currently playing.
+
+The user changes the playlist sort while Song 4 is still playing.
+
+When Song 4 finishes, playback should continue using the **new** playlist ordering.
+
+Changing playlist sort is an explicit user command to change future playback order.
+
+The currently playing song remains unaffected.
+
+Exceptions such as:
+
+- On Deck
+- Play Now
+
+continue to temporarily override normal progression.
+
+---
+
+# 7. Failure & Graceful Degradation
+
+Playback should degrade gracefully whenever practical.
+
+For example:
+
+If VC mirrored audio fails to initialize, falling back to the primary playback output is preferable to silence.
+
+Failures should always generate diagnostic logging and, where appropriate, user-visible status so problems are understandable and debuggable.
+
+The topology report should distinguish:
+
+- intended routing
+- actual routing
+
+---
+
+# 8. Preserve Existing Behavior
+
+This pass is primarily an architectural refactor.
+
+Existing playback behavior should remain unchanged unless a specific behavioral improvement has already been requested.
+
+Characterization tests should preserve existing semantics while allowing the implementation to evolve.
+
+We should avoid introducing unrelated UX/UI changes during this work.
+
+---
+
+# 9. Playback Session
+
+I like the proposed Playback Session direction with one important refinement.
+
+The Playback Session should ultimately become a framework-independent service rather than a React hook.
+
+Preferred shape:
+
+```ts
+interface PlaybackSession {
+
+    dispatch(command: PlaybackCommand): PlaybackCommandResult;
+
+    getSnapshot(): PlaybackSnapshot;
+
+    subscribe(listener: PlaybackListener): Unsubscribe;
+}
+```
+
+React should consume this through thin hooks rather than own it.
+
+The Playback Session may continue to live in the main renderer.
+
+I do **not** want to move playback into the Electron main process at this time.
+
+---
+
+# 10. Commands, Events & Snapshots
+
+Before significant extraction, please establish canonical types for:
+
+- PlaybackCommand
+- PlaybackCommandSource
+- PlaybackCommandResult
+- PlaybackEvent
+- PlaybackSnapshot
+
+A requested command is not the same thing as an event that actually occurred.
+
+For example:
+
+```
+NEXT requested
+
+↓
+
+Play Lock rejects command
+
+↓
+
+No Track Changed event
+```
+
+Likewise:
+
+```
+Play Song requested
+
+↓
+
+Media load fails
+
+↓
+
+Playback Failed event
+```
+
+Commands should carry their source.
+
+Examples:
+
+- player-ui
+- vc-controller
+- keyboard
+- context-menu
+- system
+- external
+
+---
+
+# 11. Playback Dispatch Pipeline
+
+Eventually all playback-changing actions should follow one pathway:
+
+```
+Command
+
+↓
+
+Validation
+
+↓
+
+Authorization
+
+↓
+
+Transition Planning
+
+↓
+
+State Commit
+
+↓
+
+Effects
+
+↓
+
+Domain Events
+```
+
+Play Lock, repeat, detours, source capabilities, etc. should become centralized playback policy rather than scattered guards throughout the codebase.
+
+Please keep command guards, transition rules, and effects as separate responsibilities rather than creating one large middleware layer.
+
+---
+
+# 12. State Ownership Inventory
+
+Before moving code, please produce a concise ownership inventory covering:
+
+- Current owner
+- Duplicate ownership
+- Intended future owner
+- Persistence requirements
+- Update frequency
+
+At minimum include:
+
+- Active track
+- Queue
+- Queue cursor
+- Repeat
+- Playback position
+- Detours
+- On Deck
+- Play Lock
+- Pause state
+- VC state
+- Widget/source state
+- Audio analyser state
+
+The objective is to eliminate duplicate ownership rather than merely relocating it.
+
+---
+
+# 13. Audio Topology Report
+
+Before significant audio refactoring, please document:
+
+- Every audio/video element
+- Every HLS instance
+- Audible outputs
+- Timing authority
+- Completion authority
+- FFT/analyser ownership
+- Mirror paths
+- Widget playback
+- Generation guards
+- Drift correction
+- Teardown lifecycle
+
+The desired outcome is one authoritative media lifecycle.
+
+That does **not** necessarily require exactly one media element if technical reasons require more than one.
+
+---
+
+# 14. Deterministic Ordering
+
+Playback commands and playback events should become deterministic.
+
+Please preserve or introduce:
+
+- Media load generations
+- Duplicate end-event protection
+- Stale event rejection
+- Deterministic command ordering
+- Useful command IDs where appropriate
+
+Callbacks from obsolete media loads should never mutate the active playback session.
+
+---
+
+# 15. Playback State Categories
+
+Not all playback information belongs in one update stream.
+
+Please distinguish between:
+
+### Durable Session State
+
+Examples:
+
+- Active track
+- Queue
+- Repeat
+- Play Lock
+- Scene
+- On Deck
+
+### Timing State
+
+Examples:
+
+- Position
+- Duration
+- Buffered state
+
+### High Frequency State
+
+Examples:
+
+- FFT
+- Waveform
+- Audio analyser frames
+
+VC projections should derive from Playback Session snapshots rather than maintain duplicate state.
+
+---
+
+# 16. Source Capability Model
+
+Native audio, YouTube, SoundCloud, and future playback sources do not necessarily support identical operations.
+
+Please introduce (or prepare for) a capability model similar to:
+
+```ts
+interface PlaybackCapabilities {
+
+    canSeek: boolean;
+
+    canResumePrecisely: boolean;
+
+    canPreload: boolean;
+
+    canReadCurrentTime: boolean;
+
+    canDetectEndedReliably: boolean;
+
+    canMirrorAudio: boolean;
+}
+```
+
+Playback policy should rely on capabilities rather than scattered source-specific checks.
+
+---
+
+# 17. Suggested Refactoring Sequence
+
+## Phase 0
+
+Inventory and characterization
+
+- State ownership
+- Command inventory
+- IPC inventory
+- Audio topology
+- Characterization tests
+
+---
+
+## Phase 1
+
+Canonical contracts
+
+- Commands
+- Results
+- Events
+- Snapshots
+
+Route existing systems through one dispatch entry point while preserving existing internals.
+
+---
+
+## Phase 2
+
+Centralize playback policy
+
+Move:
+
+- Play Lock
+- Repeat
+- Detours
+- On Deck
+- Natural progression
+
+into the transition layer.
+
+---
+
+## Phase 3
+
+Extract Playback Session
+
+Move authoritative playback state out of ListenerMode.
+
+Expose snapshots to React through thin hooks.
+
+---
+
+## Phase 4
+
+Extract transport adapters
+
+Convert:
+
+- VC
+- Keyboard
+- Player UI
+- Context menus
+- Command service
+
+into dispatch adapters.
+
+---
+
+## Phase 5
+
+Extract projections
+
+Build VC/controller state from Playback Session snapshots.
+
+Remove duplicated ownership.
+
+---
+
+## Phase 6
+
+Audio rationalization
+
+Centralize:
+
+- Media lifecycle
+- Source adapters
+- End authority
+- Analyser ownership
+
+---
+
+## Phase 7
+
+Delete legacy pathways
+
+Remove:
+
+- Obsolete IPC
+- Duplicate refs
+- Legacy handlers
+- Redundant state
+
+---
+
+# 18. Break Up ListenerMode
+
+The objective is not simply reducing file size.
+
+Each extracted module should have one coherent responsibility.
+
+Examples include:
+
+- Playback Session
+- Commands
+- Events
+- Transition policy
+- Audio runtime
+- Source adapters
+- Audio analyser
+- VC transport adapter
+- Keyboard transport adapter
+- VC projections
+- Library editing
+- React subscription hooks
+
+ListenerMode should evolve into a screen composition/orchestration component rather than the implementation site for every playback behavior.
+
+---
+
+# 19. Characterization Tests
+
+Before changing architecture, please preserve current behavior with tests covering:
+
+- Next / Previous
+- Repeat modes
+- Play Lock
+- Natural completion
+- Play Now
+- On Deck
+- Same-playlist detours
+- Failed loads
+- Stale media events
+- Widget completion
+- Playlist edits
+- Active playlist protection
+- VC open/close during playback
+
+The goal of this refactor is **not** to redesign playback.
+
+It is to create one clear place where we can answer:
+
+> **What happens when this playback command is requested?**
+
+while preserving existing behavior.
+
+The desired Phase 0 deliverables are:
+
+1. State ownership inventory
+2. Playback command inventory
+3. IPC inventory
+4. Audio topology report
+5. Proposed module/file structure
+6. Characterization test plan
+7. Incremental extraction plan with explicit deletion points
+
+---
+
+# RESPONSES & REVISIONS — Locked decisions (July 2026)
+
+Canonical copy: [playback-refactor/00-locked-decisions.md](./playback-refactor/00-locked-decisions.md)
+
+- Subsystems communicate via **commands, snapshots, events** — not cross-mutation.
+- **PlaybackSession** is framework-independent, app-lifetime, bootstrapped from `createPlaybackSession.ts`.
+- **VC Mode** owns presentation/workflow only; does not own playback truth.
+- **Play Lock** is VC-scoped; clears when VC exits.
+- **Special between-song pause**: session `playbackPhase: waiting-for-host`; VC owns countdown UI.
+- **No Scene** or presentation geometry in session.
+- **Playlist order** resolved at next-track decision time from current library view.
+- **Submission playlist protection** in library mutation layer when VC active + default id set.
+- **AudioEffectsEngine** sibling; session holds intent only.
+- **Song history** event-driven from session; preserve rich semantics.
+- **Tests**: Electron-less characterization harness first; mock media adapters.
+- **Input subsystem**: application-level peer (focus, routing, command generation) — not inside Playback or VC. Phase 4 adapters are interim bridges. See [09-future-enhancements.md](./playback-refactor/09-future-enhancements.md).
+- **Commands evolve**: inventory is a product snapshot; architecture must absorb add/rename/remove without churn.
+- **Scope**: infrastructure only — preserve behavior, improve ownership, no unrelated UX changes.
+
+---
+
+# Phase 0 — SIGNED OFF (July 2026)
+
+Manual smoke: all 12 scenarios verified against current implementation (catalog playback, transport, repeat, VC routing, play lock, 1 Song, play now, on deck, special pause, widget completion, reorder, submission playlist).
+
+**Go for Phase 1.**
+
+---
+
+# Phase 1 — COMPLETE (July 2026)
+
+- `shared/playback/` — commands, events, snapshot, results
+- `src/playback/` — facade, `createPlaybackSession`, `buildPlaybackSnapshot`, PlayerBar adapter
+- PlayerBar transport routes through `session.dispatch` (delegates to existing ListenerMode handlers)
+- `documentation/playback-session-architecture.md` — skeleton
+
+**Next step:** Phase 2 — policy centralization ([SPRINT-GUIDE.md](./playback-refactor/SPRINT-GUIDE.md)).
+
+---
+
+# Phase 2 — COMPLETE (July 2026)
+
+- Policy modules: `shared/playback/policies/`, `queue/planner.ts`, `detours/state.ts`
+- Shims at old paths (`shared/vcMode/playLock.ts`, `shared/listener/playbackQueue.ts`, `shared/listener/playbackDetours.ts`)
+- `ListenerMode` `playNext` / `playPrevious` / `cycleRepeat` use centralized policies
+- Tier A tests: manual advance, play lock, detours, repeat shuffle (35 playback tests green)
+
+**Signed off:** Manual + casual testing passed (all sprint focus items).
+
+**Next step:** Phase 6 — audio rationalization ([SPRINT-GUIDE.md](./playback-refactor/SPRINT-GUIDE.md)).
+
+---
+
+# Phase 6 — COMPLETE (July 2026)
+
+- `MediaCoordinator` + `attachPlaybackSource` — shared HLS/direct load for main, analyser mirror, and VC mirror
+- `AudioEffectsEngine` — `applyMainMirrorRouting` / `applyVcAudibleRouting` replace inline FX hooks
+- `AnalyserBus` + `useAnalyserBus` — single graph per mirror (`visualizer-main`, `vc-visualizer` consumers)
+- `MediaCoordinator.test.ts` — generation guard (B8) and load-failure (B7) characterization
+- Docs: `audio-pipeline.md` module map; `vc-mode-architecture.md` main-muted-when-VC-open
+
+**Manual smoke:** 1–3 passed; item 4 (OBS capture) deferred by user — acceptable for sign-off.
+
+---
+
+# Phase 7 — COMPLETE (July 2026)
+
+- Deleted shim re-exports: `shared/listener/playbackQueue`, `playbackDetours`, `shared/vcMode/playLock`
+- Deleted src shims: `audioGraph`, `useAudioAnalyser`, `usePlaybackEffects`, `useAnalyserPlaybackMirror`, `formatTime`, `shareableSongPageUrl`, `visualizers/debug/*`
+- Migrated imports to canonical paths (`@shared/playback/*`, `src/audio/*`)
+- Post-shim import fixes: `useVisualizerStream`, `PlayerBar`, `buildPlaylistTableColumns`
+
+**Manual smoke:** Casual testing OK — no unexpected behaviors. Effects edge cases (multi-HLS) deferred until unit-tested repros.
+
+**Deferred beyond Phase 7:** `playSong` body in ListenerMode, `detoursRef` / `playSongRef` indirection.
+
+**Next step:** Phase 8 — documentation alignment (in progress).
+
+---
+
+# Phase 8 — COMPLETE (July 2026)
+
+- `playback-session-architecture.md` — full module layout through Phase 7
+- `playback-refactor/FINAL-REPORT.md` — completion summary, metrics, TODOs
+- `documentation/README.md` — playback session + final report in index
+- Phase 0 reports marked historical where drift resolved (`05-audio-topology`, etc.)
+- Module `@see` headers on `PlaybackSessionImpl`, `AnalyserBus`, `AudioEffectsEngine`, `attachPlaybackSource`
+
+**Playback refactor track: DONE.** See [FINAL-REPORT.md](./playback-refactor/FINAL-REPORT.md).
+
+---
+
+# Phase 5 — COMPLETE (July 2026)
+
+- `buildVcStateFromSnapshot` projects playback, queue, play lock, and special pause from `PlaybackSnapshot`
+- `buildCommandRuntimeContextFromSnapshot` replaces VC-payload derivation for command availability
+- `useVcModeManager` subscribes via `usePlaybackSnapshot`; removed duplicate queue planner props from ListenerMode
+- Special pause `active` driven by `playbackPhase === 'waiting-for-host'`; countdown fields from hook
+- Projection unit tests in `src/playback/projections/`
+
+**Signed off:** Manual + casual testing passed (overlays, special pause, designer preview, lyrics/missing lyrics, play lock, VC events, designer moves, playlist resort).
+
+**Next step:** Phase 6 — audio rationalization ([SPRINT-GUIDE.md](./playback-refactor/SPRINT-GUIDE.md)).
+
+---
+
+# Phase 4 — COMPLETE (July 2026)
+
+- Transport adapters: `vcTransportAdapter`, `keyboardAdapter`, `playLockAdapter`, `playerBarAdapter`
+- `usePlaybackTransportAdapters` wires VC transport, keyboard commands, and play-lock IPC once at bootstrap
+- Removed `vcTransportHandlersRef` and `useListenerPlaybackCommands`
+- Session: `RESUME_AFTER_WAIT`, `VOLUME_DELTA`; NEXT blocked during `waiting-for-host`
+- Tier B harness extended: B9, volume-delta tests
+
+**Next step:** Phase 5 — projections ([SPRINT-GUIDE.md](./playback-refactor/SPRINT-GUIDE.md)).
+
+---
+
+# Phase 3 — COMPLETE (July 2026)
+
+- `PlaybackSessionImpl` owns detours, repeat/shuffle, play lock, phase
+- `ListenerMode` runs media via `runPlaybackSessionEffects`; no direct `detoursRef` mutation
+- Tier B harness: 7 tests (`PlaybackSession.harness.test.ts`)
+
+**Next step:** Phase 4 — transport adapters ([SPRINT-GUIDE.md](./playback-refactor/SPRINT-GUIDE.md)).
+
+---
+
+# Phase 0 deliverables — COMPLETE
+
+Reports and sprint guide:
+
+**[playback-refactor/README.md](./playback-refactor/README.md)**
+
+| Report | File |
+|--------|------|
+| Locked decisions | [00-locked-decisions.md](./playback-refactor/00-locked-decisions.md) |
+| State ownership | [01-state-ownership-inventory.md](./playback-refactor/01-state-ownership-inventory.md) |
+| Commands | [02-command-inventory.md](./playback-refactor/02-command-inventory.md) |
+| IPC | [03-ipc-inventory.md](./playback-refactor/03-ipc-inventory.md) |
+| Projections | [04-projection-map.md](./playback-refactor/04-projection-map.md) |
+| Audio topology | [05-audio-topology.md](./playback-refactor/05-audio-topology.md) |
+| Module tree | [06-target-module-tree.md](./playback-refactor/06-target-module-tree.md) |
+| Test plan | [07-characterization-test-plan.md](./playback-refactor/07-characterization-test-plan.md) |
+| Extraction plan | [08-extraction-plan.md](./playback-refactor/08-extraction-plan.md) |
+| **Testing & review per phase** | [SPRINT-GUIDE.md](./playback-refactor/SPRINT-GUIDE.md) |
+
+**Next step:** Phase 4 — transport adapters ([SPRINT-GUIDE.md](./playback-refactor/SPRINT-GUIDE.md)).

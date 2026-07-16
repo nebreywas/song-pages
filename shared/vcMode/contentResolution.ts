@@ -30,23 +30,39 @@ import {
   resolveLyricsEdgeFade,
   resolveLyricsRemoveBracketed,
   resolveLyricTracking,
+  resolveLyricPresentationEffect,
+  resolveLyricTypographyMode,
+  resolvePrettySoftBreakLongLines,
   resolveAlareFadeEnabled,
   resolveAlareTargetVisibleLines,
+  type LyricEffectId,
   type VcLyricTracking,
+  type VcLyricTypographyMode,
   resolveSongGraphicPresentation,
   resolveSongTitleTextPresentation,
   resolveSongVideoPresentation,
   resolveUpcomingCoversPresentation,
+  resolveSourcePresentation,
+  resolveSongUrlPresentation,
+  resolveWavesurferPresentation,
   type EffectiveGraphicPresentation,
   type EffectiveGroupPresentation,
   type EffectivePlayerControlsPresentation,
   type EffectiveSeekBarPresentation,
+  type EffectiveSourcePresentation,
+  type EffectiveSongUrlPresentation,
   type EffectiveUpcomingCoversPresentation,
   type EffectiveVideoPresentation,
+  type EffectiveWavesurferPresentation,
   type VcAssignmentOverrides,
   type VcTextAlign,
   type VcTitleOverflow,
 } from './assignmentSettings';
+import {
+  formatVcSongUrlDisplay,
+  VC_SOURCE_TITLE_LABELS,
+} from './songSourceDisplay';
+import type { PlaylistSongSourceId } from '../listener/playlistSongSource';
 import {
   isHostContentKind,
   SONG_CONTENT_SETTINGS_RULE,
@@ -75,6 +91,11 @@ export type VcResolutionContext = {
   lyricsSourceReady?: boolean;
   gridDesign?: VcGridDesignSettings;
   random?: () => number;
+  /**
+   * When provided, system media fallbacks only resolve if this returns true.
+   * Omit in unit tests to keep text/media system defaults available.
+   */
+  isSystemFallbackAssetAvailable?: (asset: keyof typeof SYSTEM_FALLBACK_ASSETS) => boolean;
 };
 
 export type ResolvedGraphic = {
@@ -89,7 +110,7 @@ export type ResolvedVideo = {
   kind: 'video';
   remoteUrl?: string | null;
   mediaPath?: string | null;
-  systemAsset?: 'video-cover';
+  systemAsset?: 'video-cover' | 'lyrics-video';
   presentation?: EffectiveVideoPresentation;
 };
 
@@ -117,6 +138,12 @@ export type ResolvedLyrics = {
   textAlign?: VcTextAlign;
   lyricsEdgeFade?: boolean;
   lyricTracking?: VcLyricTracking;
+  /** Agnostic presentation effect — orthogonal to tracking / future timed lyrics. */
+  lyricPresentationEffect?: LyricEffectId;
+  /** Pretty Lyrics typography — Sample 1 when `pretty`; transparent background in VC. */
+  lyricTypographyMode?: VcLyricTypographyMode;
+  /** Soft-return long/dense Pretty lines (presentation-only). */
+  prettySoftBreakLongLines?: boolean;
   alareFadeEnabled?: boolean;
   alareTargetVisibleLines?: number;
   /** For ALARE timeline — manifest/catalog duration when available. */
@@ -182,6 +209,28 @@ export type ResolvedUpcomingCovers = {
   songs: VcUpcomingSong[];
 };
 
+export type ResolvedSource = {
+  kind: 'source';
+  sourceId: PlaylistSongSourceId;
+  title: string;
+  shareUrl: string | null;
+  presentation: EffectiveSourcePresentation;
+};
+
+export type ResolvedSongUrl = {
+  kind: 'song-url';
+  /** Absolute URL used for open-in-browser (always with scheme when possible). */
+  href: string;
+  /** Formatted label shown in the cell. */
+  displayText: string;
+  presentation: EffectiveSongUrlPresentation;
+};
+
+export type ResolvedWavesurfer = {
+  kind: 'wavesurfer';
+  presentation: EffectiveWavesurferPresentation;
+};
+
 export type ResolvedVcContent =
   | { kind: 'empty' }
   | { kind: 'visualizer' }
@@ -195,11 +244,15 @@ export type ResolvedVcContent =
   | ResolvedSeekBar
   | ResolvedPlayerControls
   | ResolvedUpcomingCovers
+  | ResolvedSource
+  | ResolvedSongUrl
+  | ResolvedWavesurfer
   | ResolvedGraphicsGroup;
 
 const SONG_TO_FALLBACK: Partial<Record<VcCellContent, HostFallbackSlotId>> = {
   cover: 'cover',
   'video-cover': 'video-cover',
+  'lyrics-video': 'lyrics-video',
   lyrics: 'lyrics',
   'marquee-lyrics': 'lyrics',
   about: 'about-song',
@@ -323,19 +376,37 @@ function embedProviderLyricsFallbackForSong(song: VcSongPayload): string | null 
   return embedProviderLyricsFallback(song.playbackScope);
 }
 
+function systemMediaFallback(
+  kind: 'graphic' | 'video',
+  asset: keyof typeof SYSTEM_FALLBACK_ASSETS,
+  ctx?: VcResolutionContext,
+): ResolvedVcContent {
+  // Bundled file missing (or not shipped yet) → hard fail, not a blank <video>/<img>.
+  if (ctx?.isSystemFallbackAssetAvailable && !ctx.isSystemFallbackAssetAvailable(asset)) {
+    return { kind: 'empty' };
+  }
+  if (kind === 'graphic') {
+    return { kind: 'graphic', systemAsset: asset };
+  }
+  return { kind: 'video', systemAsset: asset as 'video-cover' | 'lyrics-video' };
+}
+
 function resolveSystemFallback(
   slotId: HostFallbackSlotId,
   typography: VcGridDefaultTypography,
   ctx?: VcResolutionContext,
 ): ResolvedVcContent {
   if (slotId === 'cover') {
-    return { kind: 'graphic', systemAsset: 'cover' };
+    return systemMediaFallback('graphic', 'cover', ctx);
   }
   if (slotId === 'artist-image') {
-    return { kind: 'graphic', systemAsset: 'artist-image' };
+    return systemMediaFallback('graphic', 'artist-image', ctx);
   }
   if (slotId === 'video-cover') {
-    return { kind: 'video', systemAsset: 'video-cover' };
+    return systemMediaFallback('video', 'video-cover', ctx);
+  }
+  if (slotId === 'lyrics-video') {
+    return systemMediaFallback('video', 'lyrics-video', ctx);
   }
   if (slotId === 'lyrics') {
     const embedFallback = ctx?.song ? embedProviderLyricsFallbackForSong(ctx.song) : null;
@@ -451,6 +522,11 @@ function songDurationSeconds(ctx: VcResolutionContext): number | null {
 }
 
 function resolveSongPrimary(content: VcCellContent, ctx: VcResolutionContext): ResolvedVcContent | null {
+  // Peaks load from the audio mirror URL at render time — no song field required.
+  if (content === 'wavesurfer') {
+    return { kind: 'wavesurfer', presentation: resolveWavesurferPresentation({}) };
+  }
+
   const song = ctx.song;
   if (!song) return null;
 
@@ -460,6 +536,10 @@ function resolveSongPrimary(content: VcCellContent, ctx: VcResolutionContext): R
 
   if (content === 'video-cover' && song.videoCoverUrl) {
     return { kind: 'video', remoteUrl: song.videoCoverUrl };
+  }
+
+  if (content === 'lyrics-video' && song.lyricsVideoUrl) {
+    return { kind: 'video', remoteUrl: song.lyricsVideoUrl };
   }
 
   if (content === 'lyrics' && song.lyrics.trim()) {
@@ -552,6 +632,32 @@ function resolveSongPrimary(content: VcCellContent, ctx: VcResolutionContext): R
     };
   }
 
+  if (content === 'source') {
+    const sourceId = song.sourceId ?? 'song-pages';
+    return {
+      kind: 'source',
+      sourceId,
+      title: VC_SOURCE_TITLE_LABELS[sourceId],
+      shareUrl: song.shareUrl?.trim() || null,
+      presentation: resolveSourcePresentation({}),
+    };
+  }
+
+  if (content === 'song-url') {
+    const href = song.shareUrl?.trim() || '';
+    if (!href) return null;
+    const presentation = resolveSongUrlPresentation({}, gridTypography(ctx));
+    return {
+      kind: 'song-url',
+      href,
+      displayText: formatVcSongUrlDisplay(href, {
+        rootOnly: presentation.rootOnly,
+        includeHttps: presentation.includeHttps,
+      }),
+      presentation,
+    };
+  }
+
   return null;
 }
 
@@ -574,6 +680,23 @@ function applySongPresentation(
 
   if (content === 'upcoming-covers' && resolved.kind === 'upcoming-covers') {
     return { ...resolved, presentation: resolveUpcomingCoversPresentation(overrides, typography) };
+  }
+
+  if (content === 'source' && resolved.kind === 'source') {
+    return { ...resolved, presentation: resolveSourcePresentation(overrides) };
+  }
+
+  if (content === 'song-url' && resolved.kind === 'song-url') {
+    const presentation = resolveSongUrlPresentation(overrides, typography);
+    const displayText = formatVcSongUrlDisplay(resolved.href, {
+      rootOnly: presentation.rootOnly,
+      includeHttps: presentation.includeHttps,
+    });
+    return { ...resolved, presentation, displayText };
+  }
+
+  if (content === 'wavesurfer' && resolved.kind === 'wavesurfer') {
+    return { ...resolved, presentation: resolveWavesurferPresentation(overrides) };
   }
 
   const rule = SONG_CONTENT_SETTINGS_RULE[content];
@@ -647,6 +770,10 @@ function applySongPresentation(
       const manifestDuration = songDurationSeconds(ctx);
       const songId = ctx.song?.id != null ? String(ctx.song.id) : null;
 
+      const lyricPresentationEffect = resolveLyricPresentationEffect(overrides);
+      const lyricTypographyMode = resolveLyricTypographyMode(overrides);
+      const prettySoftBreakLongLines = resolvePrettySoftBreakLongLines(overrides);
+
       if (tracking === 'alare') {
         return {
           ...resolved,
@@ -657,6 +784,9 @@ function applySongPresentation(
           markdownSource: false,
           textAlign: presentation.textAlign,
           lyricTracking: 'alare',
+          lyricPresentationEffect,
+          lyricTypographyMode,
+          prettySoftBreakLongLines,
           alareFadeEnabled: resolveAlareFadeEnabled(overrides),
           alareTargetVisibleLines: resolveAlareTargetVisibleLines(overrides),
           manifestDurationSeconds: manifestDuration,
@@ -675,6 +805,9 @@ function applySongPresentation(
         markdownSource: presentation.markdownSource,
         textAlign: presentation.textAlign,
         lyricTracking: 'simple-scroll',
+        lyricPresentationEffect,
+        lyricTypographyMode,
+        prettySoftBreakLongLines,
         lyricsEdgeFade: resolveLyricsEdgeFade(overrides),
         manifestDurationSeconds: manifestDuration,
         songId,
@@ -762,4 +895,53 @@ export function resolveVcCellContent(
     return resolveHostAssignment(content, hostBinding, ctx.catalog);
   }
   return resolveSongContent(content, ctx, songOverrides ?? {});
+}
+
+/**
+ * Whether a dual-slot partner has real source content for this song.
+ * Song primary data and host-catalog fallbacks count; bundled system fallbacks do not
+ * (so Cover + missing Video Cover does not keep cycling into a blank/system video).
+ */
+export function hasVcSlotSourceContent(
+  content: VcCellContent,
+  hostBinding: VcHostSlotBinding | null,
+  ctx: VcResolutionContext,
+): boolean {
+  if (!content) return false;
+  if (content === 'visualizer' || content === 'wavesurfer') return true;
+  if (isHostContentKind(content)) {
+    return resolveHostAssignment(content, hostBinding, ctx.catalog).kind !== 'empty';
+  }
+
+  if (resolveSongPrimary(content, ctx)) return true;
+
+  if (!ctx.useFallbacks) return false;
+  const slotId = SONG_TO_FALLBACK[content];
+  if (!slotId) return false;
+
+  if (
+    (content === 'lyrics' || content === 'marquee-lyrics') &&
+    ctx.lyricsSourceReady === false
+  ) {
+    return false;
+  }
+
+  // Embed lyrics notes are intentional source-level content, not system placeholders.
+  if (slotId === 'lyrics' && ctx.song) {
+    const embedFallback = embedProviderLyricsFallbackForSong(ctx.song);
+    if (embedFallback) return !ctx.suppressEmbedProviderLyricsMessages;
+  }
+
+  const fallback = fallbackForSlot(ctx.catalog, slotId);
+  if (fallback && !fallback.resetToSystemDefault) {
+    const hostResolved = resolveHostFallback(
+      fallback,
+      ctx.catalog,
+      ctx.random ?? Math.random,
+      gridTypography(ctx),
+    );
+    if (hostResolved) return true;
+  }
+
+  return false;
 }

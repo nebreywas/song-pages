@@ -8,12 +8,15 @@ import { useVcVisualizerRotation } from '../vc-mode/useVcVisualizerRotation';
 import { VcOverlays } from './VcOverlays';
 import { VcSpecialPlayCountdown } from './VcSpecialPlayCountdown';
 import { VcSurface } from './VcSurface';
+import { VcLiveDebugHud } from './VcLiveDebugHud';
 import { VcVisualizerRotationProvider } from './VcVisualizerRotationContext';
 import { useHostContentCatalog } from '../host-content/useHostContentCatalog';
 import { VcAlareNudgeProvider } from './VcAlareNudgeContext';
 import { useVcPlaybackAudio } from './useVcPlaybackAudio';
 import { useVcPlaybackEffects } from './useVcPlaybackEffects';
+import { useVcPerformanceEffects } from './useVcPerformanceEffects';
 import { useVcWindowState } from './useVcWindowState';
+import { useVisualizerNameReveal } from './useVisualizerNameReveal';
 import { useHostGraphicPopupUrl } from '../vc-mode/useHostGraphicPopupUrl';
 import { KudoLayer } from '../kudos/KudoLayer';
 
@@ -25,6 +28,7 @@ export function VcWindowApp() {
     frame,
     canvasFrame,
     activeOverlay,
+    dismissOverlay,
     kudoTrigger,
     layoutMode,
     onChangeSurface,
@@ -32,6 +36,7 @@ export function VcWindowApp() {
   const { catalog: hostCatalog } = useHostContentCatalog({ readOnly: true });
   const { audioRef: playbackAudioRef, audioEl: playbackAudioEl } = useVcPlaybackAudio(state);
   useVcPlaybackEffects(playbackAudioEl, state?.audioMirror, state?.playback.isPlaying ?? false);
+  useVcPerformanceEffects(playbackAudioEl, state?.audioMirror);
 
   const [layoutSurface, setLayoutSurface] = useState<VcSurfaceConfig | null>(null);
   const layoutSurfaceRef = useRef<VcSurfaceConfig | null>(null);
@@ -120,16 +125,28 @@ export function VcWindowApp() {
     reportToMain: true,
   });
 
+  const visualizerNameReveal = useVisualizerNameReveal({
+    autoReveal: displayState?.config.showVisualizerName === true,
+    visualizerId: visualizerRotation.effectiveVisualizerId,
+  });
+
+  // Name chrome is rendered inside the visualizer cell/float — not the full window.
   const rotationContextValue = useMemo(
     () => ({
       activeVisualizerId: visualizerRotation.effectiveVisualizerId,
       rotateVisualizer: visualizerRotation.rotateVisualizerRandom,
       visualizerClickEnabled: visualizerRotation.visualizerClickEnabled,
+      nameReveal: {
+        name: visualizerNameReveal.name,
+        visible: visualizerNameReveal.visible,
+      },
     }),
     [
       visualizerRotation.effectiveVisualizerId,
       visualizerRotation.rotateVisualizerRandom,
       visualizerRotation.visualizerClickEnabled,
+      visualizerNameReveal.name,
+      visualizerNameReveal.visible,
     ],
   );
 
@@ -189,7 +206,9 @@ export function VcWindowApp() {
                   state={overlayState!}
                   activeOverlay={activeOverlay}
                   hostCatalog={hostCatalog}
+                  onDismissOverlay={dismissOverlay}
                 />
+                <VcLiveDebugHud enabled={displayState.liveDebugEnabled === true} />
                 <VcSpecialPlayCountdown state={displayState} />
               </>
             ) : null}

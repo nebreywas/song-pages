@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getApp } from '../lib/bridge';
+import appIcon from '../assets/images/app-icon.png';
 
 export function AboutMode() {
   const [version, setVersion] = useState('');
@@ -11,7 +12,8 @@ export function AboutMode() {
   }, []);
 
   return (
-    <div className="simple-page panel">
+    <div className="simple-page panel about-page">
+      <img className="about-logo" src={appIcon} alt="" width={96} height={96} />
       <h2>About Song Pages</h2>
       <p className="about-meta">
         Song Pages {version || '…'} — Proof of Concept

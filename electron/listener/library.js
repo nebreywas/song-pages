@@ -150,14 +150,17 @@ function getArtistById(id) {
 
 function listSongsForArtist(artistId) {
   const { attachSkipFlags } = require('./songSkips');
+  // Join artists so Now Playing / playlist rows get artist_name for Artist Pages tracks.
   const rows = getDatabase()
     .prepare(
-      `SELECT id, artist_id, external_id, slug, title, album, year, caption,
-              cover_url, page_url, playback_url, song_manifest_url,
-              playback_scope, playback_quality, duration_seconds, sort_order
-       FROM songs
-       WHERE artist_id = ?
-       ORDER BY sort_order ASC, title COLLATE NOCASE ASC`,
+      `SELECT s.id, s.artist_id, s.external_id, s.slug, s.title, s.album, s.year,
+              s.caption, s.cover_url, s.page_url, s.playback_url, s.song_manifest_url,
+              s.playback_scope, s.playback_quality, s.duration_seconds, s.sort_order,
+              a.artist_name, a.site_root_normalized
+       FROM songs s
+       JOIN artists a ON a.id = s.artist_id
+       WHERE s.artist_id = ?
+       ORDER BY s.sort_order ASC, s.title COLLATE NOCASE ASC`,
     )
     .all(artistId);
   return attachSkipFlags(rows);

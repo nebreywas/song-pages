@@ -1,10 +1,20 @@
+/**
+ * Phase C performance effects — filter sweeps, momentary low-pass, reverb throw.
+ * Target is whichever element owns audible output (main mirror, or VC window audio).
+ */
 import {
   getOrCreatePlaybackGraph,
   resumeAudioContext,
 } from '../../graph/registry';
+import { tryPlayMirror } from '../../hooks/mirrorPlayback';
 import type { AudioGraph } from '../../types';
 import { getLabImpulseResponse } from '../spatial/impulseResponse';
 import { resetLabPerformanceNodes, type LabPerformanceNodes } from './labPerformanceNodes';
+import {
+  cancelPlaybackRateBurst,
+  rateBurstKindFromEffectId,
+  runPlaybackRateBurst,
+} from './rateBurst';
 import type {
   FilterSweepLength,
   PerformanceEffectId,
@@ -13,38 +23,97 @@ import type {
 import { performanceEffectRestoreMs } from './types';
 
 export type RunPerformanceEffectOptions = {
-  mirrorAudio: HTMLAudioElement;
-  mainAudio: HTMLAudioElement;
-  /** Main element volume to restore when mirror duck ends. */
-  mainVolume: number;
-  /** When true, leave main ducked after one-shot effects (whole-song lab active). */
-  keepMirrorAudible: boolean;
+  /** Element that receives the Web Audio performance insert (mirror or VC audio). */
+  targetAudio: HTMLAudioElement;
+  /**
+   * Optional element to duck while the effect runs (main native player only).
+   * Omit when the target already IS the audible capture stream (VC).
+   */
+  duckAudio?: HTMLAudioElement | null;
+  /** Volume to restore on duckAudio when the effect ends. */
+  duckRestoreVolume?: number;
+  /** When true, leave duckAudio muted after the effect (whole-song FX still active). */
+  keepDuckMuted?: boolean;
+  /** Speaker gain on the target graph (1 for main mirror; VC uses stream volume). */
+  speakerGain?: number;
+  /** Optional seek alignment source (usually the timing authority). */
+  syncFromAudio?: HTMLAudioElement | null;
   effectId: PerformanceEffectId;
   phase: PerformanceEffectPhase;
+  /** Notify host so dry mirror stay routed for the effect window (main path only). */
+  onRouteActiveChange?: (active: boolean) => void;
+  /**
+   * Steady rate hold to restore after a rate burst (defaults to the element rate).
+   * Keep this in sync with Effects Lab `playbackRateHold`.
+   */
+  restorePlaybackRate?: number;
 };
 
 let holdCount = 0;
+let restoreTimer: ReturnType<typeof window.setTimeout> | null = null;
+let routeActive = false;
+
+function setRouteActive(
+  active: boolean,
+  onRouteActiveChange?: (active: boolean) => void,
+): void {
+  if (routeActive === active) return;
+  routeActive = active;
+  onRouteActiveChange?.(active);
+}
+
+function clearRestoreTimer(): void {
+  if (restoreTimer != null) {
+    window.clearTimeout(restoreTimer);
+    restoreTimer = null;
+  }
+}
 
 function ensurePlaybackGraph(
-  mirrorAudio: HTMLAudioElement,
-  mainAudio: HTMLAudioElement,
+  targetAudio: HTMLAudioElement,
+  options: {
+    duckAudio?: HTMLAudioElement | null;
+    speakerGain: number;
+    syncFromAudio?: HTMLAudioElement | null;
+  },
 ): AudioGraph {
-  mainAudio.volume = 0;
-  const graph = getOrCreatePlaybackGraph(mirrorAudio);
+  const { duckAudio, speakerGain, syncFromAudio } = options;
+  if (duckAudio && duckAudio !== targetAudio) {
+    duckAudio.volume = 0;
+  }
+
+  const syncSource = syncFromAudio && syncFromAudio !== targetAudio ? syncFromAudio : null;
+  if (syncSource && Number.isFinite(syncSource.currentTime)) {
+    const drift = Math.abs(targetAudio.currentTime - syncSource.currentTime);
+    if (drift > 0.35) {
+      try {
+        targetAudio.currentTime = syncSource.currentTime;
+      } catch {
+        // Seeking before metadata is ready can throw — ignore.
+      }
+    }
+  }
+
+  const graph = getOrCreatePlaybackGraph(targetAudio);
   resumeAudioContext(graph.context);
   if (graph.speakerGain) {
-    graph.speakerGain.gain.value = 1;
+    graph.speakerGain.gain.value = speakerGain;
   }
+  void tryPlayMirror(targetAudio, 'performance');
   return graph;
 }
 
-function maybeRestoreMainPath(
-  mainAudio: HTMLAudioElement,
-  mainVolume: number,
-  keepMirrorAudible: boolean,
+function maybeRestoreDuckPath(
+  duckAudio: HTMLAudioElement | null | undefined,
+  duckRestoreVolume: number,
+  keepDuckMuted: boolean,
+  onRouteActiveChange?: (active: boolean) => void,
 ): void {
-  if (keepMirrorAudible || holdCount > 0) return;
-  mainAudio.volume = mainVolume;
+  if (holdCount > 0) return;
+  if (!keepDuckMuted && duckAudio) {
+    duckAudio.volume = duckRestoreVolume;
+  }
+  setRouteActive(false, onRouteActiveChange);
 }
 
 function runFilterSweep(
@@ -102,16 +171,50 @@ function runReverbThrow(nodes: LabPerformanceNodes, context: AudioContext): void
   throwSend.gain.exponentialRampToValueAtTime(0.001, t + 3.9);
 }
 
-/** Fire a Phase C performance effect on the mirror playback graph. */
+/** Fire a Phase C performance effect on the target playback graph. */
 export function runPerformanceEffect(options: RunPerformanceEffectOptions): boolean {
-  const { mirrorAudio, mainAudio, mainVolume, keepMirrorAudible, effectId, phase } = options;
+  const {
+    targetAudio,
+    duckAudio = null,
+    duckRestoreVolume = 1,
+    keepDuckMuted = false,
+    speakerGain = 1,
+    syncFromAudio = null,
+    effectId,
+    phase,
+    onRouteActiveChange,
+    restorePlaybackRate,
+  } = options;
 
   if (phase === 'release' && effectId !== 'momentary-lowpass') {
     return false;
   }
 
-  const graph = ensurePlaybackGraph(mirrorAudio, mainAudio);
+  // Coupled rate bursts — no Web Audio insert; keep timing elements in sync.
+  const rateKind = rateBurstKindFromEffectId(effectId);
+  if (rateKind) {
+    if (phase !== 'trigger') return false;
+    const audios: HTMLMediaElement[] = [targetAudio];
+    if (duckAudio && duckAudio !== targetAudio) audios.push(duckAudio);
+    if (syncFromAudio && !audios.includes(syncFromAudio)) audios.push(syncFromAudio);
+    return runPlaybackRateBurst({
+      audios,
+      kind: rateKind,
+      restoreRate: restorePlaybackRate ?? targetAudio.playbackRate,
+    });
+  }
+
+  const graph = ensurePlaybackGraph(targetAudio, {
+    duckAudio,
+    speakerGain,
+    syncFromAudio,
+  });
   const { performance: nodes, context } = graph;
+
+  if (phase === 'trigger' || phase === 'hold') {
+    clearRestoreTimer();
+    setRouteActive(true, onRouteActiveChange);
+  }
 
   if (phase === 'trigger') {
     resetLabPerformanceNodes(nodes, context);
@@ -138,12 +241,13 @@ export function runPerformanceEffect(options: RunPerformanceEffectOptions): bool
   }
 
   if (phase === 'release') {
-    maybeRestoreMainPath(mainAudio, mainVolume, keepMirrorAudible);
+    maybeRestoreDuckPath(duckAudio, duckRestoreVolume, keepDuckMuted, onRouteActiveChange);
   } else if (phase === 'trigger' && effectId !== 'momentary-lowpass') {
     const restoreMs = performanceEffectRestoreMs(effectId);
-    window.setTimeout(() => {
+    restoreTimer = window.setTimeout(() => {
+      restoreTimer = null;
       resetLabPerformanceNodes(nodes, context);
-      maybeRestoreMainPath(mainAudio, mainVolume, keepMirrorAudible);
+      maybeRestoreDuckPath(duckAudio, duckRestoreVolume, keepDuckMuted, onRouteActiveChange);
     }, restoreMs);
   }
 
@@ -153,4 +257,7 @@ export function runPerformanceEffect(options: RunPerformanceEffectOptions): bool
 /** Test helper — reset module hold state between tests. */
 export function resetPerformanceEffectHoldState(): void {
   holdCount = 0;
+  clearRestoreTimer();
+  routeActive = false;
+  cancelPlaybackRateBurst();
 }

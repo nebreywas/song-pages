@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { VisualizerStreamConfig, VisualizerStreamFrame } from '@shared/visualizerMessages';
 
 import { getApp } from '../lib/bridge';
-import { FFT_SIZE } from './audioGraph';
-import { audioDebug, measureFrequencyBins } from './debug/audioDebug';
+import { FFT_SIZE } from '../audio/constants';
+import { audioDebug, measureFrequencyBins } from '../audio/debug/audioDebug';
 
 type StreamState = {
   frequencyData: Uint8Array;
@@ -16,6 +16,11 @@ type StreamState = {
   song: VisualizerStreamConfig['song'];
   projectionMode: VisualizerStreamConfig['projectionMode'];
   pageUrl: string | null;
+  homepageUrl: string | null;
+  nativePage: VisualizerStreamConfig['nativePage'];
+  lyricsDisplay: VisualizerStreamConfig['lyricsDisplay'];
+  songPageFontIncreaseLevel: VisualizerStreamConfig['songPageFontIncreaseLevel'];
+  video: VisualizerStreamConfig['video'];
   frame: number;
   canvasFrame: string | null;
 };
@@ -29,11 +34,21 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
     song: VisualizerStreamConfig['song'];
     projectionMode: VisualizerStreamConfig['projectionMode'];
     pageUrl: string | null;
+    homepageUrl: string | null;
+    nativePage: VisualizerStreamConfig['nativePage'];
+    lyricsDisplay: VisualizerStreamConfig['lyricsDisplay'];
+    songPageFontIncreaseLevel: VisualizerStreamConfig['songPageFontIncreaseLevel'];
+    video: VisualizerStreamConfig['video'];
   }>({
     experienceId: 'spectrum',
     song: null,
-    projectionMode: 'visualizer',
+    projectionMode: 'page',
     pageUrl: null,
+    homepageUrl: null,
+    nativePage: null,
+    lyricsDisplay: null,
+    songPageFontIncreaseLevel: null,
+    video: null,
   });
 
   useEffect(() => {
@@ -46,26 +61,39 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
     let lastFrameAt = 0;
     let lastStallWarnAt = 0;
 
-    audioDebug.log('ipc-recv', 'Projection stream listener attached');
+    audioDebug.log('ipc-recv', 'Projector stream listener attached');
 
     const offConfig = app.visualizer.onConfig((message: VisualizerStreamConfig) => {
       setConnected(true);
       metaRef.current = {
         experienceId: message.experienceId,
         song: message.song,
-        projectionMode: message.projectionMode ?? 'visualizer',
+        projectionMode: message.projectionMode ?? 'page',
         pageUrl: message.pageUrl ?? null,
+        homepageUrl: message.homepageUrl ?? null,
+        nativePage: message.nativePage ?? null,
+        lyricsDisplay: message.lyricsDisplay ?? null,
+        songPageFontIncreaseLevel: message.songPageFontIncreaseLevel ?? null,
+        video: message.video ?? null,
       };
       setState((prev) => ({
         frequencyData: prev?.frequencyData ?? frequencyData,
         timeDomainData: prev?.timeDomainData ?? timeDomainData,
-        currentTime: prev?.currentTime ?? 0,
-        duration: prev?.duration ?? 0,
-        isPlaying: prev?.isPlaying ?? false,
+        // Video mode has no FFT frames — playback must ride on config ticks.
+        currentTime:
+          typeof message.currentTime === 'number' ? message.currentTime : (prev?.currentTime ?? 0),
+        duration: typeof message.duration === 'number' ? message.duration : (prev?.duration ?? 0),
+        isPlaying:
+          typeof message.isPlaying === 'boolean' ? message.isPlaying : (prev?.isPlaying ?? false),
         experienceId: message.experienceId,
         song: message.song,
-        projectionMode: message.projectionMode ?? 'visualizer',
+        projectionMode: message.projectionMode ?? 'page',
         pageUrl: message.pageUrl ?? null,
+        homepageUrl: message.homepageUrl ?? null,
+        nativePage: message.nativePage ?? null,
+        lyricsDisplay: message.lyricsDisplay ?? null,
+        songPageFontIncreaseLevel: message.songPageFontIncreaseLevel ?? null,
+        video: message.video ?? null,
         frame: prev?.frame ?? 0,
         canvasFrame: prev?.canvasFrame ?? null,
       }));
@@ -113,6 +141,11 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
         song: metaRef.current.song,
         projectionMode: metaRef.current.projectionMode,
         pageUrl: metaRef.current.pageUrl,
+        homepageUrl: metaRef.current.homepageUrl,
+        nativePage: metaRef.current.nativePage,
+        lyricsDisplay: metaRef.current.lyricsDisplay,
+        songPageFontIncreaseLevel: metaRef.current.songPageFontIncreaseLevel,
+        video: metaRef.current.video,
         frame: lastFrameAt,
         canvasFrame: message.canvasFrame ?? null,
       });
@@ -146,7 +179,7 @@ export function useVisualizerIpcStream(): { stream: StreamState | null; connecte
 /** ~60fps polling — setInterval keeps running when another window has focus (rAF does not). */
 const FRAME_INTERVAL_MS = 16;
 
-/** Main window: push config/FFT/canvas frames to the projection window via IPC. */
+/** Main window: push config/FFT/canvas frames to the Projector window via IPC. */
 export function useVisualizerIpcSender(options: {
   enabled: boolean;
   sendFrames: boolean;
@@ -158,6 +191,11 @@ export function useVisualizerIpcSender(options: {
   duration: number;
   projectionMode: VisualizerStreamConfig['projectionMode'];
   pageUrl: string | null;
+  homepageUrl?: string | null;
+  nativePage?: VisualizerStreamConfig['nativePage'];
+  lyricsDisplay?: VisualizerStreamConfig['lyricsDisplay'];
+  songPageFontIncreaseLevel?: VisualizerStreamConfig['songPageFontIncreaseLevel'];
+  video?: VisualizerStreamConfig['video'];
   canvasFrame?: string | null;
 }): void {
   const {
@@ -171,6 +209,11 @@ export function useVisualizerIpcSender(options: {
     duration,
     projectionMode,
     pageUrl,
+    homepageUrl = null,
+    nativePage = null,
+    lyricsDisplay = null,
+    songPageFontIncreaseLevel = null,
+    video = null,
     canvasFrame = null,
   } = options;
   const intervalRef = useRef<number | null>(null);
@@ -198,25 +241,48 @@ export function useVisualizerIpcSender(options: {
     if (!enabled || !app?.visualizer?.sendConfig) return;
 
     const sendConfig = () => {
+      const timing = timingRef.current;
       const config: VisualizerStreamConfig = {
         type: 'config',
         experienceId,
         song,
         projectionMode,
         pageUrl,
+        homepageUrl,
+        nativePage,
+        lyricsDisplay,
+        songPageFontIncreaseLevel,
+        video,
+        isPlaying: timing.isPlaying,
+        currentTime: timing.currentTime,
+        duration: timing.duration,
       };
       app.visualizer!.sendConfig(config);
     };
 
     sendConfig();
-    const intervalId = window.setInterval(sendConfig, 1000);
+    // Video theater needs frequent play/pause + seek sync (no FFT frame loop).
+    const intervalMs = projectionMode === 'video' ? 250 : 1000;
+    const intervalId = window.setInterval(sendConfig, intervalMs);
     const offSync = app.visualizer.onRequestSync?.(() => sendConfig());
 
     return () => {
       window.clearInterval(intervalId);
       offSync?.();
     };
-  }, [enabled, experienceId, pageUrl, projectionMode, song]);
+  }, [
+    enabled,
+    experienceId,
+    homepageUrl,
+    isPlaying,
+    lyricsDisplay,
+    nativePage,
+    pageUrl,
+    projectionMode,
+    song,
+    songPageFontIncreaseLevel,
+    video,
+  ]);
 
   useEffect(() => {
     const app = getApp();

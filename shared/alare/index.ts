@@ -24,6 +24,15 @@ export {
 export { parseAlareLyrics } from './parseLyrics';
 export { resolveTrackDuration } from './resolveTrackDuration';
 export type { ResolvedTrackDuration, TrackDurationSource } from './resolveTrackDuration';
+export {
+  alareFontSizeBias,
+  characteristicLineChars,
+  characteristicSoftBrokenLineChars,
+  softBreakAverageSlotUnits,
+  defaultAlareTargetVisibleLines,
+  resolveAlareContainerFontPx,
+  type ResolveAlareContainerFontInput,
+} from './containerFontScale';
 export type {
   AlareLyricBlock,
   AlareLyricLine,

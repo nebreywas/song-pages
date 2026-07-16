@@ -1055,6 +1055,7 @@ export function VcModeModal({
                 visualizerChangeRule: config.visualizerChangeRule,
                 visualizerSequence: config.visualizerSequence,
                 visualizerAlsoClickToChange: config.visualizerAlsoClickToChange,
+                showVisualizerName: config.showVisualizerName,
               }}
               windowVisualizers={windowVisualizers}
               onVisualizerConfigChange={(patch) =>

@@ -82,6 +82,8 @@ export type SongPagesSongManifest = {
   playbackQuality: SongPlaybackQuality;
   buildVersion: string;
   durationSeconds?: number | null;
+  /** Provider-specific structured metadata (e.g. Suno Studio clip fields). */
+  providerMetadata?: Record<string, unknown> | null;
 };
 
 export const CATALOG_MANIFEST_FILENAME = 'songpages-catalog.json';

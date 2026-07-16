@@ -4,6 +4,7 @@ export {
   DEFAULT_EFFECTS_LAB_STATE,
   deactivateEffectsOnPanelClose,
   isEffectsLabAudible,
+  shouldBypassLabPreset,
   isWorkletEnhanceActive,
   isTapeWowFlutterActive,
 } from './types';

@@ -1,12 +1,16 @@
 import { useCallback, useRef, useState } from 'react';
 
-import type { ListenerLyricsDisplaySettings } from '@shared/listener/lyricsDisplaySettings';
+import type {
+  ListenerLyricsDisplaySettings,
+  ListenerLyricsViewMode,
+} from '@shared/listener/lyricsDisplaySettings';
 
 import { LyricsSettingsPopover } from './LyricsSettingsPopover';
 
 type LyricsHeadingButtonProps = {
   settings: ListenerLyricsDisplaySettings;
   onRemoveBracketsChange: (value: boolean) => void;
+  onViewModeChange: (value: ListenerLyricsViewMode) => void;
   className?: string;
 };
 
@@ -14,6 +18,7 @@ type LyricsHeadingButtonProps = {
 export function LyricsHeadingButton({
   settings,
   onRemoveBracketsChange,
+  onViewModeChange,
   className,
 }: LyricsHeadingButtonProps) {
   const headingRef = useRef<HTMLButtonElement>(null);
@@ -46,9 +51,10 @@ export function LyricsHeadingButton({
           anchor={popoverAnchor}
           settings={settings}
           onRemoveBracketsChange={onRemoveBracketsChange}
+          onViewModeChange={onViewModeChange}
           onClose={closePopover}
         />
       ) : null}
     </>
   );
-};
+}

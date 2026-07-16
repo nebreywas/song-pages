@@ -1209,6 +1209,19 @@
   padding-inline-start: 0.55rem;
 }
 
+.vc-wavesurfer-assignment-preview {
+  margin: 0.35rem 0 0.55rem;
+  min-height: 5.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 70%, #0b0d12);
+  overflow: hidden;
+}
+
+.vc-wavesurfer-assignment-preview .vc-wavesurfer-shell {
+  min-height: 5.5rem;
+}
+
 .vc-host-picker {
   display: flex;
   flex-wrap: wrap;
@@ -1735,6 +1748,13 @@
 .hc-preview-body.is-text {
   align-items: stretch;
   justify-content: flex-start;
+}
+
+.hc-pane-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 1.25rem;
 }
 
 .hc-pane-title {

@@ -11,6 +11,7 @@ const APP_WIDE_COMMAND_IDS = new Set([
   'volume-down',
   'visualizer-next',
   'visualizer-previous',
+  'toggle-live-debug',
   'seek-back-500',
   'seek-back-1s',
   'seek-back-2s',
@@ -63,6 +64,11 @@ function isCommandAvailableForDispatch(commandId, context) {
 
   const presetPrefix = 'trigger-kudo-';
   if (commandId.startsWith(presetPrefix)) {
+    return context.vcModeActive !== false;
+  }
+
+  const surfacePrefix = 'switch-surface-';
+  if (commandId.startsWith(surfacePrefix)) {
     return context.vcModeActive !== false;
   }
 

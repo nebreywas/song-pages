@@ -7,6 +7,7 @@ export const APP_WIDE_COMMAND_IDS = [
   'volume-down',
   'visualizer-next',
   'visualizer-previous',
+  'toggle-live-debug',
   'seek-back-500',
   'seek-back-1s',
   'seek-back-2s',

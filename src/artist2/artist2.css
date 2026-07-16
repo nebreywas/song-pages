@@ -1,0 +1,2283 @@
+/* Artist 2.0 wireframe shell — functional first; polish later. */
+
+.a2-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 56px);
+  background: var(--bg, #0c1018);
+  color: var(--text, #e8ecf4);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.a2-loading {
+  padding: 2rem;
+}
+
+.a2-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+  flex-shrink: 0;
+}
+
+.a2-toolbar-left,
+.a2-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.a2-artist-select {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-artist-select select,
+.a2-sidebar-search input,
+.a2-field input,
+.a2-field textarea,
+.a2-title-input {
+  background: #121824;
+  color: inherit;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+}
+
+.a2-toolbar button,
+.a2-create-menu button,
+.a2-file-row button,
+.a2-track-actions button,
+.a2-secondary,
+.a2-danger {
+  background: #1a2333;
+  color: inherit;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.a2-toolbar button:hover,
+.a2-create-menu button:hover,
+.a2-file-row button:hover,
+.a2-track-actions button:hover,
+.a2-secondary:hover {
+  background: #243044;
+}
+
+.a2-danger {
+  border-color: #6b3a3a;
+  color: #f0b4b4;
+}
+
+.a2-create-wrap {
+  position: relative;
+}
+
+.a2-create-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 5;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  background: #121824;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  padding: 0.25rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.a2-create-menu button {
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: 3px;
+}
+
+.a2-banner {
+  padding: 0.5rem 0.9rem;
+  background: #2a2410;
+  border-bottom: 1px solid #5a4a20;
+  color: #f0e0a8;
+  font-size: 0.85rem;
+}
+
+.a2-confirm-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: #2a1616;
+  border-bottom-color: #6b3a3a;
+  color: #f0b4b4;
+}
+
+.a2-confirm-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.a2-inline-form {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.a2-inline-form input {
+  background: #121824;
+  color: inherit;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  min-width: 10rem;
+}
+
+.a2-empty-state button {
+  margin-top: 0.85rem;
+  background: #1a2333;
+  color: inherit;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+
+.a2-workspace {
+  display: grid;
+  grid-template-columns: minmax(340px, 420px) 1fr;
+  min-height: 0;
+  flex: 1;
+}
+
+.a2-toolbar button.is-active {
+  background: #1a2740;
+  border-color: #3a5580;
+}
+
+.a2-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-right: 1px solid var(--border, #2a3344);
+  min-height: 0;
+  overflow: hidden;
+  background: #0e131c;
+}
+
+.a2-sidebar-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.a2-sidebar-search-input,
+.a2-sidebar-control select {
+  width: 100%;
+  box-sizing: border-box;
+  background: #121824;
+  color: inherit;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.82rem;
+}
+
+.a2-sidebar-control-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.a2-sidebar-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-catalog-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0c1018;
+}
+
+.a2-catalog-table-head,
+.a2-catalog-table-row {
+  display: grid;
+  grid-template-columns: 1.35rem minmax(0, 1fr) 4.75rem 4.25rem 2rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.45rem;
+}
+
+.a2-catalog-table-head {
+  flex-shrink: 0;
+  min-height: 1.85rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+  background: #151c2a;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-catalog-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.a2-catalog-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.a2-catalog-item + .a2-catalog-item {
+  border-top: 1px solid rgba(42, 51, 68, 0.55);
+}
+
+.a2-catalog-table-row {
+  min-height: 2rem;
+  font-size: 0.82rem;
+}
+
+.a2-catalog-table-row.is-selected {
+  background: #1a2740;
+}
+
+.a2-catalog-table-row.is-nested {
+  background: #101622;
+}
+
+.a2-catalog-col-expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.a2-catalog-col-name {
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 0.35rem 0.15rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+}
+
+.a2-catalog-col-type,
+.a2-catalog-col-added {
+  font-size: 0.75rem;
+  color: var(--muted, #8b95a8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.a2-catalog-col-insert {
+  display: flex;
+  justify-content: center;
+}
+
+.a2-catalog-empty {
+  padding: 1rem 0.75rem;
+}
+
+.a2-album-expand {
+  width: 1.35rem;
+  height: 1.35rem;
+  border: none;
+  background: transparent;
+  color: var(--muted, #8b95a8);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0;
+}
+
+.a2-nested-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid rgba(42, 51, 68, 0.35);
+}
+
+.a2-nested-empty {
+  padding: 0.45rem 0.75rem 0.45rem 2.2rem;
+  font-size: 0.75rem;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-artwork-ref {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: #121824;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+}
+
+.a2-artwork-ref-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.a2-artwork-ref-file {
+  font-size: 0.78rem;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-artwork-ref-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.a2-ref-missing {
+  color: #f0b4b4;
+}
+
+.a2-promote-form {
+  margin-top: 0.35rem;
+}
+
+.a2-insert-arrow {
+  width: 1.65rem;
+  height: 1.65rem;
+  border: none;
+  background: #1e3a5f;
+  color: #9ec5ff;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0;
+}
+
+.a2-insert-arrow:hover {
+  background: #274e7e;
+}
+
+.a2-empty-hint,
+.a2-help {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted, #8b95a8);
+  line-height: 1.4;
+}
+
+.a2-main {
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem 1.25rem 2.5rem;
+}
+
+.a2-empty-state {
+  max-width: 28rem;
+  margin: 3rem auto;
+  text-align: center;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-empty-state h2 {
+  margin: 0 0 0.5rem;
+  color: var(--text, #e8ecf4);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+/* Big "Edit Song" heading + primary actions, divided from the form. */
+.a2-editor-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.85rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+}
+
+.a2-editor-heading {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text, #e8ecf4);
+}
+
+/* Song title row: title + slug block on the left, cover directly to its right. */
+.a2-editor-title-row {
+  display: flex;
+  /* Top-align the cover with the Song title label. */
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+/* Bounded width so the cover sits directly right of these elements (not far-right). */
+.a2-editor-title-block {
+  flex: 0 1 34rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.a2-editor-title-row .a2-song-field-label {
+  margin-bottom: 0.4rem;
+}
+
+/* Cover sits beside the title + slug block — a fixed square roughly matching its
+   height. (A stretch + aspect-ratio approach loops off the image's huge intrinsic
+   size, so we pin an explicit size instead.) */
+.a2-editor-title-row .a2-artwork-thumb--header {
+  flex: 0 0 auto;
+  width: 6.5rem;
+  height: 6.5rem;
+  margin-top: 0;
+}
+
+.a2-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.85rem;
+  margin-bottom: 0.65rem;
+}
+
+.a2-editor-header--with-art {
+  align-items: center;
+}
+
+.a2-editor-header--song {
+  align-items: flex-start;
+  margin-bottom: 0.55rem;
+}
+
+.a2-editor-header-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.a2-editor-header--song .a2-editor-header-main {
+  display: flex;
+  flex-direction: column;
+  /* Title + identity stack share this column’s full width. */
+  align-items: stretch;
+}
+
+.a2-editor-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  padding-top: 0.15rem;
+}
+
+/* Inline (row) variant used in the top heading bar. */
+.a2-editor-header-actions--inline {
+  flex-direction: row;
+  align-items: center;
+  padding-top: 0;
+}
+
+/* Cancel the global .a2-secondary top margin so Import lines up with Delete. */
+.a2-editor-header-actions--inline .a2-secondary {
+  margin-top: 0;
+}
+
+.a2-editor-header-actions button {
+  min-width: 5.25rem;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.a2-title-input--song {
+  display: block;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+/* Shared identity labels: Song title / Subtitle / Caption / About */
+.a2-song-field-label {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted, #8b95a8);
+  line-height: 1.2;
+}
+
+.a2-editor-header--song .a2-song-field-label {
+  margin-bottom: 0.4rem;
+}
+
+.a2-slug-row--header {
+  margin-top: 0;
+  gap: 0.45rem 0.65rem;
+}
+
+.a2-slug-line {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.a2-slug-line code {
+  font-size: 0.76rem;
+}
+
+.a2-slug-edit {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.a2-section--song-identity {
+  margin: 0;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.a2-section--song-identity .a2-field--song {
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+  width: 100%;
+  max-width: none;
+}
+
+.a2-section--song-identity .a2-field--song:last-child {
+  margin-bottom: 0;
+}
+
+.a2-section--song-identity .a2-field--song > .a2-song-field-label {
+  margin-bottom: 0;
+}
+
+.a2-field-meta {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  text-align: right;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-field-meta.a2-char-warn {
+  color: #d4a017;
+}
+
+.a2-suno-import-modal {
+  max-width: 32rem;
+}
+
+.a2-suno-import-modal .a2-inline-form {
+  margin: 0.75rem 0;
+}
+
+.a2-suno-import-modal .a2-inline-form input[type='text'] {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+}
+
+.a2-artwork-thumb {
+  flex: 0 0 auto;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0f141e;
+  border: 1px solid var(--border, #2a3344);
+}
+
+.a2-artwork-thumb--header {
+  width: 4.25rem;
+  height: 4.25rem;
+  margin-top: 0.1rem;
+}
+
+.a2-artwork-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.a2-artwork-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted, #8b95a8);
+  font-size: 0.68rem;
+  text-align: center;
+  padding: 0.25rem;
+}
+
+.a2-artwork-layout {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+}
+
+.a2-artwork-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.a2-artwork-layout .a2-artwork-thumb {
+  width: 6rem;
+  height: 6rem;
+}
+
+.a2-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-title-input {
+  font-size: 1.25rem;
+  font-weight: 600;
+  min-width: 16rem;
+  width: min(100%, 28rem);
+}
+
+.a2-incomplete-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: -0.15rem 0 0.75rem;
+}
+
+.a2-incomplete-badge {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #2a2410;
+  color: #e8d090;
+  border: 1px solid #5a4a20;
+}
+
+.a2-section {
+  margin-bottom: 1.35rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+}
+
+.a2-section h3 {
+  margin: 0 0 0.55rem;
+  font-size: 0.95rem;
+}
+
+.a2-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.65rem;
+  font-size: 0.8rem;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-field input,
+.a2-field textarea {
+  color: var(--text, #e8ecf4);
+  font: inherit;
+  width: min(100%, 36rem);
+  box-sizing: border-box;
+}
+
+/* Lyrics textarea stretches to the full width of the editor column. */
+.a2-field--lyrics textarea {
+  width: 100%;
+  max-width: none;
+  resize: vertical;
+}
+
+/* Section title sits inline with the Write/Preview toggle (drop default h3 margin). */
+.a2-lyrics-heading {
+  margin: 0;
+}
+
+/* Preview mirrors the write textarea footprint and stays responsive. */
+.a2-lyrics-preview {
+  width: 100%;
+  min-height: 12rem;
+}
+
+/* Notes heading with a static "Private" pill sitting right beside the title. */
+.a2-notes-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.a2-notes-heading {
+  margin: 0;
+}
+
+/* Informational (non-interactive) private status pill. */
+.a2-private-pill {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #5a4a20;
+  color: #c9a227;
+  background: #121824;
+}
+
+/* Notes textarea stays fully responsive to the window width. */
+.a2-field--notes textarea {
+  width: 100%;
+  max-width: none;
+  resize: vertical;
+}
+
+/* After general field widths so Subtitle / Caption / About fill the title column. */
+.a2-section--song-identity .a2-field--song > input,
+.a2-section--song-identity .a2-field--song > textarea,
+.a2-section--song-identity .a2-field--song > .a2-markdown-preview {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+.a2-section--song-identity .a2-field--song > textarea {
+  resize: vertical;
+}
+
+.a2-file-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.5rem 0;
+  flex-wrap: wrap;
+}
+
+.a2-file-row code,
+.a2-ref-note code {
+  font-size: 0.78rem;
+  color: #b8c4d8;
+}
+
+.a2-ref-note {
+  font-size: 0.82rem;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-secondary {
+  margin-top: 0.35rem;
+}
+
+.a2-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.a2-drop-zone {
+  border: 1px dashed #3a465c;
+  border-radius: 6px;
+  padding: 1.25rem;
+  text-align: center;
+  color: var(--muted, #8b95a8);
+  font-size: 0.85rem;
+  background: #101622;
+}
+
+.a2-track-list {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 40rem;
+}
+
+.a2-track-row {
+  display: grid;
+  grid-template-columns: 2rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  background: #121824;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+}
+
+.a2-track-pos {
+  color: var(--muted, #8b95a8);
+  font-size: 0.8rem;
+}
+
+.a2-track-name {
+  font-size: 0.9rem;
+}
+
+.a2-related-list {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 40rem;
+}
+
+.a2-related-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  background: #121824;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+}
+
+.a2-related-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.a2-related-type {
+  font-size: 0.8rem;
+  max-width: 12rem;
+}
+
+.a2-report-ref-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.a2-recordings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-width: 40rem;
+}
+
+.a2-compile-modal {
+  max-width: 36rem;
+  max-height: min(85vh, 40rem);
+  overflow: auto;
+}
+
+.a2-compile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.75rem 0 1rem;
+}
+
+.a2-compile-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.88rem;
+}
+
+.a2-compile-warnings {
+  color: #e6c07b;
+}
+
+.a2-compile-path {
+  display: block;
+  margin: 0.4rem 0 0.6rem;
+  font-size: 0.75rem;
+  word-break: break-all;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-compile-preview-url {
+  font-size: 0.78rem;
+}
+
+.a2-linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #9ec5ff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.a2-linkish:hover {
+  text-decoration: underline;
+}
+
+.a2-text-body {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  min-height: 16rem;
+}
+
+.a2-text-stats {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.78rem;
+}
+
+/* Recordings table — one row per recording, everything on a single line. */
+.a2-recording-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.a2-recording-table th {
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted, #8b95a8);
+  padding: 0 0.5rem 0.35rem;
+}
+
+.a2-recording-table td {
+  padding: 0.4rem 0.5rem;
+  border-top: 1px solid var(--border, #2a3344);
+  vertical-align: middle;
+}
+
+.a2-recording-name code {
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+/* Keep the publish + primary + action columns tight so the filename takes the slack. */
+.a2-recording-publish-col {
+  width: 6rem;
+  white-space: nowrap;
+}
+
+.a2-recording-primary-col {
+  width: 7rem;
+  white-space: nowrap;
+}
+
+.a2-recording-actions-col {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.a2-recording-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+}
+
+/* Compact square icon buttons (choose file / play-pause). */
+.a2-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1;
+  background: #121824;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.a2-icon-btn:hover:not(:disabled) {
+  border-color: #3a5478;
+}
+
+.a2-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Smaller "Add recording…" button, flush left. */
+.a2-add-recording {
+  align-self: flex-start;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+}
+
+.a2-track-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* Modal overlays — deleted items + delete confirmation */
+.a2-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.a2-modal {
+  width: min(100%, 42rem);
+  max-height: min(90vh, 720px);
+  display: flex;
+  flex-direction: column;
+  background: #121824;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.a2-deleted-modal {
+  width: min(100%, 52rem);
+}
+
+.a2-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem 0.75rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+}
+
+.a2-modal-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.a2-modal-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-modal-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem 0.35rem;
+}
+
+.a2-modal-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 1.1rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+}
+
+.a2-modal-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 0.55rem 0.75rem;
+  color: var(--muted, #8b95a8);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.a2-modal-tab.is-active {
+  color: inherit;
+  border-bottom-color: #6b9fd4;
+}
+
+.a2-modal-body {
+  padding: 1rem 1.1rem;
+  overflow: auto;
+  flex: 1;
+}
+
+.a2-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1.1rem 1rem;
+  border-top: 1px solid var(--border, #2a3344);
+}
+
+.a2-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: flex-end;
+}
+
+.a2-field-row .a2-field {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+}
+
+.a2-field-checkbox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.a2-field-checkbox input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+}
+
+.a2-field-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+/* Match Subtitle/Caption label→field gap (parent .a2-field--song gap only). */
+.a2-field-heading-row.a2-field-heading-row--song {
+  align-items: flex-end;
+  margin-bottom: 0;
+}
+
+.a2-segmented {
+  display: inline-flex;
+  gap: 0.15rem;
+  padding: 0.1rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 6px;
+}
+
+.a2-segmented button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.a2-segmented button.is-active {
+  background: var(--panel-raised, #1c2433);
+}
+
+.a2-markdown-preview {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  /* Keep Preview roughly as tall as the About write textarea (rows=5). */
+  min-height: 7.5rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 6px;
+  background: var(--panel-raised, #141a24);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.a2-char-warn {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: #d4a017;
+}
+
+.a2-slug-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+  margin-top: 0.65rem;
+}
+
+.a2-slug-row .a2-muted {
+  margin: 0;
+}
+
+.a2-ghost {
+  border: 1px solid var(--border, #2a3344);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.a2-suno-import .a2-inline-form {
+  margin-top: 0.35rem;
+}
+
+.a2-suno-import .a2-inline-form input[type='text'] {
+  flex: 1 1 14rem;
+  min-width: 12rem;
+}
+
+.a2-link-stub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 8px;
+  background: var(--panel-raised, #141a24);
+}
+
+.a2-link-stub-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.a2-link-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.a2-link-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 8px;
+}
+
+.a2-link-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+}
+
+.a2-link-kind {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+
+.a2-vis-public,
+.a2-vis-private {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--border, #2a3344);
+}
+
+.a2-vis-private {
+  color: #c9a227;
+}
+
+.a2-link-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.55rem;
+}
+
+.a2-field-compact {
+  min-width: 8rem;
+}
+
+.a2-field--date,
+.a2-field--bpm {
+  max-width: 9rem;
+}
+
+.a2-field--half {
+  max-width: 18rem;
+}
+
+.a2-field--date input,
+.a2-field-date,
+.a2-field--bpm input,
+.a2-field-bpm {
+  width: 100%;
+  max-width: 9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.a2-field--half input {
+  width: 100%;
+  max-width: 18rem;
+}
+
+.a2-tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  background: #121824;
+}
+
+.a2-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.35rem 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--panel-raised, #1c2433);
+  border: 1px solid var(--border, #2a3344);
+  color: var(--text, #e8ecf4);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.a2-pill-remove {
+  border: 0;
+  background: transparent;
+  color: var(--muted, #8b95a8);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.a2-pill-remove:hover {
+  color: var(--text, #e8ecf4);
+}
+
+.a2-tag-input-field {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0.2rem 0.25rem !important;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.a2-streaming-block {
+  margin: 0.85rem 0 1rem;
+}
+
+.a2-streaming-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.a2-streaming-heading {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.a2-streaming-table,
+.a2-link-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.a2-streaming-table th,
+.a2-streaming-table td,
+.a2-link-table th,
+.a2-link-table td {
+  padding: 0.4rem 0.45rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.a2-streaming-table th,
+.a2-link-table th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted, #8b95a8);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.a2-streaming-table select,
+.a2-streaming-table input,
+.a2-streaming-table .a2-streaming-url,
+.a2-streaming-table .a2-field-date,
+.a2-link-table select,
+.a2-link-table input,
+.a2-link-table .a2-streaming-url,
+.a2-link-table .a2-field-date,
+.a2-link-table .a2-link-name-input {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  background: #121824;
+  color: inherit;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  padding: 0.3rem 0.4rem;
+  font: inherit;
+}
+
+/* Public / remove columns stay narrow; provider & date get sensible caps. */
+.a2-streaming-table .a2-field-date,
+.a2-link-table .a2-field-date {
+  max-width: 7.5rem;
+}
+
+/* Name/Provider trimmed ~15% vs before (30% → 25%) so URL gets the room. */
+.a2-link-table td:first-child,
+.a2-link-table th:first-child {
+  width: 25%;
+  min-width: 6rem;
+}
+
+/* URL column takes the slack. */
+.a2-link-table td:nth-child(2),
+.a2-link-table th:nth-child(2) {
+  width: auto;
+}
+
+.a2-streaming-public,
+.a2-status-cell {
+  text-align: center;
+  width: 4.5rem;
+  white-space: nowrap;
+}
+
+/* Read-only "Date Added" timestamp. */
+.a2-date-added {
+  width: 7rem;
+  white-space: nowrap;
+  color: var(--muted, #8b95a8);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.a2-streaming-table input[type='checkbox'],
+.a2-link-table input[type='checkbox'] {
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.a2-icon-danger {
+  border: 0;
+  background: transparent;
+  color: var(--muted, #8b95a8);
+  cursor: pointer;
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+}
+
+.a2-icon-danger:hover {
+  color: #e07070;
+}
+
+.a2-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Grayish empty-state note (streaming / web links). */
+.a2-empty-note {
+  margin: 0.25rem 0 0.5rem;
+  color: var(--muted, #8b95a8);
+  font-size: 0.82rem;
+}
+
+/* Inline "?" help popover. */
+.a2-label-with-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.a2-help-popover {
+  position: relative;
+  display: inline-flex;
+}
+
+.a2-help-toggle {
+  width: 1.05rem;
+  height: 1.05rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border, #2a3344);
+  background: var(--panel-raised, #1c2433);
+  color: var(--muted, #8b95a8);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.a2-help-toggle:hover {
+  color: var(--text, #e8ecf4);
+}
+
+.a2-help-bubble {
+  position: absolute;
+  top: 130%;
+  left: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 18rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 6px;
+  background: var(--panel-raised, #141a24);
+  color: var(--text, #e8ecf4);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.4;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.a2-help-bubble code {
+  font-size: 0.74rem;
+}
+
+/* Song Pages destination card: icon + label + URL + status box. */
+.a2-song-pages-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.85rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 8px;
+  background: var(--panel-raised, #141a24);
+}
+
+.a2-song-pages-icon {
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.a2-song-pages-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.a2-song-pages-label {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.a2-song-pages-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+}
+
+.a2-song-pages-url {
+  color: var(--muted, #8b95a8);
+  font-size: 0.82rem;
+  text-decoration: none;
+  cursor: default;
+}
+
+.a2-song-pages-status-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.a2-song-pages-status-label {
+  font-size: 0.78rem;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-status-box {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid var(--border, #2a3344);
+  background: #121824;
+  color: var(--muted, #8b95a8);
+  white-space: nowrap;
+}
+
+.a2-status-box--preview {
+  color: #c9a227;
+  border-color: #5a4a20;
+}
+
+.a2-status-box--published {
+  color: #4fbf7b;
+  border-color: #2f6b46;
+}
+
+/* Grouped link sections (Web Links / Social Posts / Distribution). */
+.a2-links-group {
+  margin: 0.85rem 0 1rem;
+}
+
+.a2-links-group .a2-streaming-heading {
+  margin-bottom: 0.5rem;
+}
+
+/* Redesigned link box: title row + body. */
+.a2-link-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 8px;
+}
+
+.a2-link-box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+}
+
+.a2-link-box-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.a2-link-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.a2-link-name-input {
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.88rem;
+  max-width: 16rem;
+}
+
+.a2-link-box-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.a2-icon-edit {
+  border: 0;
+  background: transparent;
+  color: var(--muted, #8b95a8);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+}
+
+.a2-icon-edit:hover {
+  color: var(--text, #e8ecf4);
+}
+
+/* Public / Private toggle pill. */
+.a2-vis-toggle {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, #2a3344);
+  background: #121824;
+  cursor: pointer;
+}
+
+.a2-vis-toggle.is-public {
+  color: #4fbf7b;
+  border-color: #2f6b46;
+}
+
+.a2-vis-toggle.is-private {
+  color: #c9a227;
+  border-color: #5a4a20;
+}
+
+/* Delete confirmation popover anchored to the trash icon. */
+.a2-delete-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.a2-delete-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.a2-delete-popover {
+  position: absolute;
+  top: 120%;
+  right: 0;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: max-content;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 8px;
+  background: var(--panel-raised, #141a24);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.a2-delete-popover-msg {
+  font-size: 0.82rem;
+  color: var(--text, #e8ecf4);
+}
+
+.a2-delete-popover-actions {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+/* Social / Distribution: narrow provider select + URL to its right. */
+.a2-provider-url-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.a2-provider-select {
+  flex: 0 0 auto;
+  width: 6rem;
+  max-width: 6rem;
+  padding: 0.3rem 0.35rem;
+  font-size: 0.8rem;
+}
+
+.a2-provider-url {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.a2-provider-url input {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+.a2-link-add {
+  margin: 0.35rem 0 0.5rem;
+}
+
+.a2-link-add-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.a2-process-panel {
+  margin: 0.75rem 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 8px;
+}
+
+.a2-process-panel h4 {
+  margin: 0 0 0.55rem;
+  font-size: 0.92rem;
+}
+
+/* Extra breathing room between the intro line and the tabs. */
+.a2-process-help {
+  margin-bottom: 1.15rem;
+}
+
+/* Tabbed creation-process areas (one tab per shown process type). */
+.a2-process-tabs-wrap {
+  margin: 0.5rem 0 0.85rem;
+}
+
+.a2-process-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+}
+
+.a2-process-tab {
+  border: 1px solid transparent;
+  border-bottom: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  /* Overlap the wrap's bottom border so the active tab connects to its panel. */
+  margin-bottom: -1px;
+}
+
+.a2-process-tab:hover {
+  background: var(--panel-raised, #1c2433);
+}
+
+.a2-process-tab.is-active {
+  border-color: var(--border, #2a3344);
+  background: var(--panel-raised, #1c2433);
+  font-weight: 600;
+}
+
+.a2-process-active {
+  border: 1px solid var(--border, #2a3344);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  padding: 0.7rem 0.8rem;
+}
+
+.a2-process-active-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+/* Target sub-tabs (Music / Mix · Vocals) — segmented pill group. */
+.a2-process-subtabs {
+  display: inline-flex;
+  gap: 0.15rem;
+  padding: 0.1rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 6px;
+}
+
+.a2-process-subtab {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.a2-process-subtab.is-active {
+  background: #26314a;
+  font-weight: 600;
+}
+
+.a2-process-single-target {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Inner detail panel drops its own frame — the active area supplies it. */
+.a2-process-active .a2-process-panel {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.a2-clear-btn {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.a2-chip-fieldset {
+  border: 0;
+  margin: 0 0 0.55rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.85rem;
+}
+
+.a2-chip-fieldset legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+
+.a2-chip-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.a2-ai-model-row,
+.a2-prompt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+}
+
+/* AI Generation models as a compact table of rows. */
+.a2-ai-model-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.a2-ai-model-table th,
+.a2-ai-model-table td {
+  padding: 0.35rem 0.4rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.a2-ai-model-table th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted, #8b95a8);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.a2-ai-model-table input[type='text'],
+.a2-ai-model-table input:not([type]) {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  background: #121824;
+  color: inherit;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  padding: 0.3rem 0.4rem;
+  font: inherit;
+}
+
+.a2-ai-primary-cell {
+  text-align: center;
+  width: 4rem;
+}
+
+.a2-ai-model-table input[type='checkbox'] {
+  width: auto;
+}
+
+.a2-ai-add-model {
+  margin-top: 0.15rem;
+}
+
+.a2-prompt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Prompt row: Type / sign / primary on one line, remove pushed right. */
+.a2-prompt-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.9rem;
+}
+
+/* Drop the field's bottom margin so the select bottom lines up with the bugs. */
+.a2-prompt-controls .a2-field {
+  margin-bottom: 0;
+}
+
+.a2-prompt-remove {
+  margin-left: auto;
+}
+
+/* Prompt text fills the panel — overrides the general 36rem field cap. */
+.a2-prompt-row textarea {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+/* Positive / negative "bug": green + by default, red − when negative.
+   Pill shape to match the Primary / Make primary bug. */
+.a2-sign-bug {
+  flex: 0 0 auto;
+  min-width: 2rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  color: #0c1018;
+}
+
+.a2-sign-bug.is-positive {
+  background: #4fbf7b;
+  border-color: #2f6b46;
+}
+
+.a2-sign-bug.is-negative {
+  background: #e07070;
+  border-color: #7a2f2f;
+}
+
+/* Primary "bug": solid black/white when primary; outlined "Make primary" otherwise. */
+.a2-primary-bug {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, #2a3344);
+  background: transparent;
+  color: var(--text, #e8ecf4);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.a2-primary-bug.is-primary {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+  cursor: default;
+}
+
+.a2-same-as-music {
+  margin-bottom: 0.55rem;
+}
+
+.a2-same-as-music-summary {
+  padding: 0.45rem 0.55rem;
+  border: 1px dashed var(--border, #2a3344);
+  border-radius: 6px;
+  background: var(--panel-raised, #141a24);
+}
+
+.a2-same-as-music-summary .a2-muted {
+  margin: 0 0 0.35rem;
+}
+
+.a2-same-as-music-line {
+  margin: 0.15rem 0;
+  font-size: 0.88rem;
+}
+
+.a2-artwork-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.a2-artwork-entry {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 8px;
+}
+
+.a2-section--stub {
+  opacity: 0.95;
+}
+
+.a2-stub-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.a2-stub-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.a2-video-stub-list {
+  margin: 0 0 0.5rem;
+  padding-left: 1.1rem;
+}
+
+.a2-delete-modal--impact {
+  border-color: #6b3a3a;
+}
+
+.a2-delete-lead {
+  margin: 0 0 0.75rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.a2-delete-impact-intro {
+  margin: 0 0 0.5rem;
+  color: #f0c8a8;
+  font-size: 0.88rem;
+}
+
+.a2-delete-impact-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.a2-deleted-body {
+  min-height: 12rem;
+}
+
+.a2-deleted-refresh-hint {
+  margin-bottom: 0.65rem;
+  font-size: 0.78rem;
+}
+
+.a2-deleted-list,
+.a2-report-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.a2-deleted-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  background: #0f141e;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+}
+
+.a2-deleted-row-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem 0.65rem;
+  min-width: 0;
+}
+
+.a2-deleted-kind {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-deleted-reports-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.65rem;
+}
+
+.a2-report-row {
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  background: #0f141e;
+  overflow: hidden;
+}
+
+.a2-report-summary {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem 0.65rem;
+  padding: 0.6rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.a2-report-summary:hover {
+  background: #151c28;
+}
+
+.a2-report-detail {
+  padding: 0 0.75rem 0.75rem;
+  border-top: 1px solid var(--border, #2a3344);
+}
+
+.a2-report-detail p {
+  margin: 0.65rem 0 0.5rem;
+  font-size: 0.82rem;
+}
+
+.a2-report-detail code {
+  font-size: 0.78rem;
+  word-break: break-all;
+}

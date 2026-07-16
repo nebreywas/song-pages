@@ -26,7 +26,8 @@ const PlaylistSongSourceIcon = memo(function PlaylistSongSourceIcon({
         className="playlist-source-icon"
         width={18}
         height={18}
-        decoding="sync"
+        decoding="async"
+        draggable={false}
       />
       <span className="sr-only">{label}</span>
     </span>
@@ -34,6 +35,11 @@ const PlaylistSongSourceIcon = memo(function PlaylistSongSourceIcon({
 });
 
 /** Source column — tiny round service logo per row. */
-export function PlaylistSongSourceCell({ song }: { song: SongRow }) {
-  return <PlaylistSongSourceIcon sourceId={resolvePlaylistSongSource(song).id} />;
-}
+export const PlaylistSongSourceCell = memo(
+  function PlaylistSongSourceCell({ song }: { song: SongRow }) {
+    return <PlaylistSongSourceIcon sourceId={resolvePlaylistSongSource(song).id} />;
+  },
+  (prev, next) =>
+    prev.song.id === next.song.id &&
+    resolvePlaylistSongSource(prev.song).id === resolvePlaylistSongSource(next.song).id,
+);

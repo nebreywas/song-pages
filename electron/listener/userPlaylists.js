@@ -117,10 +117,13 @@ function isCompleteCatalogSnapshot(fields) {
     const { parseSunoPageClipUuid } = require('./sunoDemo/feature');
     const clipUuid = parseSunoPageClipUuid(fields.page_url);
     if (clipUuid) {
+      // Year + provider metadata force a one-time re-fetch for older Suno rows.
       return Boolean(
         fields.song_manifest_url?.trim() &&
         fields.external_id?.trim() &&
-        fields.playback_url?.trim(),
+        fields.playback_url?.trim() &&
+        String(fields.year ?? '').trim() &&
+        String(fields.provider_metadata_json ?? '').trim(),
       );
     }
     return false;
@@ -163,6 +166,7 @@ function snapshotFieldsFromDbRow(row) {
     site_root_normalized: row.site_root_normalized ?? null,
     lyrics: row.lyrics ?? '',
     snapshot_refreshed_at: row.snapshot_refreshed_at ?? row.added_at ?? null,
+    provider_metadata_json: row.provider_metadata_json ?? null,
   };
 }
 
@@ -217,6 +221,10 @@ function migratePlaylistSongColumns(db) {
   }
   if (!cols.includes('skipped')) {
     db.exec('ALTER TABLE user_playlist_songs ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0');
+  }
+  // Provider-specific JSON blob (Suno Studio clip fields, etc.) — kept out of flat columns.
+  if (!cols.includes('provider_metadata_json')) {
+    db.exec('ALTER TABLE user_playlist_songs ADD COLUMN provider_metadata_json TEXT');
   }
   repairSunoPlaylistSnapshotPointers(db);
   repairLegacySunoCoverSnapshots(db);
@@ -315,6 +323,7 @@ function captureSongFields(song) {
     site_root_normalized: song.site_root_normalized ?? null,
     lyrics: song.lyrics ?? '',
     snapshot_refreshed_at: song.snapshot_refreshed_at ?? null,
+    provider_metadata_json: song.provider_metadata_json ?? null,
   };
 }
 
@@ -561,7 +570,7 @@ function repairUserPlaylistSnapshots(db) {
        library_song_id = ?, source_artist_id = ?, artist_name = ?, title = ?, album = ?, year = ?,
        caption = ?, cover_url = ?, page_url = ?, playback_url = ?, song_manifest_url = ?,
        playback_scope = ?, playback_quality = ?, external_id = ?, duration_seconds = ?,
-       site_root_normalized = ?, lyrics = ?, snapshot_refreshed_at = ?
+       site_root_normalized = ?, lyrics = ?, snapshot_refreshed_at = ?, provider_metadata_json = ?
      WHERE id = ?`,
   );
 
@@ -600,6 +609,7 @@ function repairUserPlaylistSnapshots(db) {
       fields.site_root_normalized,
       fields.lyrics ?? '',
       fields.snapshot_refreshed_at ?? null,
+      fields.provider_metadata_json ?? null,
       row.id,
     );
   }
@@ -812,6 +822,7 @@ function rowToSongRow(row, playlistArtistId) {
     library_song_id: row.library_song_id ?? null,
     added_at: row.added_at ?? null,
     skipped: row.skipped ? 1 : 0,
+    provider_metadata_json: row.provider_metadata_json ?? null,
   };
 }
 
@@ -858,8 +869,9 @@ function insertSongFields(playlistId, fields) {
       `INSERT INTO user_playlist_songs (
          playlist_id, library_song_id, source_artist_id, artist_name, title, album, year, caption,
          cover_url, page_url, playback_url, song_manifest_url, playback_scope, playback_quality,
-         external_id, duration_seconds, site_root_normalized, lyrics, snapshot_refreshed_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+         external_id, duration_seconds, site_root_normalized, lyrics, snapshot_refreshed_at,
+         provider_metadata_json
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`,
     )
     .run(
       playlistId,
@@ -880,6 +892,7 @@ function insertSongFields(playlistId, fields) {
       fields.duration_seconds,
       fields.site_root_normalized,
       fields.lyrics ?? '',
+      fields.provider_metadata_json ?? null,
     );
 
   const entryId = insert.lastInsertRowid;

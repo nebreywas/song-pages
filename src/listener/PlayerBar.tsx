@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { formatTime } from './formatTime';
+import { formatTime } from '@shared/listener/formatTime';
 import type { SeekTimeDisplay } from '@shared/listener/playerSettings';
 import { ScrollingNowPlaying } from './ScrollingNowPlaying';
 import { usePressHold } from '../visualizers/settings/ui/usePressHold';
@@ -28,6 +28,8 @@ type PlayerBarProps = {
   nowPlayingTitle: string;
   nowPlayingArtist: string;
   nowPlayingCoverUrl: string | null;
+  /** Jump the playlist list to the currently playing song. */
+  onRevealNowPlaying?: () => void;
   shuffle: boolean;
   repeatMode: RepeatMode;
   volume: number;
@@ -58,6 +60,7 @@ type PlayerBarProps = {
   onToggleChromeMinified?: () => void;
   onDeck?: PlayerOnDeckInfo | null;
   onClearOnDeck?: () => void;
+  onRevealOnDeck?: () => void;
   songHistoryOpen?: boolean;
   onSongHistoryOpenChange?: (open: boolean) => void;
   songHistoryEntries?: SongHistoryEntry[];
@@ -87,6 +90,7 @@ export function PlayerBar({
   nowPlayingTitle,
   nowPlayingArtist,
   nowPlayingCoverUrl,
+  onRevealNowPlaying,
   shuffle,
   repeatMode,
   volume,
@@ -117,6 +121,7 @@ export function PlayerBar({
   onToggleChromeMinified,
   onDeck = null,
   onClearOnDeck,
+  onRevealOnDeck,
   songHistoryOpen = false,
   onSongHistoryOpenChange,
   songHistoryEntries = [],
@@ -197,7 +202,8 @@ export function PlayerBar({
     repeatMode === 'one' ? 'Repeat current song' : repeatMode === 'all' ? 'Repeat playlist' : 'Repeat off';
 
   const visualizerDisabled = !canUseVisualizer || vcLive;
-  const projectionDisabled = !canUseVisualizer || vcLive;
+  // Projector can open for Song Page / homepage even when nothing is playing.
+  const projectionDisabled = vcLive;
 
   const projectionActive = Boolean(projectionOpen);
   const visualizerHighlighted = Boolean(embeddedVisualizerActive);
@@ -289,6 +295,8 @@ export function PlayerBar({
         coverUrl={nowPlayingCoverUrl}
         onDeck={onDeck}
         onClearOnDeck={onClearOnDeck}
+        onTitleActivate={onRevealNowPlaying}
+        onRevealOnDeck={onRevealOnDeck}
         onCoverDoubleActivate={
           onSongHistoryOpenChange ? () => onSongHistoryOpenChange(true) : undefined
         }
@@ -354,13 +362,13 @@ export function PlayerBar({
                 onClick={() => handleMenuOption(() => onToggleProjection?.())}
                 title={
                   projectionActive
-                    ? 'Close projection window'
+                    ? 'Close Projector'
                     : visualizerHighlighted
-                      ? 'Open projection with visualizer'
-                      : 'Open projection with song page'
+                      ? 'Open Projector: Visualizer'
+                      : 'Open Projector (Song Page / Video)'
                 }
               >
-                Projection
+                Projector
               </button>
               {onVcClick ? (
                 <>

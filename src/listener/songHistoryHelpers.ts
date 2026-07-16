@@ -1,5 +1,5 @@
 import type { ArtistRow, SongRow } from '../types/app';
-import type { OnDeckTrack } from '@shared/listener/playbackDetours';
+import type { OnDeckTrack } from '@shared/playback/detours/state';
 import {
   normalizeSongHistoryEntry,
   type SongHistoryEntry,

@@ -51,16 +51,140 @@
   padding-top: 0.25rem;
 }
 
+.suno-demo-song-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+
 .suno-demo-song-title {
-  margin: 0 0 0.35rem;
+  margin: 0;
   font-size: 1.5rem;
   line-height: 1.2;
+}
+
+.suno-demo-song-model-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  color: var(--text, #eee);
+  background: color-mix(in srgb, var(--accent, #6cf) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #6cf) 45%, transparent);
+}
+
+.suno-demo-song-explicit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted, #aaa);
+  border: 1px solid var(--panel-border, #555);
 }
 
 .suno-demo-song-artist {
   margin: 0;
   color: var(--text-muted, #aaa);
   font-size: 1.05rem;
+}
+
+.suno-demo-song-creator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted, #aaa);
+}
+
+.suno-demo-song-creator-avatar {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  object-fit: cover;
+  background: var(--panel-border, #333);
+}
+
+.suno-demo-song-creator-handle {
+  opacity: 0.9;
+}
+
+.suno-demo-song-creator-handle-btn {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  opacity: 0.9;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.suno-demo-song-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  margin: 0.55rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted, #aaa);
+}
+
+.song-page-source-pill {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.65rem 0 0;
+}
+
+.suno-demo-song-tags {
+  margin: 0 0 1.1rem;
+}
+
+.suno-demo-song-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.suno-demo-song-tag {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--text, #eee);
+  background: color-mix(in srgb, var(--panel-border, #444) 55%, transparent);
+  border: 1px solid var(--panel-border, #444);
+}
+
+.suno-demo-song-style {
+  margin: 0 0 1.25rem;
+}
+
+.suno-demo-song-section-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted, #aaa);
+}
+
+.suno-demo-song-style-body {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
 }
 
 .suno-demo-song-lyrics-heading {
@@ -714,6 +838,38 @@
   min-height: 0;
 }
 
+.soundcloud-song-page--rich {
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 1.5rem 2rem 2rem;
+}
+
+.soundcloud-song-page--projector {
+  /* Projector fills the window shell — match listener song-page padding feel. */
+  height: 100%;
+}
+
+.soundcloud-song-page-header {
+  flex: 0 0 auto;
+  margin-bottom: 0.35rem;
+}
+
+.soundcloud-song-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.55rem 0 0;
+  color: var(--text-muted, #aaa);
+  font-size: 0.85rem;
+}
+
+.soundcloud-song-source-logo {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
 .soundcloud-song-header {
   flex: 0 0 auto;
 }
@@ -731,8 +887,9 @@
 }
 
 .soundcloud-song-player-wrap {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 5.5rem;
+  margin-top: 0.35rem;
 }
 
 .soundcloud-player-shell,

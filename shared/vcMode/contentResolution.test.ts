@@ -34,6 +34,7 @@ function songPayload() {
     caption: 'A caption',
     coverUrl: 'https://example.com/cover.jpg',
     videoCoverUrl: 'https://example.com/video-cover.mp4',
+    lyricsVideoUrl: 'https://example.com/lyrics-video.mp4',
     about: 'About this song',
     lyrics: 'Line one\nLine two',
     artistId: 10,
@@ -66,6 +67,24 @@ test('resolveVcCellContent resolves song cover and title from payload', () => {
   assert.equal(title.kind, 'text');
   if (title.kind === 'text') {
     assert.equal(title.text, 'Test Song');
+  }
+});
+
+test('resolveVcCellContent resolves video-cover from song payload', () => {
+  const ctx = baseContext({ song: songPayload() });
+  const videoCover = resolveVcCellContent('video-cover', null, ctx);
+  assert.equal(videoCover.kind, 'video');
+  if (videoCover.kind === 'video') {
+    assert.equal(videoCover.remoteUrl, 'https://example.com/video-cover.mp4');
+  }
+});
+
+test('resolveVcCellContent resolves lyrics-video from song payload', () => {
+  const ctx = baseContext({ song: songPayload() });
+  const lyricsVideo = resolveVcCellContent('lyrics-video', null, ctx);
+  assert.equal(lyricsVideo.kind, 'video');
+  if (lyricsVideo.kind === 'video') {
+    assert.equal(lyricsVideo.remoteUrl, 'https://example.com/lyrics-video.mp4');
   }
 });
 
@@ -354,6 +373,58 @@ test('resolveVcCellContent applies ALARE lyric tracking', () => {
   }
 });
 
+test('resolveVcCellContent applies lyric presentation effect override', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: 'Hello world' },
+  });
+
+  const plain = resolveVcCellContent('lyrics', null, ctx);
+  assert.equal(plain.kind, 'lyrics');
+  if (plain.kind === 'lyrics') {
+    assert.equal(plain.lyricPresentationEffect, 'none');
+    assert.equal(plain.lyricTypographyMode, 'plain');
+  }
+
+  const pulsed = resolveVcCellContent('lyrics', null, ctx, {
+    lyricTracking: 'alare',
+    lyricPresentationEffect: 'beat-pulse',
+  });
+  assert.equal(pulsed.kind, 'lyrics');
+  if (pulsed.kind === 'lyrics') {
+    assert.equal(pulsed.lyricTracking, 'alare');
+    assert.equal(pulsed.lyricPresentationEffect, 'beat-pulse');
+    assert.equal(pulsed.lyricTypographyMode, 'plain');
+  }
+});
+
+test('resolveVcCellContent applies lyric typography mode override', () => {
+  const ctx = baseContext({
+    song: { ...songPayload(), lyrics: 'Hello world' },
+  });
+
+  const pretty = resolveVcCellContent('lyrics', null, ctx, {
+    lyricTracking: 'alare',
+    lyricTypographyMode: 'pretty',
+  });
+  assert.equal(pretty.kind, 'lyrics');
+  if (pretty.kind === 'lyrics') {
+    assert.equal(pretty.lyricTracking, 'alare');
+    assert.equal(pretty.lyricTypographyMode, 'pretty');
+    assert.equal(pretty.lyricPresentationEffect, 'none');
+    assert.equal(pretty.prettySoftBreakLongLines, false);
+  }
+
+  const soft = resolveVcCellContent('lyrics', null, ctx, {
+    lyricTracking: 'alare',
+    lyricTypographyMode: 'pretty',
+    prettySoftBreakLongLines: true,
+  });
+  assert.equal(soft.kind, 'lyrics');
+  if (soft.kind === 'lyrics') {
+    assert.equal(soft.prettySoftBreakLongLines, true);
+  }
+});
+
 test('resolveVcCellContent strips bracketed lyrics when configured', () => {
   const ctx = baseContext({
     song: { ...songPayload(), lyrics: '[Verse 1]\nHello [softly] world\n[Chorus]\nAgain' },
@@ -368,7 +439,7 @@ test('resolveVcCellContent strips bracketed lyrics when configured', () => {
   const stripped = resolveVcCellContent('lyrics', null, ctx, { lyricsRemoveBracketed: true });
   assert.equal(stripped.kind, 'lyrics');
   if (stripped.kind === 'lyrics') {
-    assert.equal(stripped.text, '\nHello world\n\nAgain');
+    assert.equal(stripped.text, 'Hello world\n\nAgain');
   }
 });
 
@@ -433,5 +504,60 @@ test('resolveVcCellContent resolves upcoming covers when playlist has entries', 
   if (upcoming.kind === 'upcoming-covers') {
     assert.equal(upcoming.songs.length, 1);
     assert.equal(upcoming.presentation.layout, 'multi-row');
+  }
+});
+test('resolveVcCellContent resolves Source with Artist Page label for catalog tracks', () => {
+  const ctx = baseContext({
+    song: {
+      ...songPayload(),
+      sourceId: 'song-pages',
+      shareUrl: 'https://example.com/artist/song',
+    },
+  });
+  const source = resolveVcCellContent('source', null, ctx, { sourceDisplayMode: 'title', sourceOpenInBrowser: true });
+  assert.equal(source.kind, 'source');
+  if (source.kind === 'source') {
+    assert.equal(source.title, 'Artist Page');
+    assert.equal(source.presentation.displayMode, 'title');
+    assert.equal(source.presentation.openInBrowser, true);
+    assert.equal(source.shareUrl, 'https://example.com/artist/song');
+  }
+});
+
+test('resolveVcCellContent formats Song URL without https by default', () => {
+  const ctx = baseContext({
+    song: {
+      ...songPayload(),
+      shareUrl: 'https://www.youtube.com/watch?v=abc123',
+    },
+  });
+  const url = resolveVcCellContent('song-url', null, ctx, {});
+  assert.equal(url.kind, 'song-url');
+  if (url.kind === 'song-url') {
+    assert.equal(url.displayText, 'www.youtube.com/watch?v=abc123');
+    assert.equal(url.presentation.underline, false);
+    assert.equal(url.presentation.hoverEffect, false);
+  }
+
+  const rooted = resolveVcCellContent('song-url', null, ctx, { songUrlRootOnly: true, songUrlIncludeHttps: true });
+  assert.equal(rooted.kind, 'song-url');
+  if (rooted.kind === 'song-url') {
+    assert.equal(rooted.displayText, 'https://www.youtube.com');
+  }
+});
+
+test('resolveVcCellContent resolves WaveSurfer with presentation overrides', () => {
+  const resolved = resolveVcCellContent('wavesurfer', null, baseContext(), {
+    wavesurferViewMode: 'barwave',
+    wavesurferBarWidth: 6,
+    wavesurferBarGap: 2,
+    wavesurferPaintProgress: false,
+  });
+  assert.equal(resolved.kind, 'wavesurfer');
+  if (resolved.kind === 'wavesurfer') {
+    assert.equal(resolved.presentation.viewMode, 'barwave');
+    assert.equal(resolved.presentation.barWidth, 6);
+    assert.equal(resolved.presentation.barGap, 2);
+    assert.equal(resolved.presentation.paintProgress, false);
   }
 });

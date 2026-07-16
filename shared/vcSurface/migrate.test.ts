@@ -150,6 +150,15 @@ test('migrateVcConfig preserves visualizerAlsoClickToChange on modern configs', 
   assert.equal(migrated.visualizerAlsoClickToChange, true);
 });
 
+test('migrateVcConfig preserves showVisualizerName on modern configs', () => {
+  const migrated = migrateVcConfig({
+    ...modernPersistedConfig(),
+    showVisualizerName: true,
+  });
+
+  assert.equal(migrated.showVisualizerName, true);
+});
+
 test('migrateVcConfig migrates legacy cell content strings through normalize', () => {
   const config = migrateVcConfig({
     surface: createDefaultSurface('quad'),

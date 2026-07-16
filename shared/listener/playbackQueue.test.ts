@@ -6,7 +6,7 @@ import {
   pickPreviousPlayableSongId,
   pickUpcomingPlayableSongIds,
   resolvePlayableSong,
-} from './playbackQueue.ts';
+} from '../playback/queue/planner.ts';
 
 const songs = [
   { id: 1, skipped: 0 },

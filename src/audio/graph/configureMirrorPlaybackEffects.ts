@@ -1,7 +1,11 @@
 import { applyLabEffectParams } from '../effectsLab/applyLabPreset';
 import { bypassParams, resolveLabEffectParams } from '../effectsLab/presets';
 import type { EffectsLabState, LabEffectId } from '../effectsLab/types';
-import { isEffectsLabAudible, isWorkletEnhanceActive } from '../effectsLab/types';
+import {
+  isEffectsLabAudible,
+  isWorkletEnhanceActive,
+  shouldBypassLabPreset,
+} from '../effectsLab/types';
 import {
   applyLabWorkletEnhance,
   ensureWorkletEnhanceNode,
@@ -75,7 +79,8 @@ export function configureMirrorPlaybackEffectsGraph(
     const params = resolveLabEffectParams(
       input.effectsLab.effectId as LabEffectId,
       input.effectsLab.outputTrimDb,
-      input.effectsLab.abBypass,
+      // Hold-to-apply sets abBypass while Activate is off — that must NOT flatten the preset.
+      shouldBypassLabPreset(input.effectsLab as EffectsLabState),
     );
     applyLabEffectParams(graph, params);
     syncWorkletEnhance(graph, input.effectsLab);

@@ -1,5 +1,5 @@
 import { applyCustomPlaylistOrder } from './playlistOrder.ts';
-import { playableQueueSongs } from './playbackQueue.ts';
+import { playableQueueSongs } from '../playback/queue/planner.ts';
 
 type CueSong = {
   id: number;

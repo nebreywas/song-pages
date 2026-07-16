@@ -64,6 +64,7 @@ export function VisualizerSettingsDialog({
     if (!open) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
+      // Field changes already autosave — dismiss without a second flush.
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKeyDown);
@@ -73,7 +74,13 @@ export function VisualizerSettingsDialog({
   if (!open || !activeExperience) return null;
 
   const handleFieldChange = (key: string, value: boolean | number | string) => {
-    setValues((current) => ({ ...current, [key]: value }));
+    setValues((current) => {
+      const next = { ...current, [key]: value };
+      // Persist immediately so toggles (esp. Meyda bass drive) survive song changes
+      // without requiring an explicit Save click.
+      void saveExperienceSettings(activeExperience.id, activeExperience.settings, next);
+      return next;
+    });
   };
 
   const handleSave = async () => {
@@ -87,14 +94,22 @@ export function VisualizerSettingsDialog({
     onClose();
   };
 
+  const handleClose = async () => {
+    // Flush current dialog values on dismiss (backdrop / ×) so nothing is lost.
+    await saveExperienceSettings(activeExperience.id, activeExperience.settings, values);
+    onClose();
+  };
+
   const handleReset = () => {
-    setValues(defaultSettingsFromSchema(activeExperience.settings));
+    const defaults = defaultSettingsFromSchema(activeExperience.settings);
+    setValues(defaults);
+    void saveExperienceSettings(activeExperience.id, activeExperience.settings, defaults);
   };
 
   const credits = resolveExperienceCredits(activeExperience.id);
 
   return (
-    <div className="viz-settings-backdrop" role="presentation" onClick={onClose}>
+    <div className="viz-settings-backdrop" role="presentation" onClick={() => void handleClose()}>
       <div
         className="viz-settings-modal panel"
         role="dialog"
@@ -104,7 +119,12 @@ export function VisualizerSettingsDialog({
       >
         <header className="viz-settings-header">
           <h2 id="viz-settings-title">Visualizer Settings</h2>
-          <button type="button" className="btn icon-btn" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            className="btn icon-btn"
+            onClick={() => void handleClose()}
+            aria-label="Close"
+          >
             ×
           </button>
         </header>

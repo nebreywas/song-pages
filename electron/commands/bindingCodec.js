@@ -134,6 +134,7 @@ const LEGACY_ACTION_BY_COMMAND = {
   'alare-speed-down': 'alareSpeedDown',
   'alare-speed-reset': 'alareSpeedReset',
   'change-visualizer': 'changeVisualizer',
+  'show-visualizer-name': 'showVisualizerName',
 };
 
 function migrateToggleHostGraphicBinding(state) {
@@ -203,6 +204,7 @@ function createDefaultMappingState() {
     gateTimeoutMs: 8000,
     configuredCommandIds,
     configuredKudoPresetIds: [],
+    configuredSurfaceDesignIds: [],
     commands: {
       'toggle-cover': { direct: `${O}+c` },
       'toggle-host': { direct: `${O}+f` },
@@ -221,6 +223,7 @@ function createDefaultMappingState() {
     reservedKudoKeys: [],
     kudoPresetByReservedKey: {},
     kudoPresetBindings: {},
+    surfaceDesignBindings: {},
   };
 }
 
@@ -376,6 +379,19 @@ function migrateMappingState(raw) {
     ? raw.configuredKudoPresetIds.filter((id) => typeof id === 'string')
     : Object.keys(kudoPresetBindings);
 
+  const surfaceDesignBindings = {};
+  if (raw.surfaceDesignBindings && typeof raw.surfaceDesignBindings === 'object') {
+    for (const [designId, value] of Object.entries(raw.surfaceDesignBindings)) {
+      const sanitized = sanitizeBindingSlot(value);
+      if (!sanitized) continue;
+      surfaceDesignBindings[designId] = { ...surfaceDesignBindings[designId], ...sanitized };
+    }
+  }
+
+  const configuredSurfaceDesignIds = Array.isArray(raw.configuredSurfaceDesignIds)
+    ? raw.configuredSurfaceDesignIds.filter((id) => typeof id === 'string')
+    : Object.keys(surfaceDesignBindings);
+
   const commands = {};
   for (const commandId of configuredCommandIds) {
     const fromRaw = rawCommands ? sanitizeBindingSlot(rawCommands[commandId]) : null;
@@ -393,6 +409,7 @@ function migrateMappingState(raw) {
         : defaults.gateTimeoutMs,
     configuredCommandIds,
     configuredKudoPresetIds,
+    configuredSurfaceDesignIds,
     commands,
     reservedKudoKeys: Array.isArray(raw.reservedKudoKeys) ? raw.reservedKudoKeys : [],
     kudoPresetByReservedKey:
@@ -400,6 +417,7 @@ function migrateMappingState(raw) {
         ? raw.kudoPresetByReservedKey
         : {},
     kudoPresetBindings,
+    surfaceDesignBindings,
   };
 
   const synced = syncReservedKudoKeysFromSlots(migrated);
@@ -445,6 +463,19 @@ function resolveBindingToCommand(state, source, binding) {
     }
     if (source === 'extended-function' && slot.extendedFunction === normalizedBinding) {
       return { commandId: `trigger-kudo-${presetId}`, source, binding: slot.extendedFunction };
+    }
+  }
+
+  for (const [designId, slot] of Object.entries(state.surfaceDesignBindings || {})) {
+    const commandId = `switch-surface-${designId}`;
+    if (source === 'direct' && slot.direct?.toLowerCase() === normalizedBinding.toLowerCase()) {
+      return { commandId, source, binding: slot.direct };
+    }
+    if (source === 'gated' && slot.gated?.toLowerCase() === normalizedBinding) {
+      return { commandId, source, binding: slot.gated };
+    }
+    if (source === 'extended-function' && slot.extendedFunction === normalizedBinding) {
+      return { commandId, source, binding: slot.extendedFunction };
     }
   }
 

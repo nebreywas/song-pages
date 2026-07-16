@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
 import {
+  formatDualSlotSuppressedMessage,
+  selectRenderableCellContents,
+} from '@shared/vcMode/dualSlotAvailability';
+import {
+  VC_CONTENT_LABELS,
   VC_TRANSITION_FADE_MS,
   songSlotSettingsForContent,
   type VcCellAssignment,
@@ -13,6 +18,7 @@ import type { HostContentCatalog } from '@shared/hostContent';
 
 import { VcCellContentView } from './VcCellContentView';
 import { useCellClickCooldown } from './useVcWindowState';
+import { buildLiveVcResolutionContext } from './vcResolutionContext';
 import { useOptionalVcVisualizerRotationContext } from './VcVisualizerRotationContext';
 
 type VcCellProps = {
@@ -26,6 +32,8 @@ type VcCellProps = {
   isFloat?: boolean;
   /** Layout mode — block click-to-cycle and transport controls. */
   interactionDisabled?: boolean;
+  /** e.g. "Area 1" / "Float 2" — used when logging dual-slot suppression. */
+  regionLabel?: string;
 };
 
 function hostBindingForContent(
@@ -35,13 +43,6 @@ function hostBindingForContent(
   if (content === cell.slotA) return cell.hostSlotA;
   if (content === cell.slotB) return cell.hostSlotB;
   return null;
-}
-
-function activeContents(cell: VcCellAssignment): VcCellContent[] {
-  const items: VcCellContent[] = [];
-  if (cell.slotA) items.push(cell.slotA);
-  if (cell.slotB && cell.slotB !== cell.slotA) items.push(cell.slotB);
-  return items;
 }
 
 /** One surface region — optional primary/secondary cycling with replace or fade. */
@@ -54,11 +55,37 @@ export function VcCell({
   canvasFrame,
   isFloat = false,
   interactionDisabled = false,
+  regionLabel = 'Region',
 }: VcCellProps) {
-  const contents = useMemo(() => activeContents(cell), [cell]);
+  const resolutionCtx = useMemo(
+    () => buildLiveVcResolutionContext(state, hostCatalog),
+    [
+      hostCatalog,
+      state.currentSong,
+      state.artistName,
+      state.artistBio,
+      state.artistPhotoUrl,
+      state.playback,
+      state.upcoming,
+      state.config.useFallbacks,
+      state.config.suppressEmbedProviderLyricsMessages,
+      state.lyricsSourceReady,
+      state.config.gridDesign,
+    ],
+  );
+
+  const availability = useMemo(
+    () => selectRenderableCellContents(cell, resolutionCtx),
+    [cell, resolutionCtx],
+  );
+
+  const contents = availability.contents;
+  const switchingSuppressed = availability.switchingSuppressed;
   const [index, setIndex] = useState(0);
   const tryClick = useCellClickCooldown();
-  const useFade = cell.transitionStyle === 'fade' && contents.length > 1;
+  // Dual-slot cycling is voided when one side has nothing to show for this song.
+  const canSwitch = contents.length > 1 && !switchingSuppressed;
+  const useFade = cell.transitionStyle === 'fade' && canSwitch;
   const rotation = useOptionalVcVisualizerRotationContext();
   const hasVisualizer = contents.includes('visualizer');
   const visualizerClickEnabled = hasVisualizer && Boolean(rotation?.visualizerClickEnabled);
@@ -67,8 +94,20 @@ export function VcCell({
     setIndex(0);
   }, [cell.slotA, cell.slotB, state.currentSong?.id]);
 
+  // Keep the layer index valid when availability collapses to a single slot.
   useEffect(() => {
-    if (contents.length <= 1) return;
+    setIndex((value) => (contents.length === 0 ? 0 : value % contents.length));
+  }, [contents.length]);
+
+  useEffect(() => {
+    if (!switchingSuppressed) return;
+    // Temporary console sink — later these should route to a VC host log.
+    console.info(formatDualSlotSuppressedMessage(regionLabel, availability));
+    // availability is memoized on song/cell/resolution inputs.
+  }, [switchingSuppressed, regionLabel, state.currentSong?.id, availability]);
+
+  useEffect(() => {
+    if (!canSwitch) return;
     if (cell.cycleTime === 'click' || cell.cycleTime == null) return;
 
     const intervalMs = cell.cycleTime * 1000;
@@ -77,7 +116,7 @@ export function VcCell({
     }, intervalMs);
 
     return () => window.clearInterval(timerId);
-  }, [cell.cycleTime, contents.length]);
+  }, [canSwitch, cell.cycleTime, contents.length]);
 
   if (!contents.length) {
     return <div className={`vc-cell vc-cell-blank${isFloat ? ' vc-cell-float' : ''}`} />;
@@ -88,21 +127,21 @@ export function VcCell({
   const onCellClick = () => {
     if (interactionDisabled) return;
 
-    const current = contents[index] ?? contents[0];
-    if (visualizerClickEnabled && current === 'visualizer') {
+    const active = contents[index] ?? contents[0];
+    if (visualizerClickEnabled && active === 'visualizer') {
       if (!tryClick()) return;
       rotation?.rotateVisualizer();
       return;
     }
 
-    if (contents.length <= 1 || cell.cycleTime !== 'click') return;
+    if (!canSwitch || cell.cycleTime !== 'click') return;
     if (!tryClick()) return;
     setIndex((value) => (value + 1) % contents.length);
   };
 
   const isClickable =
     !interactionDisabled &&
-    ((cell.cycleTime === 'click' && contents.length > 1) ||
+    ((cell.cycleTime === 'click' && canSwitch) ||
       (visualizerClickEnabled && (contents[index] ?? contents[0]) === 'visualizer'));
 
   const sharedViewProps = {
@@ -125,6 +164,12 @@ export function VcCell({
       tabIndex={isClickable ? 0 : undefined}
       style={
         useFade ? ({ '--vc-fade-ms': `${VC_TRANSITION_FADE_MS}ms` } as CSSProperties) : undefined
+      }
+      data-vc-switch-suppressed={switchingSuppressed ? 'true' : undefined}
+      title={
+        switchingSuppressed
+          ? `Showing ${contents.map((c) => VC_CONTENT_LABELS[c]).join(', ')} only (partner content missing)`
+          : undefined
       }
     >
       {useFade ? (

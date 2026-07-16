@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
-import Hls from 'hls.js';
 
-import { loadDirectAudioPlayback, shouldUseDirectAudioPlayback } from '../../listener/directAudioPlayback';
 import { audioDebug } from '../debug/audioDebug';
 import { getAudioGraphIfExists } from '../graph/registry';
+import { MediaCoordinator } from '../MediaCoordinator';
 import { mirrorCanPlay, tryPlayMirror } from './mirrorPlayback';
 
 const SEEK_DRIFT_SECONDS = 0.4;
@@ -27,9 +26,13 @@ export function useAnalyserPlaybackMirror({
   playbackUrl,
   enabled,
 }: UseAnalyserPlaybackMirrorOptions): void {
-  const hlsRef = useRef<Hls | null>(null);
+  const coordinatorRef = useRef<MediaCoordinator | null>(null);
+  if (!coordinatorRef.current) {
+    coordinatorRef.current = new MediaCoordinator();
+  }
   const loadGenerationRef = useRef(0);
-  const loadedUrlRef = useRef<string | null>(null);
+  /** True after we've attached HLS/src so disable doesn't spam tear down/log every effect re-run. */
+  const mirrorArmedRef = useRef(false);
 
   useEffect(() => {
     const mirror = analyserAudioRef.current;
@@ -42,37 +45,30 @@ export function useAnalyserPlaybackMirror({
 
   useEffect(() => {
     const mirror = analyserAudioRef.current;
-    if (!mirror) return;
+    const coordinator = coordinatorRef.current;
+    if (!mirror || !coordinator) return;
 
     if (!enabled || !playbackUrl) {
-      audioDebug.log('mirror', 'Mirror disabled — tearing down HLS', { enabled, playbackUrl: Boolean(playbackUrl) });
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
+      if (mirrorArmedRef.current) {
+        audioDebug.log('mirror', 'Mirror disabled — tearing down HLS', {
+          enabled,
+          playbackUrl: Boolean(playbackUrl),
+        });
+        coordinator.teardownElement(mirror);
+        mirror.load();
+        loadGenerationRef.current += 1;
+        mirrorArmedRef.current = false;
       }
-      loadedUrlRef.current = null;
-      loadGenerationRef.current += 1;
-      mirror.pause();
-      mirror.removeAttribute('src');
-      mirror.load();
       return;
     }
 
-    if (loadedUrlRef.current === playbackUrl) {
-      const ready = shouldUseDirectAudioPlayback(playbackUrl)
-        ? mirror.readyState > 0
-        : hlsRef.current != null || mirror.readyState > 0;
-      if (ready) return;
+    if (coordinator.isReady(mirror, playbackUrl)) {
+      mirrorArmedRef.current = true;
+      return;
     }
 
     const generation = ++loadGenerationRef.current;
-    loadedUrlRef.current = playbackUrl;
-
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-    mirror.pause();
+    mirrorArmedRef.current = true;
 
     const startPlayback = () => {
       if (generation !== loadGenerationRef.current) return;
@@ -87,54 +83,14 @@ export function useAnalyserPlaybackMirror({
 
     audioDebug.log('mirror', 'Loading mirror audio', { playbackUrl: playbackUrl.slice(0, 80) });
 
-    if (shouldUseDirectAudioPlayback(playbackUrl)) {
-      const cleanup = loadDirectAudioPlayback(mirror, playbackUrl, {
-        onReady: startPlayback,
-        onError: () => {
-          audioDebug.log('mirror', 'Mirror direct audio error', {}, 'error');
-        },
-      });
-      return cleanup;
-    }
-
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        xhrSetup: (xhr) => {
-          xhr.withCredentials = false;
-        },
-      });
-      hlsRef.current = hls;
-      hls.loadSource(playbackUrl);
-      hls.attachMedia(mirror);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (generation !== loadGenerationRef.current) return;
-        audioDebug.log('mirror', 'Mirror manifest parsed');
-        startPlayback();
-      });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (generation !== loadGenerationRef.current) return;
-        if (data.fatal) {
-          audioDebug.log('mirror', 'Mirror HLS fatal error', { type: data.type, details: data.details }, 'error');
-          hls.destroy();
-          if (hlsRef.current === hls) hlsRef.current = null;
-        }
-      });
-      return () => {
-        hls.destroy();
-        if (hlsRef.current === hls) hlsRef.current = null;
-      };
-    }
-
-    if (mirror.canPlayType('application/vnd.apple.mpegurl')) {
-      mirror.src = playbackUrl;
-      const onLoaded = () => {
-        if (generation !== loadGenerationRef.current) return;
-        startPlayback();
-      };
-      mirror.addEventListener('loadedmetadata', onLoaded, { once: true });
-      return () => mirror.removeEventListener('loadedmetadata', onLoaded);
-    }
+    return coordinator.attach(mirror, playbackUrl, {
+      generation,
+      isGenerationCurrent: (g) => g === loadGenerationRef.current,
+      onReady: startPlayback,
+      onError: () => {
+        audioDebug.log('mirror', 'Mirror direct audio error', {}, 'error');
+      },
+    });
   }, [analyserAudioRef, enabled, mainAudioRef, playbackUrl]);
 
   useEffect(() => {

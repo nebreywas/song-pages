@@ -4,6 +4,11 @@ import {
   MIN_CAUTION_MINUTES,
   type PlaylistLengthSettings,
 } from '@shared/listener/playlistLengthSettings';
+import {
+  normalizeSongPageFontIncreaseLevel,
+  type ListenerPlayerSettings,
+} from '@shared/listener/playerSettings';
+import type { LiveDebugSettings } from '@shared/liveDebug/settings';
 import { APP_THEME_OPTIONS, type AppThemeId } from '../lib/themes';
 import './settingsModal.css';
 
@@ -19,6 +24,10 @@ type SettingsModalProps = {
   onThemeChange: (themeId: AppThemeId) => void;
   playlistLengthSettings: PlaylistLengthSettings;
   onPlaylistLengthSettingsChange: (settings: PlaylistLengthSettings) => void;
+  playerSettings: ListenerPlayerSettings;
+  onPlayerSettingsChange: (settings: ListenerPlayerSettings) => void;
+  liveDebugSettings: LiveDebugSettings;
+  onLiveDebugSettingsChange: (settings: LiveDebugSettings) => void;
   onClose: () => void;
 };
 
@@ -29,6 +38,10 @@ export function SettingsModal({
   onThemeChange,
   playlistLengthSettings,
   onPlaylistLengthSettingsChange,
+  playerSettings,
+  onPlayerSettingsChange,
+  liveDebugSettings,
+  onLiveDebugSettingsChange,
   onClose,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<SettingsTab>('main');
@@ -87,46 +100,121 @@ export function SettingsModal({
         </nav>
 
         {tab === 'main' ? (
-          <section className="settings-section">
-            <h3>Playlists</h3>
-            <div className="settings-checkbox-row">
-              <label className="settings-checkbox-label">
+          <>
+            <section className="settings-section">
+              <h3>Player</h3>
+              <div className="settings-checkbox-row">
+                <label className="settings-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={playerSettings.showSunoPromptInformation}
+                    onChange={(event) =>
+                      onPlayerSettingsChange({
+                        ...playerSettings,
+                        showSunoPromptInformation: event.target.checked,
+                      })
+                    }
+                  />
+                  <span>Show prompt information on Suno songs</span>
+                </label>
+              </div>
+              <p className="settings-hint">
+                When enabled, Suno song pages show style tags and the Style prompt under the header.
+                Off by default so lyrics stay front and center.
+              </p>
+
+              <label className="settings-slider-field">
+                <span className="settings-slider-label-row">
+                  <span>Increase Song Pages font size</span>
+                  <span className="settings-slider-value" aria-live="polite">
+                    {playerSettings.songPageFontIncreaseLevel === 0
+                      ? 'Default'
+                      : String(playerSettings.songPageFontIncreaseLevel)}
+                  </span>
+                </span>
                 <input
-                  type="checkbox"
-                  checked={playlistLengthSettings.cautionLongSongsEnabled}
+                  type="range"
+                  min={0}
+                  max={4}
+                  step={1}
+                  value={playerSettings.songPageFontIncreaseLevel}
                   onChange={(event) =>
-                    onPlaylistLengthSettingsChange({
-                      ...playlistLengthSettings,
-                      cautionLongSongsEnabled: event.target.checked,
+                    onPlayerSettingsChange({
+                      ...playerSettings,
+                      songPageFontIncreaseLevel: normalizeSongPageFontIncreaseLevel(
+                        Number(event.target.value),
+                      ),
                     })
                   }
                 />
-                <span>
-                  Caution flag songs longer than{' '}
+              </label>
+              <p className="settings-hint">
+                Steps 1–4 enlarge text on song pages above each page’s own default. Pages built with
+                relative units respond best; artist pages are responsible for their own layout.
+              </p>
+            </section>
+
+            <section className="settings-section">
+              <h3>Playlists</h3>
+              <div className="settings-checkbox-row">
+                <label className="settings-checkbox-label">
                   <input
-                    type="number"
-                    className="settings-minutes-input"
-                    min={MIN_CAUTION_MINUTES}
-                    max={MAX_CAUTION_MINUTES}
-                    step={1}
-                    value={playlistLengthSettings.cautionMinutes}
-                    disabled={!playlistLengthSettings.cautionLongSongsEnabled}
+                    type="checkbox"
+                    checked={playlistLengthSettings.cautionLongSongsEnabled}
                     onChange={(event) =>
                       onPlaylistLengthSettingsChange({
                         ...playlistLengthSettings,
-                        cautionMinutes: Number.parseInt(event.target.value, 10),
+                        cautionLongSongsEnabled: event.target.checked,
                       })
                     }
-                  />{' '}
-                  minutes
-                </span>
-              </label>
-            </div>
-            <p className="settings-hint">
-              Flagged rows stay playable but get a brighter highlight and a yellow length badge so you can
-              spot long tracks before they start — useful for VC sessions and party playlists.
-            </p>
-          </section>
+                  />
+                  <span>
+                    Caution flag songs longer than{' '}
+                    <input
+                      type="number"
+                      className="settings-minutes-input"
+                      min={MIN_CAUTION_MINUTES}
+                      max={MAX_CAUTION_MINUTES}
+                      step={1}
+                      value={playlistLengthSettings.cautionMinutes}
+                      disabled={!playlistLengthSettings.cautionLongSongsEnabled}
+                      onChange={(event) =>
+                        onPlaylistLengthSettingsChange({
+                          ...playlistLengthSettings,
+                          cautionMinutes: Number.parseInt(event.target.value, 10),
+                        })
+                      }
+                    />{' '}
+                    minutes
+                  </span>
+                </label>
+              </div>
+              <p className="settings-hint">
+                Flagged rows stay playable but get a brighter highlight and a yellow length badge so you can
+                spot long tracks before they start — useful for VC sessions and party playlists.
+              </p>
+            </section>
+
+            <section className="settings-section">
+              <h3>Live Debug</h3>
+              <div className="settings-checkbox-row">
+                <label className="settings-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={liveDebugSettings.enabled}
+                    onChange={(event) =>
+                      onLiveDebugSettingsChange({ enabled: event.target.checked })
+                    }
+                  />
+                  <span>Enable Live Debug mode</span>
+                </label>
+              </div>
+              <p className="settings-hint">
+                Shows a realtime HUD on the VC surface (ALARE trim/speed first). Bind Toggle Live Debug in
+                Key Bindings to flip this mid-session without opening Settings.
+              </p>
+            </section>
+          </>
         ) : null}
 
         {tab === 'theme' ? (

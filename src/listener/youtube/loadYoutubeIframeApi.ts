@@ -47,6 +47,9 @@ export type YoutubePlayerInstance = {
   seekTo: (seconds: number, allowSeekAhead?: boolean) => void;
   getCurrentTime: () => number;
   getDuration: () => number;
+  /** YouTube uses 0–100; we convert from the app’s 0–1 slider. */
+  setVolume: (volume: number) => void;
+  getVolume: () => number;
   destroy: () => void;
   getPlayerState: () => number;
   getIframe?: () => HTMLIFrameElement;

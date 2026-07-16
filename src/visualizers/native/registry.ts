@@ -1,4 +1,5 @@
 import { AuroraVisualizer } from './canvas/aurora/AuroraVisualizer';
+import { MeydaMetersVisualizer } from './canvas/meyda-meters/MeydaMetersVisualizer';
 import { BarsVisualizer } from './canvas/spectrum/BarsVisualizer';
 import { CoverPulseVisualizer } from './canvas/album-flow/CoverPulseVisualizer';
 import type { VisualizerExperienceDefinition } from '../types';
@@ -17,6 +18,24 @@ const barsSettings = [
     key: 'mirror',
     type: 'boolean' as const,
     label: 'Mirror',
+    default: true,
+  },
+];
+
+const meydaMetersSettings = [
+  {
+    key: 'sensitivity',
+    type: 'range' as const,
+    label: 'Sensitivity',
+    min: 0.5,
+    max: 2,
+    step: 0.1,
+    default: 1,
+  },
+  {
+    key: 'showFeel',
+    type: 'boolean' as const,
+    label: 'Brightness / noisiness',
     default: true,
   },
 ];
@@ -59,6 +78,19 @@ export const nativeExperiences: VisualizerExperienceDefinition[] = [
     creditRefs: [],
     component: BarsVisualizer,
     isSafeFallback: true,
+  },
+  {
+    id: 'meyda-meters',
+    name: 'Meyda Meters',
+    description:
+      'Labeled bass / mid / treble share meters plus level and brightness — Meyda Lab vocabulary on canvas.',
+    category: 'spectrum',
+    implementation: 'native-canvas',
+    targets: ['main-embedded', 'external-projection', 'vc-region'],
+    surfaces: 'both',
+    settings: meydaMetersSettings,
+    creditRefs: [],
+    component: MeydaMetersVisualizer,
   },
   {
     id: 'album-flow',

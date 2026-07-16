@@ -108,6 +108,7 @@ contextBridge.exposeInMainWorld('app', {
 
   artist: {
     pickAudio: () => ipcRenderer.invoke('artist:pickAudio'),
+    pickVideo: () => ipcRenderer.invoke('artist:pickVideo'),
     pickImage: () => ipcRenderer.invoke('artist:pickImage'),
     pickOutputFolder: () => ipcRenderer.invoke('artist:pickOutputFolder'),
     compile: (payload) => ipcRenderer.invoke('artist:compile', payload),
@@ -120,9 +121,49 @@ contextBridge.exposeInMainWorld('app', {
     readMp3Bytes: (filePath) => ipcRenderer.invoke('artist:readMp3Bytes', filePath),
   },
 
+  /** Artist 2.0 catalog workspace — parallel to Artist 1.0 until cutover. */
+  artist2: {
+    listArtists: () => ipcRenderer.invoke('artist2:listArtists'),
+    createArtist: (payload) => ipcRenderer.invoke('artist2:createArtist', payload),
+    updateArtist: (id, patch) => ipcRenderer.invoke('artist2:updateArtist', id, patch),
+    listObjects: (artistId, options) => ipcRenderer.invoke('artist2:listObjects', artistId, options),
+    listMembershipCounts: (artistId) => ipcRenderer.invoke('artist2:listMembershipCounts', artistId),
+    listAlbumTrackSummaries: (artistId) =>
+      ipcRenderer.invoke('artist2:listAlbumTrackSummaries', artistId),
+    getObject: (id) => ipcRenderer.invoke('artist2:getObject', id),
+    createObject: (payload) => ipcRenderer.invoke('artist2:createObject', payload),
+    updateObject: (id, patch) => ipcRenderer.invoke('artist2:updateObject', id, patch),
+    deleteObject: (id) => ipcRenderer.invoke('artist2:deleteObject', id),
+    getDeleteImpact: (id) => ipcRenderer.invoke('artist2:getDeleteImpact', id),
+    listDeletedObjects: (artistId) => ipcRenderer.invoke('artist2:listDeletedObjects', artistId),
+    restoreObject: (id) => ipcRenderer.invoke('artist2:restoreObject', id),
+    listDeletionReports: (artistId, options) =>
+      ipcRenderer.invoke('artist2:listDeletionReports', artistId, options),
+    clearDeletionReport: (reportId) => ipcRenderer.invoke('artist2:clearDeletionReport', reportId),
+    clearAllDeletionReports: (artistId) =>
+      ipcRenderer.invoke('artist2:clearAllDeletionReports', artistId),
+    getCompilePreview: (artistId) => ipcRenderer.invoke('artist2:getCompilePreview', artistId),
+    compile: (artistId) => ipcRenderer.invoke('artist2:compile', artistId),
+    importSunoIntoSong: (objectId, rawInput) =>
+      ipcRenderer.invoke('artist2:importSunoIntoSong', objectId, rawInput),
+    resolveLocalFileUrl: (filePath) => ipcRenderer.invoke('artist2:resolveLocalFileUrl', filePath),
+    renameCoverForObject: (objectId) => ipcRenderer.invoke('artist2:renameCoverForObject', objectId),
+    getAlbumDetail: (albumId) => ipcRenderer.invoke('artist2:getAlbumDetail', albumId),
+    addMembership: (payload) => ipcRenderer.invoke('artist2:addMembership', payload),
+    removeMembership: (membershipId) => ipcRenderer.invoke('artist2:removeMembership', membershipId),
+    reorderMemberships: (containerId, orderedMemberIds) =>
+      ipcRenderer.invoke('artist2:reorderMemberships', containerId, orderedMemberIds),
+    promoteArtwork: (payload) => ipcRenderer.invoke('artist2:promoteArtwork', payload),
+    linkRelatedSongs: (payload) => ipcRenderer.invoke('artist2:linkRelatedSongs', payload),
+    unlinkRelatedSongs: (payload) => ipcRenderer.invoke('artist2:unlinkRelatedSongs', payload),
+    repairBrokenReference: (payload) =>
+      ipcRenderer.invoke('artist2:repairBrokenReference', payload),
+  },
+
   visualizer: {
     open: (options) => ipcRenderer.invoke('visualizer:open', options),
     close: () => ipcRenderer.invoke('visualizer:close'),
+    setTitle: (title) => ipcRenderer.invoke('visualizer:setTitle', title),
     setFullScreen: (fullscreen) => ipcRenderer.invoke('visualizer:setFullScreen', fullscreen),
     status: () => ipcRenderer.invoke('visualizer:status'),
     listDisplays: () => ipcRenderer.invoke('visualizer:listDisplays'),
@@ -167,6 +208,7 @@ contextBridge.exposeInMainWorld('app', {
     status: () => ipcRenderer.invoke('vc:status'),
     sendState: (payload) => ipcRenderer.send('vc:sendState', payload),
     sendFrame: (payload) => ipcRenderer.send('vc:sendFrame', payload),
+    sendPerformanceEffect: (payload) => ipcRenderer.send('vc:sendPerformanceEffect', payload),
     sendPlaybackStatus: (payload) => ipcRenderer.send('vc:sendPlaybackStatus', payload),
     sendTransport: (payload) => ipcRenderer.send('vc:sendTransport', payload),
     updateSurface: (patch) => ipcRenderer.send('vc:updateSurface', patch),
@@ -189,6 +231,11 @@ contextBridge.exposeInMainWorld('app', {
       const handler = (_event, payload) => callback(payload);
       ipcRenderer.on('vc:frame', handler);
       return () => ipcRenderer.removeListener('vc:frame', handler);
+    },
+    onPerformanceEffect: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('vc:performance-effect', handler);
+      return () => ipcRenderer.removeListener('vc:performance-effect', handler);
     },
     onHotkey: (callback) => {
       const handler = (_event, payload) => callback(payload);

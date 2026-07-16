@@ -106,6 +106,7 @@ export function useCommandMappings() {
       commandId: string,
       patch: Partial<CommandBindingSlot>,
       kudoPresets: Array<{ id: string; name: string }> = [],
+      surfaceDesigns: Array<{ id: string; name: string }> = [],
     ) => {
       for (const [field, value] of Object.entries(patch) as Array<
         [keyof CommandBindingSlot, string | undefined]
@@ -126,6 +127,7 @@ export function useCommandMappings() {
             field,
             getBindingSlotForCommand(stateRef.current, commandId),
             kudoPresets,
+            surfaceDesigns,
           )
         ) {
           window.alert('This binding is required and cannot be cleared.');
@@ -158,11 +160,17 @@ export function useCommandMappings() {
   );
 
   const removeConfiguredCommand = useCallback(
-    async (commandId: string, kudoPresets: Array<{ id: string; name: string }> = []) => {
+    async (
+      commandId: string,
+      kudoPresets: Array<{ id: string; name: string }> = [],
+      surfaceDesigns: Array<{ id: string; name: string }> = [],
+    ) => {
       if (!window.confirm('Remove this action from your key bindings? All of its assigned keys will be cleared.')) {
         return;
       }
-      return saveState((current) => removeCommandFromConfiguredSet(current, commandId, kudoPresets));
+      return saveState((current) =>
+        removeCommandFromConfiguredSet(current, commandId, kudoPresets, surfaceDesigns),
+      );
     },
     [saveState],
   );
@@ -172,8 +180,11 @@ export function useCommandMappings() {
       fromCommandId: string,
       toCommandId: string,
       kudoPresets: Array<{ id: string; name: string }> = [],
+      surfaceDesigns: Array<{ id: string; name: string }> = [],
     ) => {
-      return saveState((current) => reassignConfiguredCommand(current, fromCommandId, toCommandId, kudoPresets));
+      return saveState((current) =>
+        reassignConfiguredCommand(current, fromCommandId, toCommandId, kudoPresets, surfaceDesigns),
+      );
     },
     [saveState],
   );
@@ -184,6 +195,7 @@ export function useCommandMappings() {
       binding: string,
       commandId: string,
       kudoPresets: Array<{ id: string; name: string }> = [],
+      surfaceDesigns: Array<{ id: string; name: string }> = [],
     ) => {
       const field =
         layer === 'extended-function'
@@ -192,7 +204,7 @@ export function useCommandMappings() {
             ? 'gated'
             : 'direct';
       await addConfiguredCommand(commandId);
-      return updateCommandBinding(commandId, { [field]: binding }, kudoPresets);
+      return updateCommandBinding(commandId, { [field]: binding }, kudoPresets, surfaceDesigns);
     },
     [addConfiguredCommand, updateCommandBinding],
   );

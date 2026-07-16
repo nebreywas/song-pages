@@ -1,26 +1,53 @@
 /**
  * Full-screen upcoming queue overlay — position and max count come from VC Settings.
+ * Double-click a row to jump to that song; single click is inert; click outside closes.
  */
+
+import type { MouseEvent } from 'react';
 
 import type { VcUpcomingOverlaySettings, VcUpcomingSong } from '@shared/vcModeTypes';
 
-import { formatTime } from '../listener/formatTime';
+import { formatTime } from '@shared/listener/formatTime';
+
+import { sendVcTransport } from './useVcTransport';
 
 type VcUpcomingOverlayProps = {
   songs: VcUpcomingSong[];
   settings: VcUpcomingOverlaySettings;
+  onDismiss: () => void;
 };
 
 function rankLabel(index: number): string {
   return String(index + 1).padStart(2, '0');
 }
 
-export function VcUpcomingOverlay({ songs, settings }: VcUpcomingOverlayProps) {
+export function VcUpcomingOverlay({ songs, settings, onDismiss }: VcUpcomingOverlayProps) {
   const position = settings.position;
 
+  const handleBackdropClick = (event: MouseEvent<HTMLDivElement>) => {
+    // Only the chrome around the panel dismisses — not the list itself.
+    if (event.target === event.currentTarget) {
+      onDismiss();
+    }
+  };
+
+  const handleRowDoubleClick = (songId: number) => {
+    sendVcTransport({ type: 'playSong', songId });
+    onDismiss();
+  };
+
   return (
-    <div className={`vc-overlay vc-overlay-upcoming vc-overlay-upcoming--${position}`}>
-      <div className="vc-upcoming-panel" role="dialog" aria-label="Upcoming songs">
+    <div
+      className={`vc-overlay vc-overlay-upcoming vc-overlay-upcoming--${position}`}
+      onClick={handleBackdropClick}
+      role="presentation"
+    >
+      <div
+        className="vc-upcoming-panel"
+        role="dialog"
+        aria-label="Upcoming songs"
+        onClick={(event) => event.stopPropagation()}
+      >
         <header className="vc-upcoming-panel-header">
           <div className="vc-upcoming-panel-heading">
             <p className="vc-upcoming-panel-eyebrow">Queue preview</p>
@@ -36,7 +63,12 @@ export function VcUpcomingOverlay({ songs, settings }: VcUpcomingOverlayProps) {
         {songs.length ? (
           <ol className="vc-upcoming-list" tabIndex={0} aria-label="Upcoming song list">
             {songs.map((entry, index) => (
-              <li key={`${entry.id}-${index}`} className="vc-upcoming-row">
+              <li
+                key={`${entry.id}-${index}`}
+                className="vc-upcoming-row"
+                onDoubleClick={() => handleRowDoubleClick(entry.id)}
+                title="Double-click to play"
+              >
                 <span className="vc-upcoming-rank" aria-hidden="true">
                   {rankLabel(index)}
                 </span>
@@ -47,6 +79,7 @@ export function VcUpcomingOverlay({ songs, settings }: VcUpcomingOverlayProps) {
                       src={entry.coverUrl}
                       alt=""
                       loading="lazy"
+                      draggable={false}
                     />
                   ) : (
                     <div className="vc-upcoming-cover vc-upcoming-cover-placeholder" aria-hidden="true" />

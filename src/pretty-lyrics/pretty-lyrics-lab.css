@@ -1,0 +1,444 @@
+/* Pretty Lyrics Lab — isolated prototype styles */
+
+.pretty-lab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  /* Escape .panel / about-page width habits — this is a 3-pane lab, not a narrow doc page. */
+  max-width: none;
+  width: 100%;
+  height: calc(100vh - 4.5rem);
+  margin: 0;
+  padding: 0.75rem 1rem 1rem;
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pretty-lab-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.pretty-lab-header h2 {
+  margin: 0 0 0.25rem;
+}
+
+.pretty-lab-lede {
+  margin: 0;
+  max-width: 42rem;
+  color: var(--muted, #8b93a7);
+  font-size: 0.92rem;
+}
+
+.pretty-lab-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  font-size: 0.78rem;
+  color: var(--muted, #8b93a7);
+}
+
+.pretty-lab-metrics .mono,
+.pretty-lab .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.pretty-lab-grid {
+  display: grid;
+  /* Fixed-ish controls column so Presets/Signals never collapse to a letter strip. */
+  grid-template-columns: minmax(14rem, 1fr) minmax(18rem, 1.4fr) minmax(17.5rem, 20rem);
+  gap: 0.85rem;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+@media (max-width: 1100px) {
+  .pretty-lab {
+    height: auto;
+    overflow: auto;
+  }
+
+  .pretty-lab-grid {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+}
+
+.pretty-lab-col {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.pretty-lab-controls {
+  overflow: auto;
+  /* Keep labels readable even when the middle pane is hungry for space. */
+  flex-shrink: 0;
+}
+
+.pretty-lab-controls h3 {
+  margin: 0.55rem 0 0.2rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #8b93a7);
+}
+
+.pretty-lab-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.pretty-lab-toolbar button,
+.pretty-lab-named button,
+.pretty-lab-export-row button,
+.pretty-lab-controls > button,
+.pretty-lab-named-list button {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  border-radius: 6px;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.pretty-lab-named-list button.danger {
+  color: #f87171;
+}
+
+.pretty-lab-textarea,
+.pretty-lab-plain,
+.pretty-lab-json,
+.pretty-lab-evidence {
+  width: 100%;
+  flex: 1;
+  min-height: 14rem;
+  resize: vertical;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #0a0c10;
+  color: #e8ecf4;
+  padding: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.pretty-lab-preview {
+  overflow: auto;
+  padding: 0;
+  /* Override the shared .pretty-lab-col panel tint — theme lives here. */
+  background: #0b0d12;
+  position: relative;
+}
+
+/* Capture root for PNG export — wraps the composed view so height includes padding. */
+.pretty-lab-lyrics-capture {
+  min-height: 100%;
+}
+
+.pretty-lab-ctx-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 10rem;
+  padding: 0.25rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #151820;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.pretty-lab-ctx-menu button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #e8ecf4;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pretty-lab-ctx-menu button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pretty-lab-ctx-menu button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.pretty-lab-plain {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* Composed typography canvas */
+.pretty-lyric-view {
+  /* Fill the scrollport at minimum, grow with content; keep theme glued to the canvas. */
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 1.5rem 1.25rem 2.5rem;
+  background-color: var(--pretty-bg, #0b0d12);
+  background-image: none;
+  color: var(--pretty-base, #e8ecf4);
+  /* Font comes from manifest (lab font pack); preset classes no longer hardcode family. */
+  font-family: Georgia, serif;
+  font-size: clamp(1.05rem, 1.6vw, 1.35rem);
+  line-height: 1.35;
+}
+
+.pretty-lyric-view.font-poster,
+.pretty-lyric-view.font-impact {
+  line-height: 1.2;
+}
+
+.pretty-lyric-view.font-handwritten {
+  line-height: 1.45;
+}
+
+.pretty-lyric-view.font-digital {
+  line-height: 1.3;
+}
+
+.pretty-lab-toggle {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.84rem;
+}
+
+.pretty-lab-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+}
+
+.pretty-lab-slider input {
+  width: 100%;
+}
+
+.pretty-lab-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted, #8b93a7);
+}
+
+.pretty-lab-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.pretty-lab-swatches span {
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.pretty-lab-font-sample {
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  font-size: 1.15rem;
+}
+
+.pretty-lab-harmony {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.pretty-lab-harmony label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+}
+
+.pretty-lab-hue-bar {
+  height: 0.45rem;
+  border-radius: 999px;
+  opacity: 0.85;
+}
+
+.pretty-lab-named {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.pretty-lab-export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.pretty-lab-import {
+  width: 100%;
+  min-height: 5rem;
+  resize: vertical;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #0a0c10;
+  color: inherit;
+  padding: 0.45rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  box-sizing: border-box;
+}
+
+.pretty-lab-named input,
+.pretty-lab-controls select {
+  flex: 1;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #0a0c10;
+  color: inherit;
+  padding: 0.3rem 0.45rem;
+}
+
+.pretty-lab-named-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.pretty-lab-named-list li {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.pretty-lab-named-list li > button:first-child {
+  flex: 1;
+  text-align: left;
+}
+
+.pretty-lab-diag {
+  font-size: 0.82rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.pretty-lab-diag-word {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.pretty-lab-diag ul,
+.pretty-lab-summary ul {
+  margin: 0.2rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.pretty-lab-evidence,
+.pretty-lab-json {
+  max-height: 14rem;
+  overflow: auto;
+  min-height: 0;
+}
+
+.pretty-lyric-block {
+  max-width: var(--block-max, 36em);
+  margin: 0 auto;
+  padding-top: var(--block-before, 1rem);
+  padding-bottom: var(--block-after, 1rem);
+}
+
+.pretty-lyric-block.align-left {
+  margin-left: 0;
+  margin-right: auto;
+  text-align: left;
+}
+
+.pretty-lyric-block.align-center {
+  text-align: center;
+}
+
+.pretty-lyric-line {
+  margin-top: var(--space-before, 0.4rem);
+  margin-bottom: var(--space-after, 0.35rem);
+  font-size: calc(1em * var(--line-scale, 1));
+  /* Seeded horizontal drift on centered blocks — breaks the rigid pillar without reflowing. */
+  transform: translateX(calc(var(--line-offset-pct, 0) * 1%));
+}
+
+.pretty-lyric-token {
+  display: inline;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  color: var(--token-color, inherit);
+  font: inherit;
+  font-size: calc(1em * var(--token-scale, 1));
+  font-weight: var(--token-weight, 500);
+  opacity: var(--token-opacity, 1);
+  cursor: pointer;
+  vertical-align: baseline;
+  line-height: inherit;
+}
+
+.pretty-lyric-token.is-underlined {
+  /* Safer than text-decoration — matches Semantic Canvas border-bottom approach. */
+  text-decoration: none;
+  border-bottom: 0.08em solid currentColor;
+  padding-bottom: 0.05em;
+}
+
+.pretty-lyric-token.is-italic {
+  font-style: italic;
+}
+
+.pretty-lyric-token.is-glow {
+  /* Halo blur + scale punch scale with --pretty-glow-intensity (1 = Semantic Canvas default). */
+  text-shadow: 0 0 calc(12px * var(--pretty-glow-intensity, 1)) currentColor;
+  transform: scale(calc(1 + 0.05 * var(--pretty-glow-intensity, 1)));
+  transform-origin: center bottom;
+  display: inline-block;
+}
+
+.pretty-lyric-token.is-selected {
+  outline: 1px dashed rgba(255, 255, 255, 0.45);
+  outline-offset: 2px;
+}
+
+/* Hide lab selection chrome in PNG snapshots. */
+.pretty-lab-lyrics-capture.is-png-export .pretty-lyric-token.is-selected,
+.pretty-lyric-view.is-png-export .pretty-lyric-token.is-selected {
+  outline: none;
+}
+
+.pretty-lyric-token.role-quiet {
+  letter-spacing: 0.01em;
+}
+
+.pretty-lyric-sep {
+  white-space: pre-wrap;
+}

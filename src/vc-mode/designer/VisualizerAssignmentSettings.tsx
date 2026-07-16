@@ -14,12 +14,17 @@ type VisualizerAssignmentSettingsProps = {
   visualizerChangeRule: VcModeConfig['visualizerChangeRule'];
   visualizerSequence: VcModeConfig['visualizerSequence'];
   visualizerAlsoClickToChange: boolean;
+  showVisualizerName: boolean;
   visualizers: VisualizerPluginOption[];
   onChange: (
     patch: Partial<
       Pick<
         VcModeConfig,
-        'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence' | 'visualizerAlsoClickToChange'
+        | 'visualizerId'
+        | 'visualizerChangeRule'
+        | 'visualizerSequence'
+        | 'visualizerAlsoClickToChange'
+        | 'showVisualizerName'
       >
     >,
   ) => void;
@@ -31,6 +36,7 @@ export function VisualizerAssignmentSettings({
   visualizerChangeRule,
   visualizerSequence,
   visualizerAlsoClickToChange,
+  showVisualizerName,
   visualizers,
   onChange,
 }: VisualizerAssignmentSettingsProps) {
@@ -78,6 +84,19 @@ export function VisualizerAssignmentSettings({
       <p className="vc-assignment-hint">
         When checked, clicking the visualizer on the live surface randomizes the plugin even if the change
         rule is Never. Use the Change Visualizer command for the same effect from the controller or a hotkey.
+      </p>
+
+      <label className="vc-field vc-field-inline">
+        <input
+          type="checkbox"
+          checked={showVisualizerName}
+          onChange={(e) => onChange({ showVisualizerName: e.target.checked })}
+        />
+        <span>Show visualizer name</span>
+      </label>
+      <p className="vc-assignment-hint">
+        When checked, a bottom bar shows the visualizer name for the first 10 seconds after it becomes
+        active. You can also bind the Show Visualizer Name command to reveal it on demand.
       </p>
 
       <label className="vc-field">

@@ -78,6 +78,7 @@ export function migrateVcConfig(raw: unknown, visualizerIdFallback: string = DEF
       visualizerChangeRule: value.visualizerChangeRule,
       visualizerSequence: value.visualizerSequence,
       visualizerAlsoClickToChange: value.visualizerAlsoClickToChange,
+      showVisualizerName: value.showVisualizerName === true,
       useFallbacks: value.useFallbacks !== false,
       suppressEmbedProviderLyricsMessages: value.suppressEmbedProviderLyricsMessages === true,
       gridDesign: value.gridDesign as VcModeConfig['gridDesign'],

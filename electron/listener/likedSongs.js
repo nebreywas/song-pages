@@ -51,7 +51,7 @@ function isSongLiked(songId) {
   return Boolean(row);
 }
 
-function getSongSnapshot(songId) {
+function getCatalogSongSnapshot(songId) {
   return getDatabase()
     .prepare(
       `SELECT s.id, s.artist_id, s.external_id, s.slug, s.title, s.album, s.year, s.caption,
@@ -63,6 +63,59 @@ function getSongSnapshot(songId) {
        WHERE s.id = ?`,
     )
     .get(songId);
+}
+
+/** Suno sidebar playlist rows use synthetic negative ids outside the catalog `songs` table. */
+function getSunoDemoSongSnapshot(songId) {
+  const { isSunoDemoSongId, sunoPlaylistArtistId, sunoDemoPageUrlFromClipUuid } = require(
+    './sunoDemo/feature',
+  );
+  const { getRowBySongId } = require('./sunoDemo/sunoDemoSongs');
+  if (!isSunoDemoSongId(songId)) return null;
+  const row = getRowBySongId(songId);
+  if (!row) return null;
+  return {
+    id: songId,
+    artist_id: sunoPlaylistArtistId(row.playlist_id ?? 1),
+    artist_name: row.artist_name || 'Suno',
+    title: row.title,
+    album: null,
+    year: null,
+    page_url:
+      sunoDemoPageUrlFromClipUuid(row.clip_uuid) || `songpages-suno-demo:page/${songId}`,
+    playback_url: row.playback_url,
+    external_id: row.clip_uuid,
+    duration_seconds: row.duration_seconds,
+  };
+}
+
+/** Custom-playlist snapshots (including Suno/YouTube/Flow copies). */
+function getUserPlaylistSongSnapshot(songId) {
+  const { isUserPlaylistSongId, getEntryBySongId } = require('./userPlaylists');
+  if (!isUserPlaylistSongId(songId)) return null;
+  const row = getEntryBySongId(songId);
+  if (!row) return null;
+  const { userPlaylistArtistId } = require('./userPlaylists');
+  return {
+    id: songId,
+    artist_id: row.playlist_id != null ? userPlaylistArtistId(row.playlist_id) : null,
+    artist_name: row.artist_name || 'Playlist',
+    title: row.title,
+    album: row.album,
+    year: row.year,
+    page_url: row.page_url,
+    playback_url: row.playback_url,
+    external_id: row.external_id,
+    duration_seconds: row.duration_seconds,
+  };
+}
+
+function getSongSnapshot(songId) {
+  return (
+    getCatalogSongSnapshot(songId) ||
+    getSunoDemoSongSnapshot(songId) ||
+    getUserPlaylistSongSnapshot(songId)
+  );
 }
 
 function toggleLikeSong(songId) {

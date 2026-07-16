@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { configUsesVisualizer, type VcModeConfig, type VcPlaybackEffectsMirror } from '@shared/vcModeTypes';
+import { isSpecialPlayStyleActive } from '@shared/vcMode/specialPlayStyles';
 import { getApp } from '../lib/bridge';
-import Hls from 'hls.js';
+import { MediaCoordinator } from '../audio/MediaCoordinator';
 import { SongPageWebview } from './SongPageWebview';
 import { ListenerWelcome } from './ListenerWelcome';
 import { ArtistInfoPanel } from './ArtistInfoPanel';
@@ -15,9 +16,16 @@ import {
   isEffectsLabAudible,
   type EffectsLabState,
 } from '../audio/effectsLab';
+import { MeydaLabPanel, meydaLabStore } from '../audio/meydaLab';
+import { cancelPlaybackRateBurst } from '../audio/effectsLab/performance/rateBurst';
 import { ToastStack } from './ToastStack';
 import { useToasts } from './useToasts';
 import { PlayerBar, type RepeatMode } from './PlayerBar';
+import { createPlaybackSession, type PlaybackSessionImpl } from '../playback/createPlaybackSession';
+import { createPlayerBarTransportHandlers } from '../playback/adapters/playerBarAdapter';
+import type { PlaybackSessionEffect } from '../playback/effects';
+import { usePlaybackSnapshot } from '../playback/hooks/usePlaybackSnapshot';
+import { runPlaybackSessionEffects } from './playbackSessionEffects';
 import type { PlayerOnDeckInfo } from './PlayerOnDeckIndicator';
 import { VerticalResizeHandle } from './VerticalResizeHandle';
 import { HorizontalResizeHandle } from './HorizontalResizeHandle';
@@ -33,6 +41,7 @@ import {
 import { SubscribeArtistModal } from './SubscribeArtistModal';
 import { useListenerPlayerSettings } from './useListenerPlayerSettings';
 import { usePlaylistLengthSettings } from './usePlaylistLengthSettings';
+import { useLiveDebugSettings } from '../live-debug/useLiveDebugSettings';
 import { persistPlaylistSongSkipped } from './playlistSongSkip';
 import { isSongLongerThanMinutes } from '@shared/listener/songDuration';
 import { useListenerLyricsDisplaySettings } from './useListenerLyricsDisplaySettings';
@@ -48,13 +57,14 @@ import {
 } from '@shared/listener/playlistOrder';
 import {
   playlistKindForArtistId,
+  vcArtistDisplayName,
 } from '@shared/listener/playlistKinds';
 import {
   pickNextPlayableSongId,
   pickPreviousPlayableSongId,
   playableQueueSongs,
   resolvePlayableSong,
-} from '@shared/listener/playbackQueue';
+} from '@shared/playback/queue/planner';
 import {
   buildLastPlaybackState,
   LISTENER_LAST_PLAYBACK_KEY,
@@ -63,15 +73,12 @@ import {
 } from '@shared/listener/lastPlayback';
 import { pickCueSongInPlaylist } from '@shared/listener/startupCue';
 import {
-  clearDetourState,
-  createEmptyDetourState,
-  markSongConsumed,
-  resolveTrackEndAdvance,
-  setPrimaryContext,
+  type PlaybackDetourState,
   type PlaybackRole,
-} from '@shared/listener/playbackDetours';
+  type TrackEndAdvanceAction,
+} from '@shared/playback/detours/state';
 import { isSongSkipped, isSongUnavailable } from '@shared/listener/playlistKinds';
-import { isVcPlayLockBlocking, isVcPlayLockBlockingSongRemoval, shouldReleasePlayLockOnNaturalAdvance } from '@shared/vcMode/playLock';
+import { isVcPlayLockBlockingSongRemoval } from '@shared/playback';
 import { loadOrderedPlaylistSongs, pickNextPrimarySongId } from './playbackDetourHelpers';
 import { OnDeckReplaceDialog } from './OnDeckReplaceDialog';
 import { ClearSongHistoryDialog } from './ClearSongHistoryDialog';
@@ -85,14 +92,14 @@ import {
   normalizeSongHistoryEntry,
   type SongHistoryEntry,
 } from '@shared/listener/songHistory';
-import type { OnDeckTrack } from '@shared/listener/playbackDetours';
+import type { OnDeckTrack } from '@shared/playback/detours/state';
 import { usePlaylistDragReorder } from './usePlaylistDragReorder';
 import { PlaylistTable } from './PlaylistTable';
 import { usePlaylistColumnWidths } from './usePlaylistColumnWidths';
 import { SongLikeButton } from './SongLikeButton';
 import { LikedSongsPanel } from './LikedSongsPanel';
 import { SunoDemoSongPage } from './SunoDemoSongPage';
-import { shouldUseDirectAudioPlayback, loadDirectAudioPlayback } from './directAudioPlayback';
+import { shouldUseDirectAudioPlayback } from './directAudioPlayback';
 import { PlaylistRowContextMenu } from './PlaylistRowContextMenu';
 import { LibrarySidebarContextMenu } from './LibrarySidebarContextMenu';
 import { LibraryPlaylistRemoveConfirm } from './LibraryPlaylistRemoveConfirm';
@@ -107,7 +114,7 @@ import { SoundcloudSongPage } from './SoundcloudSongPage';
 import type { YoutubePlayerHandle } from './youtube/YoutubePlayer';
 import type { SoundcloudPlayerHandle } from './soundcloud/SoundcloudPlayer';
 import { sidebarEntryType, isRenamableSidebarPlaylist, isSidebarPlaylistContextTarget } from './sidebarEntry';
-import { shareableSongLink } from './shareableSongPageUrl';
+import { shareableSongLink } from '@shared/listener/shareableSongLink';
 import { resolveSongAccess } from './resolveSongAccess';
 import {
   buildLikedSongsArtistRow,
@@ -127,7 +134,11 @@ import {
   isSunoDemoSongId,
 } from '@shared/demo/sunoDemoFeature';
 import { isYoutubeSong } from '@shared/youtube/youtubeFeature';
-import { isSoundcloudSong } from '@shared/soundcloud/soundcloudFeature';
+import {
+  isSoundcloudSong,
+  soundcloudPermalinkFromSong,
+} from '@shared/soundcloud/soundcloudFeature';
+import type { ProjectorNativePagePayload } from '@shared/visualizerMessages';
 import { isFlowSong } from '@shared/flow/flowFeature';
 import type { ArtistRow, SongRow } from '../types/app';
 import { EmbeddedVisualizerHost } from '../visualizers/EmbeddedVisualizerHost';
@@ -143,7 +154,8 @@ import { VcModeModal } from '../vc-mode/VcModeModal';
 import { VcCloseConfirmModal } from '../vc-mode/VcCloseConfirmModal';
 import { useVcModeManager } from '../vc-mode/useVcModeManager';
 import { useSpecialPlayPause } from './useSpecialPlayPause';
-import { useListenerPlaybackCommands } from './useListenerPlaybackCommands';
+import { usePlaybackTransportAdapters } from './usePlaybackTransportAdapters';
+import { useMediaSession } from '../playback/hooks/useMediaSession';
 import '../styles/themes.css';
 import '../styles/toast.css';
 import '../styles/select.css';
@@ -194,7 +206,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const { toasts, addToast, dismissToast } = useToasts();
   const { settings: playerSettings, toggleSeekLabel } = useListenerPlayerSettings();
   const { settings: playlistLengthSettings } = usePlaylistLengthSettings();
-  const { settings: lyricsDisplaySettings, setRemoveBrackets: setLyricsRemoveBrackets } =
+  const liveDebug = useLiveDebugSettings();
+  const { settings: lyricsDisplaySettings, setRemoveBrackets: setLyricsRemoveBrackets, setViewMode: setLyricsViewMode } =
     useListenerLyricsDisplaySettings();
   const sidebarLibrary = useListenerSidebarLibraryLayout(artists);
   const [busy, setBusy] = useState(false);
@@ -208,14 +221,21 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [pageLoadKey, setPageLoadKey] = useState(0);
   const [pageLoadError, setPageLoadError] = useState<string | null>(null);
 
-  const [shuffle, setShuffle] = useState(false);
-  const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [volume, setVolume] = useState(0.85);
   const [activePlaybackUrl, setActivePlaybackUrl] = useState<string | null>(null);
   const [effectsLab, setEffectsLab] = useState<EffectsLabState>(() => ({
     ...DEFAULT_EFFECTS_LAB_STATE,
     panelVisible: effectsLabStore.isPanelVisible(),
   }));
+  /** Keep mirror graph warm while Meyda Lab is open (same idea as Effects Lab panel). */
+  const [meydaLabVisible, setMeydaLabVisible] = useState(() => meydaLabStore.isPanelVisible());
+  /** Dry performance FX keep the main mirror routed while no whole-song preset is Active. */
+  const [performanceFxActive, setPerformanceFxActive] = useState(false);
+  /**
+   * VC window reports whether its capture `<audio>` is actually playing.
+   * If VC is open but capture is silent, we must not leave the main player ducked.
+   */
+  const [vcCaptureAudioActive, setVcCaptureAudioActive] = useState(false);
   const [crossfades, setCrossfades] = useState(false);
   const [chromeMinified, setChromeMinified] = useState(false);
   const [contentHeight, setContentHeight] = useState(DEFAULT_CONTENT_HEIGHT);
@@ -235,7 +255,20 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const skipInitialPlaylistSelectRef = useRef(true);
   const startupCueDoneRef = useRef(false);
   const skipNextPlaylistReloadRef = useRef(false);
-  const detoursRef = useRef(createEmptyDetourState());
+  const queueContextRef = useRef({
+    queueAnchorSongId: null as number | null,
+    sortedSongs: [] as SongRow[],
+    sessionSkippedIds: new Set<number>(),
+  });
+  const runPlaybackEffectsRef = useRef<(effects: PlaybackSessionEffect[]) => void>(() => {});
+  const playbackSessionRef = useRef(
+    createPlaybackSession({
+      getQueueContext: () => queueContextRef.current,
+      onEffects: (effects) => runPlaybackEffectsRef.current(effects),
+    }),
+  );
+  const playbackSession = playbackSessionRef.current as PlaybackSessionImpl;
+  const detoursRef = useRef<PlaybackDetourState>(playbackSession.getDetourState());
   const interruptReturnSongRef = useRef<SongRow | null>(null);
   const onDeckSongRef = useRef<SongRow | null>(null);
   const pendingPlaybackSeekRef = useRef<number | null>(null);
@@ -264,9 +297,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [songHistoryLoading, setSongHistoryLoading] = useState(false);
   const [clearSongHistoryOpen, setClearSongHistoryOpen] = useState(false);
   const [scrollToSongId, setScrollToSongId] = useState<number | null>(null);
+  const [scrollToSongNonce, setScrollToSongNonce] = useState(0);
+  /** Sidebar + title-click: playlist that currently owns/supplies transport playback. */
+  const [playingSourcePlaylistId, setPlayingSourcePlaylistId] = useState<number | null>(null);
   const activeHistoryEntryIdRef = useRef<number | null>(null);
   const songHistoryOpenRef = useRef(false);
   const pendingHistoryNavigationRef = useRef<{ song: SongRow; playlistId: number } | null>(null);
+  const pendingRevealSongRef = useRef<{ songId: number; playlistId: number } | null>(null);
   const [librarySidebarContextMenu, setLibrarySidebarContextMenu] = useState<{
     artist: ArtistRow;
     x: number;
@@ -285,13 +322,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const audioRef = useRef<HTMLAudioElement>(null);
   /** Muted HLS mirror for visualizer FFT — keeps main playback on native output for stream capture. */
   const analyserAudioRef = useRef<HTMLAudioElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
+  const mainMediaCoordinatorRef = useRef<MediaCoordinator | null>(null);
+  if (!mainMediaCoordinatorRef.current) {
+    mainMediaCoordinatorRef.current = new MediaCoordinator();
+  }
   const playbackGenerationRef = useRef(0);
   /** Ignore spurious `ended` while tearing down HLS / swapping tracks (double-advance). */
   const suppressPlaybackEndedRef = useRef(false);
   /** Serialize natural track-end auto-advance — stale `ended` must not call playSong twice. */
   const advancingFromEndedRef = useRef(false);
   const playingSongIdRef = useRef<number | null>(null);
+  /** Song page currently in the main pane (preview browse or playing track). */
+  const activeSongPageIdRef = useRef<number | null>(null);
   const pageAccessGenerationRef = useRef(0);
   const mainColumnRef = useRef<HTMLDivElement>(null);
   const listenerLayoutRef = useRef<HTMLDivElement>(null);
@@ -302,22 +344,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const playSongRef = useRef<(song: SongRow, options?: PlaySongOptions) => Promise<void>>(async () => {});
   const youtubePlayerRef = useRef<YoutubePlayerHandle | null>(null);
   const soundcloudPlayerRef = useRef<SoundcloudPlayerHandle | null>(null);
-  const playNextRef = useRef<() => void>(() => {});
+  const resumeAfterSpecialPauseRef = useRef<() => void>(() => {});
   /** Last row passed to playSong — visualizer must not depend on the selected playlist's song list. */
   const playingSongRowRef = useRef<SongRow | null>(null);
-  /** Latest transport handlers for VC window IPC — avoids hook-order / TDZ issues. */
-  const vcTransportHandlersRef = useRef({
-    togglePlayPause: () => {},
-    playPrevious: () => {},
-    playNext: () => {},
-    handleSeek: (_time: number) => {},
-    playSong: async (_song: SongRow) => {},
-    sortedSongs: [] as SongRow[],
-    handleYoutubeEnded: () => {},
-    handleSoundcloudEnded: () => {},
-    handleYoutubeDuration: (_seconds: number) => {},
-    applyYoutubeTiming: (_currentTime: number, _duration: number) => {},
-  });
 
   const selectedArtist = artists.find((artist) => artist.id === selectedArtistId) ?? null;
   const customPlaylistPickerRows = useMemo((): PlaylistPickerRow[] => {
@@ -349,11 +378,19 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     isPlaying && playingSong != null && isWidgetTransportSong(playingSong),
   );
   const previewSong = songs.find((song) => song.id === previewSongId) ?? playingSong;
+  /** Prefer the playing row; fall back to subscribed artist profile when song rows omit artist_name. */
+  const nowPlayingArtistName = useMemo(() => {
+    const song = playingSong ?? previewSong;
+    if (!song) return '';
+    const artistProfile = artists.find((artist) => artist.id === song.artist_id) ?? null;
+    return vcArtistDisplayName(song, artistProfile) ?? '';
+  }, [artists, playingSong, previewSong]);
   const isLikedPlaylist = isLikedSongsArtist(selectedArtistId);
   const isCustomPlaylistSelected = isUserPlaylistArtistId(selectedArtistId);
   const playlistKind = playlistKindForArtistId(selectedArtistId);
   const showArtistColumn = isLikedPlaylist || isCustomPlaylistSelected;
-  const showSourceColumn = isCustomPlaylistSelected;
+  // Liked Songs mixes catalog + Suno/Flow/SC/YT — Source column identifies provenance.
+  const showSourceColumn = isCustomPlaylistSelected || isLikedPlaylist;
   const playlistColumns = usePlaylistColumnWidths(playlistPanelRef, {
     hasArtist: showArtistColumn,
     hasSourceCol: showSourceColumn,
@@ -361,6 +398,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const { columnOrder, columnWidths, isResizing, profile: playlistTableProfile, resizeBetween } =
     playlistColumns;
   const activeSongPage = previewSong ?? playingSong;
+  activeSongPageIdRef.current = activeSongPage?.id ?? null;
   /** Transport row follows the cued preview or the active playback track. */
   const queueAnchorSongId = playingSongId ?? previewSongId;
   const transportDuration =
@@ -373,7 +411,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const showingYoutubePage = Boolean(activeSongPage && isYoutubeSong(activeSongPage));
   const showingSoundcloudPage = Boolean(activeSongPage && isSoundcloudSong(activeSongPage));
   const showingFlowPage = Boolean(activeSongPage && isFlowSong(activeSongPage));
-  const canToggleLike = previewSong != null && previewSong.id > 0;
+  /**
+   * Browse (single-click) can mount a YouTube/SoundCloud embed that is not the playing track.
+   * Only that playing track's widget may drive seekbar time/duration.
+   */
+  const widgetOwnsTransport =
+    playingSongId != null &&
+    activeSongPage != null &&
+    playingSongId === activeSongPage.id &&
+    (showingYoutubePage || showingSoundcloudPage);
+  const canToggleLike =
+    previewSong != null &&
+    (previewSong.id > 0 || isSunoDemoSong(previewSong) || isUserPlaylistSongId(previewSong.id));
   const playlistKey = useMemo(
     () => (selectedArtistId != null ? playlistKeyForArtistId(selectedArtistId) : null),
     [selectedArtistId],
@@ -398,7 +447,111 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const sortedSongsRef = useRef(sortedSongs);
   sortedSongsRef.current = sortedSongs;
 
+  queueContextRef.current = {
+    queueAnchorSongId,
+    sortedSongs,
+    sessionSkippedIds: vcSessionSkippedIds,
+  };
+
+  const playbackSnapshot = usePlaybackSnapshot(playbackSession);
+  const shuffle = playbackSnapshot?.shuffle ?? false;
+  const repeatMode = playbackSnapshot?.repeatMode ?? 'off';
+
+  const isCurrentTrackRepeatable = useCallback((): boolean => {
+    const row = playingSongRowRef.current;
+    if (!row) return false;
+    return (
+      !isSongSkipped(row) &&
+      !isSongUnavailable(row) &&
+      !vcSessionSkippedIds.has(row.id)
+    );
+  }, [vcSessionSkippedIds]);
+
+  /** Fast repeat-one loop in ended handlers — skip when the row cannot play again. */
+  const shouldFastRepeatCurrentOnEnd = useCallback((): boolean => {
+    return (
+      repeatMode === 'one' &&
+      detoursRef.current.activeRole === 'primary' &&
+      !detoursRef.current.onDeck &&
+      isCurrentTrackRepeatable()
+    );
+  }, [isCurrentTrackRepeatable, repeatMode]);
+
+  /**
+   * When play is pressed on a paused/stopped row that is skipped, do not resume it.
+   * Advance to the next playable track when one exists.
+   */
+  const tryResumeCurrentOrAdvance = useCallback((): 'resume' | 'advanced' | 'blocked' => {
+    if (isCurrentTrackRepeatable()) return 'resume';
+
+    const row = playingSongRowRef.current;
+    if (!row) return 'blocked';
+
+    const playable = resolvePlayableSong(sortedSongsRef.current, row, {
+      sessionSkippedIds: vcSessionSkippedIds,
+    });
+    if (!playable) return 'blocked';
+
+    void playSongRef.current(playable, { userInitiated: true });
+    return 'advanced';
+  }, [isCurrentTrackRepeatable, vcSessionSkippedIds]);
+
   playingSongIdRef.current = playingSongId;
+
+  const projectorHomepageUrl = useMemo(() => {
+    if (!selectedArtist) return null;
+    return selectedArtist.site_url?.trim() || selectedArtist.site_root_normalized?.trim() || null;
+  }, [selectedArtist]);
+
+  /** SoundCloud / Flow / Suno (non-HTTP) pages project as native UI, not a guest webview. */
+  const projectorNativePage = useMemo((): ProjectorNativePagePayload | null => {
+    const song = activeSongPage;
+    if (!song) return null;
+
+    if (isSoundcloudSong(song)) {
+      const permalink = soundcloudPermalinkFromSong(song);
+      if (!permalink) return null;
+      return {
+        kind: 'soundcloud',
+        songId: song.id,
+        title: song.title,
+        artist: song.artist_name ?? null,
+        coverUrl: song.cover_url ?? null,
+        permalink,
+      };
+    }
+
+    if (isFlowSong(song)) {
+      return {
+        kind: 'flow',
+        songId: song.id,
+        title: song.title,
+        artist: song.artist_name ?? null,
+        coverUrl: song.cover_url ?? null,
+        caption: song.caption ?? null,
+        songManifestUrl: song.song_manifest_url ?? null,
+      };
+    }
+
+    if (isSunoDemoSong(song)) {
+      return {
+        kind: 'suno',
+        songId: song.id,
+        title: song.title,
+        artist: song.artist_name ?? null,
+        coverUrl: song.cover_url ?? null,
+        year: song.year ?? null,
+        caption: song.caption ?? null,
+        pageUrl: song.page_url ?? null,
+        songManifestUrl: song.song_manifest_url ?? null,
+        externalId: song.external_id ?? null,
+        playbackScope: song.playback_scope ?? null,
+        providerMetadataJson: song.provider_metadata_json ?? null,
+      };
+    }
+
+    return null;
+  }, [activeSongPage]);
 
   const visualizer = useVisualizerManager({
     analyserAudioRef,
@@ -407,6 +560,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     currentTime,
     duration,
     pageUrl,
+    homepageUrl: projectorHomepageUrl,
+    nativePage: projectorNativePage,
+    lyricsDisplay: lyricsDisplaySettings,
+    songPageFontIncreaseLevel: playerSettings.songPageFontIncreaseLevel,
+    volume,
   });
 
   const butterchurnSettings = useExperienceSettings(visualizer.windowExperienceId, {
@@ -437,6 +595,14 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     [],
   );
 
+  // Rate hold is per-song — clear like ALARE trim so the next track starts normal.
+  useEffect(() => {
+    cancelPlaybackRateBurst(1);
+    setEffectsLab((prev) =>
+      prev.playbackRateHold === 1 ? prev : { ...prev, playbackRateHold: 1 },
+    );
+  }, [playingSongId]);
+
   const toggleAudioEffects = useCallback(() => {
     setEffectsLabSynced((prev) => ({ ...prev, panelVisible: !prev.panelVisible }));
   }, [setEffectsLabSynced]);
@@ -451,6 +617,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     };
     window.addEventListener('songpages-effects-lab-changed', syncFromStore);
     return () => window.removeEventListener('songpages-effects-lab-changed', syncFromStore);
+  }, []);
+
+  useEffect(() => {
+    const syncMeyda = () => setMeydaLabVisible(meydaLabStore.isPanelVisible());
+    window.addEventListener('songpages-meyda-lab-changed', syncMeyda);
+    return () => window.removeEventListener('songpages-meyda-lab-changed', syncMeyda);
   }, []);
 
   const buildDurationSnapshot = useCallback(() => {
@@ -703,7 +875,16 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   useEffect(() => {
     const app = getApp();
-    if (!app || previewSongId == null || previewSongId <= 0) {
+    if (!app || previewSongId == null) {
+      setCurrentSongLiked(false);
+      return;
+    }
+    // Catalog ids are positive; Suno demo + custom-playlist (Flow/SC/YT) use negative ids.
+    if (
+      previewSongId <= 0 &&
+      !isSunoDemoSongId(previewSongId) &&
+      !isUserPlaylistSongId(previewSongId)
+    ) {
       setCurrentSongLiked(false);
       return;
     }
@@ -775,10 +956,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   }, []);
 
   const destroyHls = () => {
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
+    mainMediaCoordinatorRef.current?.invalidateLoads();
   };
 
   const pickNextSongId = useCallback(
@@ -792,10 +970,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   );
 
   const specialPlay = useSpecialPlayPause({
-    onPlayNext: () => playNextRef.current(),
+    onPlayNext: () => resumeAfterSpecialPauseRef.current(),
   });
 
+  /** Main-pane embed is the playing track (not a single-click browse preview). */
+  const isMainPanePlayingWidget = useCallback(() => {
+    const playingId = playingSongIdRef.current;
+    return playingId != null && playingId === activeSongPageIdRef.current;
+  }, []);
+
   const handleYoutubeReady = useCallback(() => {
+    // Preview browse mounts widgets too — do not seek or force isPlaying for those.
+    if (!isMainPanePlayingWidget()) return;
     if (playingSongIdRef.current != null) setIsPlaying(true);
     const pendingSeek = pendingPlaybackSeekRef.current;
     if (pendingSeek != null && pendingSeek > 0) {
@@ -803,11 +989,19 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       setCurrentTime(pendingSeek);
       pendingPlaybackSeekRef.current = null;
     }
-  }, []);
+  }, [isMainPanePlayingWidget]);
 
   const handleYoutubeError = useCallback((message: string) => {
     setError(message);
   }, []);
+
+  const handleWidgetPlayingChange = useCallback(
+    (playing: boolean) => {
+      if (!isMainPanePlayingWidget()) return;
+      setIsPlaying(playing);
+    },
+    [isMainPanePlayingWidget],
+  );
 
   const vcPlaybackEffects = useMemo(
     (): VcPlaybackEffectsMirror => ({
@@ -819,6 +1013,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         outputTrimDb: effectsLab.outputTrimDb,
         abBypass: effectsLab.abBypass,
         workletEnhance: effectsLab.workletEnhance,
+        playbackRateHold: effectsLab.playbackRateHold,
       },
     }),
     [
@@ -827,46 +1022,108 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       effectsLab.effectId,
       effectsLab.enabled,
       effectsLab.outputTrimDb,
+      effectsLab.playbackRateHold,
       effectsLab.workletEnhance,
     ],
   );
 
   const vc = useVcModeManager({
+    playbackSession,
     analyserAudioRef,
     playingSong,
     previewSong,
     sortedSongs,
-    playingSongId,
-    repeatMode,
-    shuffle,
     artists,
-    isPlaying,
-    currentTime,
-    duration,
     activePlaybackUrl,
     volume,
     playbackEffects: vcPlaybackEffects,
-    specialPlayPause: specialPlay.specialPlayPause,
+    specialPlayPauseCountdown: specialPlay.specialPlayPause,
     sessionSkippedIds: vcSessionSkippedIds,
+    liveDebugEnabled: liveDebug.enabled,
   });
 
-  const isPlayLockActive = vc.vcOpen && vc.playLockEnabled;
-  const playLockRef = useRef(false);
-  playLockRef.current = isPlayLockActive;
+  const isPlayLockActive = playbackSession.isPlayLockActive();
+
+  useEffect(() => {
+    playbackSession.syncVcPolicy({
+      vcActive: vc.vcOpen,
+      playLockEnabled: vc.playLockEnabled,
+      playLockReleaseOnNext: vc.playLockReleaseOnNextSong,
+    });
+  }, [playbackSession, vc.playLockEnabled, vc.playLockReleaseOnNextSong, vc.vcOpen]);
+
+  useEffect(() => {
+    playbackSession.syncTransport({
+      activeTrackId: playingSongId,
+      isPlaying,
+      waitingForHost: specialPlay.specialPlayPause?.active === true,
+      currentTime,
+      duration: transportDuration,
+      mediaSource:
+        showingYoutubePage && playingSongId != null
+          ? 'youtube'
+          : showingSoundcloudPage && playingSongId != null
+            ? 'soundcloud'
+            : showingFlowPage && playingSongId != null
+              ? 'flow'
+              : playingSongId != null &&
+                  activeSongPage != null &&
+                  shouldUseDirectAudioPlayback(
+                    activePlaybackUrl ?? activeSongPage.playback_url ?? '',
+                    activeSongPage.playback_scope,
+                  )
+                ? 'direct'
+                : playingSongId != null
+                  ? 'hls'
+                  : null,
+      playingSongIdRef: playingSongIdRef.current,
+    });
+  }, [
+    activePlaybackUrl,
+    activeSongPage,
+    currentTime,
+    isPlaying,
+    playbackSession,
+    playingSongId,
+    showingFlowPage,
+    showingSoundcloudPage,
+    showingYoutubePage,
+    specialPlay.specialPlayPause?.active,
+    transportDuration,
+  ]);
 
   const persistSongDuration = useCallback(async (songId: number, seconds: number) => {
     const rounded = Math.round(seconds);
     if (rounded <= 0) return;
     if (songId <= 0 && !isSunoDemoSongId(songId) && !isUserPlaylistSongId(songId)) return;
 
-    setRuntimeDurations((prev) => ({ ...prev, [songId]: rounded }));
-    setSongs((prev) =>
-      prev.map((song) =>
-        song.id === songId && (song.duration_seconds == null || song.duration_seconds <= 0)
-          ? { ...song, duration_seconds: rounded }
-          : song,
-      ),
-    );
+    // Bail when unchanged — SoundCloud/YouTube widgets re-report duration often.
+    // A fresh runtimeDurations/songs identity forces the playlist body to rebuild and
+    // makes source logos flicker while the mouse moves over rows.
+    const alreadyCached = runtimeDurations[songId] === rounded;
+    const song = songs.find((row) => row.id === songId);
+    const songNeedsLocalDuration =
+      song != null && (song.duration_seconds == null || song.duration_seconds <= 0);
+    if (alreadyCached && !songNeedsLocalDuration) return;
+
+    if (!alreadyCached) {
+      setRuntimeDurations((prev) =>
+        prev[songId] === rounded ? prev : { ...prev, [songId]: rounded },
+      );
+    }
+    if (songNeedsLocalDuration) {
+      setSongs((prev) => {
+        let changed = false;
+        const next = prev.map((row) => {
+          if (row.id === songId && (row.duration_seconds == null || row.duration_seconds <= 0)) {
+            changed = true;
+            return { ...row, duration_seconds: rounded };
+          }
+          return row;
+        });
+        return changed ? next : prev;
+      });
+    }
 
     const app = getApp();
     if (!app) return;
@@ -900,14 +1157,35 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     vcSessionSkippedIds,
   ]);
 
-  const handleYoutubeDuration = useCallback(
+  /** VC / transport duration for the currently playing song (not the browse preview). */
+  const applyPlayingSongDuration = useCallback(
     (seconds: number) => {
+      if (!(seconds > 0)) return;
+      const playingId = playingSongIdRef.current;
+      if (playingId == null) return;
       setDuration(seconds);
-      if (playingSongId != null && seconds > 0) {
-        void persistSongDuration(playingSongId, seconds);
+      void persistSongDuration(playingId, seconds);
+    },
+    [persistSongDuration],
+  );
+
+  /**
+   * Main-pane YouTube/SoundCloud duration. Browse previews only cache length;
+   * seekbar updates require the open page to be the playing track.
+   */
+  const handleMainPaneWidgetDuration = useCallback(
+    (seconds: number) => {
+      if (!(seconds > 0)) return;
+      const pageId = activeSongPageIdRef.current;
+      if (isMainPanePlayingWidget()) {
+        applyPlayingSongDuration(seconds);
+        return;
+      }
+      if (pageId != null) {
+        void persistSongDuration(pageId, seconds);
       }
     },
-    [persistSongDuration, playingSongId],
+    [applyPlayingSongDuration, isMainPanePlayingWidget, persistSongDuration],
   );
 
   const wasVcOpenRef = useRef(false);
@@ -927,6 +1205,14 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     [vc.vcOpen, vc.activeConfig, playingSong],
   );
 
+  /** Projector: Video owns the YouTube iframe while the theater is open. */
+  const projectorYoutubeCaptureActive = useMemo(
+    () => visualizer.videoProjectionActive && playingSong != null && isYoutubeSong(playingSong),
+    [playingSong, visualizer.videoProjectionActive],
+  );
+
+  const youtubeRemoteCaptureActive = vcYoutubeCaptureActive || projectorYoutubeCaptureActive;
+
   const vcSoundcloudCaptureActive = useMemo(
     () =>
       vc.vcOpen &&
@@ -937,20 +1223,22 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   );
 
   const vcWidgetCaptureActive = vcYoutubeCaptureActive || vcSoundcloudCaptureActive;
+  /** Remote embed owns audible YouTube/SoundCloud (VC slot or Projector theater). */
+  const remoteWidgetCaptureActive = youtubeRemoteCaptureActive || vcSoundcloudCaptureActive;
 
-  const prevVcWidgetCaptureRef = useRef(false);
+  const prevRemoteWidgetCaptureRef = useRef(false);
   useEffect(() => {
-    const active = vcWidgetCaptureActive;
-    const wasActive = prevVcWidgetCaptureRef.current;
-    prevVcWidgetCaptureRef.current = active;
+    const active = remoteWidgetCaptureActive;
+    const wasActive = prevRemoteWidgetCaptureRef.current;
+    prevRemoteWidgetCaptureRef.current = active;
     if (!wasActive && active && playingSongId != null && playingSong != null && isWidgetTransportSong(playingSong)) {
       setIsPlaying(true);
     }
-  }, [vcWidgetCaptureActive, playingSong, playingSongId]);
+  }, [remoteWidgetCaptureActive, playingSong, playingSongId]);
 
   const handleYoutubeEnded = useCallback(() => {
     if (advancingFromEndedRef.current) return;
-    if (repeatMode === 'one' && detoursRef.current.activeRole === 'primary' && !detoursRef.current.onDeck) {
+    if (shouldFastRepeatCurrentOnEnd()) {
       setIsPlaying(false);
       if (vcYoutubeCaptureActive) {
         setCurrentTime(0);
@@ -963,11 +1251,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       return;
     }
     handleTrackNaturalEndRef.current();
-  }, [repeatMode, vcYoutubeCaptureActive]);
+  }, [shouldFastRepeatCurrentOnEnd, vcYoutubeCaptureActive]);
 
   const handleSoundcloudEnded = useCallback(() => {
     if (advancingFromEndedRef.current) return;
-    if (repeatMode === 'one' && detoursRef.current.activeRole === 'primary' && !detoursRef.current.onDeck) {
+    if (shouldFastRepeatCurrentOnEnd()) {
       setIsPlaying(false);
       if (vcSoundcloudCaptureActive) {
         setCurrentTime(0);
@@ -980,9 +1268,22 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       return;
     }
     handleTrackNaturalEndRef.current();
-  }, [repeatMode, vcSoundcloudCaptureActive]);
+  }, [shouldFastRepeatCurrentOnEnd, vcSoundcloudCaptureActive]);
 
+  /** Main-pane ended — ignore browse preview embeds. */
+  const handleMainPaneYoutubeEnded = useCallback(() => {
+    if (!isMainPanePlayingWidget()) return;
+    handleYoutubeEnded();
+  }, [handleYoutubeEnded, isMainPanePlayingWidget]);
+
+  const handleMainPaneSoundcloudEnded = useCallback(() => {
+    if (!isMainPanePlayingWidget()) return;
+    handleSoundcloudEnded();
+  }, [handleSoundcloudEnded, isMainPanePlayingWidget]);
+
+  /** VC timing bridge for the playing track (main pane may show something else). */
   const applyYoutubeTiming = useCallback((nextTime: number, nextDuration: number) => {
+    if (playingSongIdRef.current == null) return;
     if (!Number.isFinite(nextTime)) return;
     setCurrentTime(nextTime);
     if (Number.isFinite(nextDuration) && nextDuration > 0) {
@@ -990,12 +1291,32 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     }
   }, []);
 
-  useListenerPlaybackCommands({
+  // OS / keyboard / headphone media keys → PlaybackSession (next to PlayerBar transport).
+  useMediaSession({
+    session: playbackSession,
+    isPlaying,
+    // YouTube/SoundCloud iframes overwrite navigator.mediaSession — re-assert while they play.
+    reassertWhilePlaying: Boolean(
+      playingSong && isPlaying && isWidgetTransportSong(playingSong),
+    ),
+    track: playingSong
+      ? {
+          title: playingSong.title,
+          artist: nowPlayingArtistName || playingSong.artist_name || '',
+          artworkUrl: playingSong.cover_url,
+        }
+      : null,
+  });
+
+  usePlaybackTransportAdapters({
+    session: playbackSession,
+    // Accept VC transport IPC from VC Mode and from Projector: Video theater.
+    vcOpen: vc.vcOpen || projectorYoutubeCaptureActive,
     mainAudioRef: audioRef,
-    onPlayNextSong: specialPlay.playNextAfterPause,
-    isPlayLockBlocking: () => playLockRef.current,
-    onVolumeDelta: (delta) => {
-      setVolume((current) => Math.min(1, Math.max(0, current + delta)));
+    getSortedSongs: () => sortedSongsRef.current,
+    playSongById: (songId) => {
+      const target = sortedSongsRef.current.find((song) => song.id === songId);
+      if (target) void playSongRef.current(target);
     },
     onVisualizerStep: (direction) => {
       const catalogIds = listVisualizers().map((plugin) => plugin.id);
@@ -1010,6 +1331,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         getApp()?.vc?.syncActiveVisualizer?.(nextId);
       }
     },
+    onToggleLiveDebug: () => liveDebug.toggle(),
+    playLockVc: {
+      setPlayLockEnabled: vc.setPlayLockEnabled,
+      setPlayLockReleaseOnNextSong: vc.setPlayLockReleaseOnNextSong,
+    },
+    media: {
+      onYoutubeEnded: handleYoutubeEnded,
+      onSoundcloudEnded: handleSoundcloudEnded,
+      onYoutubeDuration: applyPlayingSongDuration,
+      onYoutubeTiming: applyYoutubeTiming,
+      onSoundcloudTiming: applyYoutubeTiming,
+    },
   });
 
   useEffect(() => {
@@ -1021,14 +1354,39 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   }, [vc.vcOpen, visualizer.selectExperience]);
 
   useEffect(() => {
+    if (!vc.vcOpen) {
+      setVcCaptureAudioActive(false);
+      return;
+    }
+    const app = getApp();
+    return app?.vc?.onPlaybackStatus?.(({ active }) => {
+      setVcCaptureAudioActive(Boolean(active));
+    });
+  }, [vc.vcOpen]);
+
+  useEffect(() => {
+    if (!vc.vcOpen) return;
+    // Performance FX must never leave the main mirror audible under VC.
+    setPerformanceFxActive(false);
+  }, [vc.vcOpen]);
+
+  useEffect(() => {
     if (!vc.vcOpen) specialPlay.clearPause();
   }, [specialPlay.clearPause, vc.vcOpen]);
+
+  // Duck main only when VC capture audio is actually carrying the mix (or playback is paused).
+  // Otherwise keep local speakers alive — a silent VC window used to mute the whole player.
+  const vcOwnsAudibleOutput = vc.vcOpen && (vcCaptureAudioActive || !isPlaying);
 
   const analyserMirrorEnabled =
     (visualizer.canVisualize && visualizer.activeSession !== 'none') ||
     (visualizer.windowOpen && visualizer.projectionMode === 'visualizer' && visualizer.canVisualize) ||
     vc.analyserEnabled ||
-    isEffectsLabAudible(effectsLab);
+    isEffectsLabAudible(effectsLab) ||
+    // Warm the mirror while the panel is open so performance pads are not firing into silence.
+    effectsLab.panelVisible ||
+    meydaLabVisible ||
+    performanceFxActive;
 
   useAudioDebugReporter({
     surface: 'main',
@@ -1067,95 +1425,23 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     bassBoost: false,
     lofi: false,
     effectsLab,
-    // VC window owns audible output — main stays timing-only while VC is open.
-    vcMirrorPlaybackActive: vc.vcOpen,
+    // VC window owns audible output only while its capture element is actually playing.
+    vcMirrorPlaybackActive: vcOwnsAudibleOutput,
+    performanceFxActive,
   });
-
-  useEffect(() => {
-    const app = getApp();
-    if (!app?.vc?.onTransport) return;
-
-    const off = app.vc.onTransport((command) => {
-      const handlers = vcTransportHandlersRef.current;
-      const playLockOn = playLockRef.current;
-      const lockContext = { playingSongId: playingSongIdRef.current };
-
-      if (command.type === 'playPause') {
-        handlers.togglePlayPause();
-        return;
-      }
-      if (command.type === 'prev') {
-        if (isVcPlayLockBlocking(playLockOn, 'prev', lockContext)) return;
-        handlers.playPrevious();
-        return;
-      }
-      if (command.type === 'next') {
-        if (isVcPlayLockBlocking(playLockOn, 'next', lockContext)) return;
-        handlers.playNext();
-        return;
-      }
-      if (command.type === 'seek') {
-        handlers.handleSeek(command.seconds);
-        return;
-      }
-      if (command.type === 'playSong') {
-        if (
-          isVcPlayLockBlocking(playLockOn, 'change-song', {
-            ...lockContext,
-            targetSongId: command.songId,
-          })
-        ) {
-          return;
-        }
-        const target = handlers.sortedSongs.find((song) => song.id === command.songId);
-        if (target) void handlers.playSong(target);
-        return;
-      }
-      if (command.type === 'playNextSong') {
-        if (isVcPlayLockBlocking(playLockOn, 'play-next-song', lockContext)) return;
-        specialPlay.playNextAfterPause();
-        return;
-      }
-      if (command.type === 'youtubeEnded') {
-        handlers.handleYoutubeEnded();
-        return;
-      }
-      if (command.type === 'youtubeTiming') {
-        handlers.applyYoutubeTiming(command.currentTime, command.duration);
-        return;
-      }
-      if (command.type === 'youtubeDuration') {
-        handlers.handleYoutubeDuration(command.seconds);
-        return;
-      }
-      if (command.type === 'soundcloudEnded') {
-        handlers.handleSoundcloudEnded();
-        return;
-      }
-      if (command.type === 'soundcloudTiming') {
-        handlers.applyYoutubeTiming(command.currentTime, command.duration);
-        return;
-      }
-      if (command.type === 'soundcloudDuration') {
-        handlers.handleYoutubeDuration(command.seconds);
-      }
-    });
-
-    return () => off();
-  }, [specialPlay.playNextAfterPause, vc.vcOpen]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    // VC window owns audible playback while open — always duck main (FX path included).
-    if (vc.vcOpen) {
+    if (vcOwnsAudibleOutput) {
       audio.volume = 0;
       return;
     }
-    if (isEffectsLabAudible(effectsLab)) return;
+    if (isEffectsLabAudible(effectsLab) || performanceFxActive) return;
+    audio.muted = false;
     audio.volume = volume;
-  }, [volume, effectsLab, vc.vcOpen]);
+  }, [volume, effectsLab, vcOwnsAudibleOutput, performanceFxActive]);
 
   const markSongAvailability = useCallback(
     async (song: SongRow, unavailable: boolean) => {
@@ -1171,10 +1457,29 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     [],
   );
 
+  /** True when Liked Songs availability probes don't apply (embeds / native demos). */
+  const songSkipsLikedAvailabilityProbe = useCallback((song: SongRow) => {
+    return (
+      isWidgetTransportSong(song) ||
+      isFlowSong(song) ||
+      isSunoDemoSong(song) ||
+      !/^https?:\/\//i.test(String(song.page_url ?? '').trim())
+    );
+  }, []);
+
   /** Lazy probe when traversing the Liked Songs playlist — re-checks on every visit. */
   const probeLikedSongAvailability = useCallback(
     async (song: SongRow) => {
       if (!isLikedSongsArtist(selectedArtistId)) return;
+
+      // Widget / native demo tracks aren't HTML song pages — the http probe wrongly
+      // marks them unavailable (songpages-soundcloud:, YouTube, Flow, Suno).
+      if (songSkipsLikedAvailabilityProbe(song)) {
+        if (song.unavailable === 1) {
+          await markSongAvailability(song, false);
+        }
+        return;
+      }
 
       const app = getApp();
       if (!app) return;
@@ -1184,8 +1489,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
       await markSongAvailability(song, !result.data.ok);
     },
-    [markSongAvailability, selectedArtistId],
+    [markSongAvailability, selectedArtistId, songSkipsLikedAvailabilityProbe],
   );
+
+  // Clear false "unavailable" strikes left by the old probe path for embeds / demos.
+  useEffect(() => {
+    if (!isLikedPlaylist) return;
+    for (const song of songs) {
+      if (song.unavailable === 1 && songSkipsLikedAvailabilityProbe(song)) {
+        void markSongAvailability(song, false);
+      }
+    }
+  }, [isLikedPlaylist, markSongAvailability, songIdsSignature, songSkipsLikedAvailabilityProbe, songs]);
   const probeDurationForSong = useCallback(
     async (song: SongRow) => {
       // YouTube and SoundCloud use embedded widget players — length comes from the widget on first play.
@@ -1351,37 +1666,27 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       const historyOnDeck =
         detour && role === 'on-deck' ? detoursRef.current.onDeck : null;
 
-      if (userInitiated && playLockRef.current) {
+      if (userInitiated && playbackSession.isPlayLockActive()) {
         if (detour) {
-          if (
-            role === 'play-now' &&
-            isVcPlayLockBlocking(true, 'play-now', { playingSongId })
-          ) {
+          if (role === 'play-now' && playbackSession.isTrajectoryChangeBlocked('play-now')) {
             return;
           }
-          if (
-            role === 'on-deck' &&
-            isVcPlayLockBlocking(true, 'on-deck', { playingSongId })
-          ) {
+          if (role === 'on-deck' && playbackSession.isTrajectoryChangeBlocked('on-deck')) {
             return;
           }
-        } else if (
-          isVcPlayLockBlocking(true, 'change-song', {
-            playingSongId,
-            targetSongId: song.id,
-          })
-        ) {
+        } else if (playbackSession.isTrajectoryChangeBlocked('change-song', song.id)) {
           return;
         }
       }
 
       if (!detour) {
-        clearDetourState(detoursRef.current);
         interruptReturnSongRef.current = null;
         onDeckSongRef.current = null;
         setOnDeckInfo(null);
         if (selectedArtistId != null) {
-          setPrimaryContext(detoursRef.current, selectedArtistId, song.id);
+          playbackSession.beginPrimaryPlayback(selectedArtistId, song.id);
+        } else {
+          playbackSession.clearDetours();
         }
 
         const playableSong = resolvePlayableSong(sortedSongsRef.current, song, {
@@ -1402,12 +1707,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           return;
         }
         if (role === 'on-deck') {
-          markSongConsumed(detoursRef.current, song.id);
-          detoursRef.current.onDeck = null;
+          playbackSession.beginDetourOnDeckPlayback(song.id);
           onDeckSongRef.current = null;
           setOnDeckInfo(null);
         }
-        detoursRef.current.activeRole = role;
+        playbackSession.setDetourRole(role);
       }
 
       void beginPlaybackHistory(song, options, historyOnDeck);
@@ -1425,6 +1729,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       setMainContentView('song');
       setPageLoadError(null);
       setError(null);
+
+      // Sidebar “now playing playlist” follows the track’s source playlist.
+      if (!detour && selectedArtistId != null) {
+        setPlayingSourcePlaylistId(selectedArtistId);
+      } else if (detour) {
+        const role = options.role ?? 'primary';
+        const sourceId =
+          role === 'play-now' || role === 'on-deck'
+            ? (options.historyContext?.playlistId ?? selectedArtistId)
+            : (detoursRef.current.primary?.artistId ?? selectedArtistId);
+        if (sourceId != null) setPlayingSourcePlaylistId(sourceId);
+      }
 
       if (!detour && selectedArtistId != null) {
         void getApp()?.saveSettings(
@@ -1498,63 +1814,23 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         );
       };
 
-      const onAudioError = () => {
+      const onAudioError = (detail?: string) => {
         if (generation !== playbackGenerationRef.current) return;
         suppressPlaybackEndedRef.current = false;
-        setError('Could not load audio stream.');
+        setError(detail ? `HLS error — ${detail}` : 'Could not load audio stream.');
         setIsPlaying(false);
         setActivePlaybackUrl(null);
         markUnavailableIfLiked();
         handlePlaybackFailure();
       };
 
-      if (shouldUseDirectAudioPlayback(playbackUrl, song.playback_scope)) {
-        loadDirectAudioPlayback(audio, playbackUrl, {
-          onReady: startPlayback,
-          onError: onAudioError,
-        });
-      } else if (Hls.isSupported()) {
-        const hls = new Hls({
-          enableWorker: true,
-          xhrSetup: (xhr) => {
-            xhr.withCredentials = false;
-          },
-        });
-        hlsRef.current = hls;
-        hls.loadSource(playbackUrl);
-        hls.attachMedia(audio);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (generation !== playbackGenerationRef.current) return;
-          startPlayback();
-        });
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (generation !== playbackGenerationRef.current) return;
-          if (data.fatal) {
-            suppressPlaybackEndedRef.current = false;
-            const detail = data.details ? `${data.type}: ${data.details}` : data.type;
-            setError(`HLS error — ${detail}`);
-            setIsPlaying(false);
-            setActivePlaybackUrl(null);
-            markUnavailableIfLiked();
-            handlePlaybackFailure();
-          }
-        });
-      } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
-        audio.src = playbackUrl;
-        audio.addEventListener(
-          'loadedmetadata',
-          () => {
-            if (generation !== playbackGenerationRef.current) return;
-            startPlayback();
-          },
-          { once: true },
-        );
-        audio.addEventListener('error', onAudioError, { once: true });
-      } else {
-        suppressPlaybackEndedRef.current = false;
-        setError('HLS playback is not supported in this environment.');
-        handlePlaybackFailure();
-      }
+      mainMediaCoordinatorRef.current?.attach(audio, playbackUrl, {
+        generation,
+        playbackScope: song.playback_scope,
+        isGenerationCurrent: (g) => g === playbackGenerationRef.current,
+        onReady: startPlayback,
+        onError: onAudioError,
+      });
     },
     [beginPlaybackHistory, markSongAvailability, probeLikedSongAvailability, selectedArtistId, vcSessionSkippedIds],
   );
@@ -1570,8 +1846,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   const ensurePrimaryPlaybackContext = useCallback(() => {
     if (detoursRef.current.primary || selectedArtistId == null || playingSongId == null) return;
-    setPrimaryContext(detoursRef.current, selectedArtistId, playingSongId);
-  }, [playingSongId, selectedArtistId]);
+    playbackSession.setPrimaryContext(selectedArtistId, playingSongId);
+  }, [playbackSession, playingSongId, selectedArtistId]);
 
   const playPrimarySongById = useCallback(
     async (songId: number, options: PlaySongOptions = {}) => {
@@ -1615,10 +1891,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       if (nextSongId == null) return;
       const nextSong = ordered.find((row) => row.id === nextSongId);
       if (!nextSong) return;
-      detoursRef.current.activeRole = 'primary';
-      if (detoursRef.current.primary) {
-        detoursRef.current.primary.anchorSongId = nextSong.id;
-      }
+      playbackSession.setActiveRole('primary');
+      playbackSession.updatePrimaryAnchor(nextSong.id);
       const restartCurrent =
         nextSong.id === playingSongIdRef.current && primaryQueueOptions().repeatMode === 'one';
       await playSong(nextSong, {
@@ -1627,7 +1901,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         startAt: restartCurrent ? 0 : undefined,
       });
     },
-    [playSong, primaryQueueOptions, selectedArtistId],
+    [playSong, playbackSession, primaryQueueOptions, selectedArtistId],
   );
 
   const handleDetourPlaybackFailure = useCallback(async () => {
@@ -1635,8 +1909,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     if (role === 'play-now') {
       const resumeSong = interruptReturnSongRef.current;
       const interrupt = detoursRef.current.interrupt;
-      detoursRef.current.interrupt = null;
-      detoursRef.current.activeRole = 'primary';
+      playbackSession.clearInterrupt();
+      playbackSession.setActiveRole('primary');
       if (resumeSong && interrupt) {
         await playSong(resumeSong, {
           startAt: interrupt.returnPositionSeconds,
@@ -1648,22 +1922,22 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     }
 
     if (role === 'on-deck') {
-      detoursRef.current.activeRole = 'primary';
+      playbackSession.setActiveRole('primary');
       const primary = detoursRef.current.primary;
       if (!primary) return;
       await advancePrimaryPlaylist(primary.anchorSongId, primary.consumedSongIds);
     }
-  }, [advancePrimaryPlaylist, playSong]);
+  }, [advancePrimaryPlaylist, playSong, playbackSession]);
 
   /** Start the queued On Deck track — used when the current song ends or the user hits Next. */
   const playQueuedOnDeckIfAny = useCallback(async (fromUser = false): Promise<boolean> => {
-    if (fromUser && playLockRef.current) return false;
+    if (fromUser && playbackSession.isPlayLockActive()) return false;
 
     const deckTrack = detoursRef.current.onDeck;
     if (!deckTrack) return false;
 
     const deckSong = onDeckSongRef.current;
-    detoursRef.current.onDeck = null;
+    playbackSession.setOnDeck(null);
     onDeckSongRef.current = null;
     setOnDeckInfo(null);
 
@@ -1676,34 +1950,26 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       return false;
     }
 
-    await playSong(deckSong, { detour: true, role: 'on-deck' });
+    await playSong(deckSong, {
+      detour: true,
+      role: 'on-deck',
+      historyContext: {
+        playlistId: deckTrack.artistId,
+        playlistName: deckTrack.playlistName,
+        playbackType: 'on-deck',
+      },
+    });
     return true;
-  }, [advancePrimaryPlaylist, playSong]);
+  }, [advancePrimaryPlaylist, playSong, playbackSession]);
 
   const dismissOnDeck = useCallback(() => {
-    detoursRef.current.onDeck = null;
+    playbackSession.setOnDeck(null);
     onDeckSongRef.current = null;
     setOnDeckInfo(null);
-  }, []);
+  }, [advancePrimaryPlaylist, playSong, playbackSession]);
 
-  const handleTrackNaturalEnd = useCallback(async () => {
-    if (advancingFromEndedRef.current) return;
-
-    const currentSongId = playingSongIdRef.current;
-    if (currentSongId == null) return;
-
-    if (vc.vcOpen && specialPlay.beginPauseAfterSong(vc.activeConfig.specialPlayStyle)) {
-      return;
-    }
-
-    advancingFromEndedRef.current = true;
-    try {
-      const action = resolveTrackEndAdvance({
-        state: detoursRef.current,
-        repeatMode,
-        currentSongId,
-      });
-
+  const executeTrackEndAction = useCallback(
+    async (action: TrackEndAdvanceAction) => {
       setIsPlaying(false);
 
       const finalizeCompletedHistory = async () => {
@@ -1723,8 +1989,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
       switch (action.type) {
         case 'repeat-current': {
-          const audio = audioRef.current;
           const row = playingSongRowRef.current;
+          if (row && !isCurrentTrackRepeatable()) {
+            await finalizeCompletedHistory();
+            break;
+          }
+          const audio = audioRef.current;
           if (row && isWidgetTransportSong(row)) {
             if (vcYoutubeCaptureActive || vcSoundcloudCaptureActive) {
               setCurrentTime(0);
@@ -1754,8 +2024,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           await finalizeCompletedHistory();
           const resumeSong = interruptReturnSongRef.current;
           const interrupt = detoursRef.current.interrupt;
-          detoursRef.current.interrupt = null;
-          detoursRef.current.activeRole = 'primary';
+          playbackSession.clearInterrupt();
+          playbackSession.setActiveRole('primary');
           if (resumeSong && interrupt) {
             await playSong(resumeSong, {
               startAt: interrupt.returnPositionSeconds,
@@ -1767,13 +2037,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         }
         case 'repeat-primary-anchor': {
           await finalizeCompletedHistory();
-          detoursRef.current.activeRole = 'primary';
+          playbackSession.setActiveRole('primary');
           await playPrimarySongById(action.songId);
           break;
         }
         case 'advance-primary': {
           await finalizeCompletedHistory();
-          detoursRef.current.activeRole = 'primary';
+          playbackSession.setActiveRole('primary');
           await advancePrimaryPlaylist(action.anchorSongId, action.consumedSongIds);
           break;
         }
@@ -1781,29 +2051,87 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           await finalizeCompletedHistory();
           break;
       }
+    },
+    [
+      advancePrimaryPlaylist,
+      duration,
+      finalizeActiveHistoryEntry,
+      getPlaybackPositionSeconds,
+      playPrimarySongById,
+      playQueuedOnDeckIfAny,
+      playSong,
+      playbackSession,
+      isCurrentTrackRepeatable,
+      vcSoundcloudCaptureActive,
+      vcYoutubeCaptureActive,
+    ],
+  );
 
-      if (shouldReleasePlayLockOnNaturalAdvance(action.type)) {
-        vc.releasePlayLockIfScheduled();
+  const releaseScheduledPlayLock = useCallback(() => {
+    const armed =
+      playbackSession.getSnapshot().playLockReleaseOnNext || vc.playLockReleaseOnNextSong;
+    if (!armed) return;
+
+    // Clear VC controller state and session together so syncVcPolicy cannot restore a stale lock.
+    vc.setPlayLockReleaseOnNextSong(false);
+    vc.setPlayLockEnabled(false);
+    playbackSession.syncVcPolicy({
+      vcActive: vc.vcOpen,
+      playLockEnabled: false,
+      playLockReleaseOnNext: false,
+    });
+  }, [playbackSession, vc]);
+
+  const resumeAfterSpecialPause = useCallback(async () => {
+    if (advancingFromEndedRef.current) return;
+
+    const currentSongId = playingSongIdRef.current;
+    if (currentSongId == null) return;
+
+    advancingFromEndedRef.current = true;
+    try {
+      playbackSession.handleTrackEnded(currentSongId, {
+        currentSongPlayable: isCurrentTrackRepeatable(),
+      });
+    } finally {
+      advancingFromEndedRef.current = false;
+    }
+  }, [isCurrentTrackRepeatable, playbackSession]);
+  resumeAfterSpecialPauseRef.current = () => {
+    void resumeAfterSpecialPause();
+  };
+
+  const handleTrackNaturalEnd = useCallback(async () => {
+    if (advancingFromEndedRef.current) return;
+
+    const currentSongId = playingSongIdRef.current;
+    if (currentSongId == null) return;
+
+    if (vc.vcOpen) {
+      if (isSpecialPlayStyleActive(vc.activeConfig.specialPlayStyle.style)) {
+        // 1-song play lock clears when the song ends, before the between-song countdown.
+        releaseScheduledPlayLock();
+        if (specialPlay.beginPauseAfterSong(vc.activeConfig.specialPlayStyle)) {
+          return;
+        }
       }
+    }
+
+    advancingFromEndedRef.current = true;
+    try {
+      playbackSession.handleTrackEnded(currentSongId, {
+        currentSongPlayable: isCurrentTrackRepeatable(),
+      });
     } finally {
       advancingFromEndedRef.current = false;
     }
   }, [
-    advancePrimaryPlaylist,
-    duration,
-    finalizeActiveHistoryEntry,
-    getPlaybackPositionSeconds,
-    handleDetourPlaybackFailure,
-    playPrimarySongById,
-    playQueuedOnDeckIfAny,
-    playSong,
-    repeatMode,
+    isCurrentTrackRepeatable,
+    playbackSession,
+    releaseScheduledPlayLock,
     specialPlay,
     vc.activeConfig.specialPlayStyle,
-    vc.releasePlayLockIfScheduled,
     vc.vcOpen,
-    vcSoundcloudCaptureActive,
-    vcYoutubeCaptureActive,
   ]);
 
   useEffect(() => {
@@ -1820,25 +2148,27 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     (song: SongRow, artistId: number, playlistName: string) => {
       ensurePrimaryPlaybackContext();
       onDeckSongRef.current = song;
-      detoursRef.current.onDeck = {
+      playbackSession.setOnDeck({
         songId: song.id,
         artistId,
         songTitle: song.title,
         playlistName,
-      };
+      });
       setOnDeckInfo({
+        songId: song.id,
+        playlistId: artistId,
         songTitle: song.title,
         artistName: song.artist_name ?? '',
         playlistName,
       });
     },
-    [ensurePrimaryPlaybackContext],
+    [ensurePrimaryPlaybackContext, playbackSession],
   );
 
   const handlePlayNowFromContext = useCallback(
     async (song: SongRow) => {
       if (playingSongId == null || !playingSong) return;
-      if (isVcPlayLockBlocking(playLockRef.current, 'play-now', { playingSongId })) return;
+      if (playbackSession.isTrajectoryChangeBlocked('play-now')) return;
       const menu = playlistContextMenu;
       setPlaylistContextMenu(null);
       setOnDeckReplacePrompt(null);
@@ -1846,16 +2176,16 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
       const primary = detoursRef.current.primary;
       if (primary) {
-        primary.anchorSongId = playingSongId;
+        playbackSession.updatePrimaryAnchor(playingSongId);
       }
 
       interruptReturnSongRef.current = playingSong;
-      detoursRef.current.interrupt = {
+      playbackSession.setInterrupt({
         returnSongId: playingSong.id,
         returnArtistId: primary?.artistId ?? selectedArtistId ?? playingSong.artist_id,
         returnPositionSeconds: getPlaybackPositionSeconds(),
-      };
-      detoursRef.current.activeRole = 'play-now';
+      });
+      playbackSession.setActiveRole('play-now');
       await playSong(song, {
         detour: true,
         role: 'play-now',
@@ -1877,6 +2207,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       playingSong,
       playingSongId,
       playlistContextMenu,
+      playbackSession,
       selectedArtistId,
     ],
   );
@@ -1884,7 +2215,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const handlePutOnDeckFromContext = useCallback(
     (song: SongRow, artistId: number, playlistName: string) => {
       if (playingSongId == null) return;
-      if (isVcPlayLockBlocking(playLockRef.current, 'on-deck', { playingSongId })) return;
+      if (playbackSession.isTrajectoryChangeBlocked('on-deck')) return;
       setPlaylistContextMenu(null);
       ensurePrimaryPlaybackContext();
 
@@ -1949,20 +2280,20 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         return;
       }
 
-      if (isVcPlayLockBlocking(playLockRef.current, 'play-now', { playingSongId })) return;
+      if (playbackSession.isTrajectoryChangeBlocked('play-now')) return;
       ensurePrimaryPlaybackContext();
       const primary = detoursRef.current.primary;
       if (primary) {
-        primary.anchorSongId = playingSongId;
+        playbackSession.updatePrimaryAnchor(playingSongId);
       }
 
       interruptReturnSongRef.current = playingSong;
-      detoursRef.current.interrupt = {
+      playbackSession.setInterrupt({
         returnSongId: playingSong.id,
         returnArtistId: primary?.artistId ?? selectedArtistId ?? playingSong.artist_id,
         returnPositionSeconds: getPlaybackPositionSeconds(),
-      };
-      detoursRef.current.activeRole = 'play-now';
+      });
+      playbackSession.setActiveRole('play-now');
       await playSong(resolved.song, {
         detour: true,
         role: 'play-now',
@@ -2006,10 +2337,57 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
       await showSongPage(resolved.song);
       setScrollToSongId(resolved.song.id);
+      setScrollToSongNonce((n) => n + 1);
       setSongHistoryOpen(false);
     },
     [addToast, resolveHistorySong, selectedArtistId, showSongPage],
   );
+
+  /** Single-click Now Playing title — select source playlist, open the song page, scroll to the row. */
+  const revealSongInPlaylist = useCallback(
+    (song: SongRow, playlistId: number | null) => {
+      const focusSong = (row: SongRow) => {
+        void showSongPage(row);
+        setScrollToSongId(row.id);
+        setScrollToSongNonce((n) => n + 1);
+      };
+
+      if (playlistId == null || selectedArtistId === playlistId) {
+        focusSong(song);
+        return;
+      }
+
+      pendingRevealSongRef.current = { songId: song.id, playlistId };
+      skipNextPlaylistReloadRef.current = false;
+      setSelectedArtistId(playlistId);
+    },
+    [selectedArtistId, showSongPage],
+  );
+
+  const handleRevealNowPlaying = useCallback(() => {
+    if (playingSongId == null || !playingSong) return;
+
+    const playlistId =
+      playingSourcePlaylistId ??
+      playbackSnapshot?.detours.primary?.artistId ??
+      selectedArtistId;
+
+    revealSongInPlaylist(playingSong, playlistId);
+  }, [
+    playingSong,
+    playingSongId,
+    playingSourcePlaylistId,
+    playbackSnapshot?.detours.primary?.artistId,
+    revealSongInPlaylist,
+    selectedArtistId,
+  ]);
+
+  const handleRevealOnDeck = useCallback(() => {
+    const deck = onDeckInfo;
+    const song = onDeckSongRef.current;
+    if (!deck || !song || song.id !== deck.songId) return;
+    revealSongInPlaylist(song, deck.playlistId);
+  }, [onDeckInfo, revealSongInPlaylist]);
 
   const handleConfirmClearSongHistory = useCallback(async () => {
     const app = getApp();
@@ -2029,6 +2407,21 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     pendingHistoryNavigationRef.current = null;
     void showSongPage(song);
     setScrollToSongId(song.id);
+    setScrollToSongNonce((n) => n + 1);
+  }, [selectedArtistId, showSongPage, sortedSongs]);
+
+  // Finish title-click reveal after the source playlist finishes loading.
+  useEffect(() => {
+    const pending = pendingRevealSongRef.current;
+    if (!pending || selectedArtistId !== pending.playlistId) return;
+
+    const song = sortedSongs.find((row) => row.id === pending.songId);
+    if (!song) return;
+
+    pendingRevealSongRef.current = null;
+    void showSongPage(song);
+    setScrollToSongId(song.id);
+    setScrollToSongNonce((n) => n + 1);
   }, [selectedArtistId, showSongPage, sortedSongs]);
 
   useEffect(() => {
@@ -2139,11 +2532,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       if (!audio.ended) return;
 
       setIsPlaying(false);
-      if (
-        repeatMode === 'one' &&
-        detoursRef.current.activeRole === 'primary' &&
-        !detoursRef.current.onDeck
-      ) {
+      if (shouldFastRepeatCurrentOnEnd()) {
         audio.currentTime = 0;
         void audio.play();
         setIsPlaying(true);
@@ -2174,11 +2563,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       audio.removeEventListener('play', onPlay);
       audio.removeEventListener('pause', onPause);
     };
-  }, [persistSongDuration, playingSongId, repeatMode]);
+  }, [persistSongDuration, playingSongId, shouldFastRepeatCurrentOnEnd]);
 
   useEffect(() => {
-    if (vcWidgetCaptureActive) return;
-    if ((!showingYoutubePage && !showingSoundcloudPage) || playingSongId == null || !isPlaying) return;
+    // Only poll the main-pane widget when it is the playing track (not a browse preview).
+    if (vcWidgetCaptureActive || !widgetOwnsTransport || !isPlaying) return;
 
     const tick = () => {
       const player = showingYoutubePage
@@ -2186,17 +2575,25 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         : soundcloudPlayerRef.current;
       if (!player) return;
       const nextTime = player.getCurrentTime();
-      if (Number.isFinite(nextTime)) setCurrentTime(nextTime);
+      // Skip identical floats so seekbar ticks do not thrash ListenerMode for no reason.
+      if (Number.isFinite(nextTime)) {
+        setCurrentTime((prev) => (Math.abs(prev - nextTime) < 0.05 ? prev : nextTime));
+      }
       const nextDuration = player.getDuration();
       if (Number.isFinite(nextDuration) && nextDuration > 0) {
-        setDuration(nextDuration);
+        setDuration((prev) => (Math.abs(prev - nextDuration) < 0.05 ? prev : nextDuration));
       }
     };
 
     tick();
     const intervalId = window.setInterval(tick, 250);
     return () => window.clearInterval(intervalId);
-  }, [isPlaying, playingSongId, showingSoundcloudPage, showingYoutubePage, vcWidgetCaptureActive]);
+  }, [
+    isPlaying,
+    showingYoutubePage,
+    vcWidgetCaptureActive,
+    widgetOwnsTransport,
+  ]);
 
   useEffect(() => () => destroyHls(), []);
 
@@ -2551,9 +2948,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   const togglePlayPause = () => {
     if (playingSongId == null && previewSong) {
-      if (
-        isVcPlayLockBlocking(playLockRef.current, 'start-idle-playback', { playingSongId })
-      ) {
+      if (playbackSession.isTrajectoryChangeBlocked('start-idle-playback')) {
         return;
       }
       void playSong(previewSong, { userInitiated: true });
@@ -2562,13 +2957,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
     if (showingYoutubePage && playingSongId != null && activeSongPage?.id === playingSongId) {
       if (vcYoutubeCaptureActive) {
-        setIsPlaying(!isPlaying);
+        if (isPlaying) {
+          setIsPlaying(false);
+        } else if (tryResumeCurrentOrAdvance() === 'resume') {
+          setIsPlaying(true);
+        }
         return;
       }
       if (isPlaying) {
         youtubePlayerRef.current?.pause();
         setIsPlaying(false);
       } else {
+        if (tryResumeCurrentOrAdvance() !== 'resume') return;
         youtubePlayerRef.current?.play();
         setIsPlaying(true);
       }
@@ -2577,13 +2977,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
     if (showingSoundcloudPage && playingSongId != null && activeSongPage?.id === playingSongId) {
       if (vcSoundcloudCaptureActive) {
-        setIsPlaying(!isPlaying);
+        if (isPlaying) {
+          setIsPlaying(false);
+        } else if (tryResumeCurrentOrAdvance() === 'resume') {
+          setIsPlaying(true);
+        }
         return;
       }
       if (isPlaying) {
         soundcloudPlayerRef.current?.pause();
         setIsPlaying(false);
       } else {
+        if (tryResumeCurrentOrAdvance() !== 'resume') return;
         soundcloudPlayerRef.current?.play();
         setIsPlaying(true);
       }
@@ -2593,34 +2998,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
+      if (tryResumeCurrentOrAdvance() !== 'resume') return;
       void audio.play();
     } else {
       audio.pause();
     }
-  };
-
-  const playPrevious = () => {
-    if (isVcPlayLockBlocking(playLockRef.current, 'prev', { playingSongId })) return;
-
-    const role = detoursRef.current.activeRole;
-    if (role === 'play-now' || role === 'on-deck') {
-      const current = playingSongRowRef.current;
-      if (current) void playSong(current, { detour: true, role, startAt: 0 });
-      return;
-    }
-
-    if (role === 'primary' && detoursRef.current.onDeck) {
-      dismissOnDeck();
-    }
-
-    if (queueAnchorSongId == null) return;
-    const previousSongId = pickPreviousPlayableSongId(sortedSongs, queueAnchorSongId, {
-      sessionSkippedIds: vcSessionSkippedIds,
-      repeatMode,
-    });
-    if (previousSongId == null) return;
-    const previousSong = sortedSongs.find((song) => song.id === previousSongId);
-    if (previousSong) void playSong(previousSong);
   };
 
   const clearPlaybackForRemovedSong = useCallback(
@@ -2664,7 +3046,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const handlePlaylistSongRemove = useCallback(
     async (song: SongRow) => {
       setPlaylistContextMenu(null);
-      if (isVcPlayLockBlockingSongRemoval(playLockRef.current, playingSongId, song.id)) {
+      if (isVcPlayLockBlockingSongRemoval(playbackSession.isPlayLockActive(), playingSongId, song.id)) {
         setError('Cannot remove the currently playing song while Play Lock is on.');
         return;
       }
@@ -2889,17 +3271,20 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     [selectedArtistId, vcSessionSkippedIds],
   );
 
-  const handleRowContextMenu = (event: React.MouseEvent, song: SongRow) => {
-    event.preventDefault();
-    if (selectedArtistId == null) return;
-    setPlaylistContextMenu({
-      song,
-      sourceArtistId: selectedArtistId,
-      sourcePlaylistName: selectedArtist?.artist_name ?? 'Playlist',
-      x: event.clientX,
-      y: event.clientY,
-    });
-  };
+  const handleRowContextMenu = useCallback(
+    (event: React.MouseEvent, song: SongRow) => {
+      event.preventDefault();
+      if (selectedArtistId == null) return;
+      setPlaylistContextMenu({
+        song,
+        sourceArtistId: selectedArtistId,
+        sourcePlaylistName: selectedArtist?.artist_name ?? 'Playlist',
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [selectedArtist?.artist_name, selectedArtistId],
+  );
 
   const handleCopySongPageLink = async (song: SongRow) => {
     setPlaylistContextMenu(null);
@@ -2911,28 +3296,39 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     }
   };
 
-  const handleRowClick = (song: SongRow) => {
-    if (rowClickTimerRef.current != null) {
-      window.clearTimeout(rowClickTimerRef.current);
-    }
-    rowClickTimerRef.current = window.setTimeout(() => {
-      rowClickTimerRef.current = null;
-      showSongPage(song);
-    }, 250);
-  };
+  // Stable handlers keep PlaylistTableBody's memo intact while widget transport
+  // polls currentTime — otherwise every tick remounts source logos under the cursor.
+  const handleRowClick = useCallback(
+    (song: SongRow) => {
+      if (rowClickTimerRef.current != null) {
+        window.clearTimeout(rowClickTimerRef.current);
+      }
+      rowClickTimerRef.current = window.setTimeout(() => {
+        rowClickTimerRef.current = null;
+        void showSongPage(song);
+      }, 250);
+    },
+    [showSongPage],
+  );
 
-  const handleRowDoubleClick = (song: SongRow) => {
-    if (rowClickTimerRef.current != null) {
-      window.clearTimeout(rowClickTimerRef.current);
-      rowClickTimerRef.current = null;
-    }
-    void playSong(song, { userInitiated: true });
-  };
+  const handleRowDoubleClick = useCallback(
+    (song: SongRow) => {
+      if (rowClickTimerRef.current != null) {
+        window.clearTimeout(rowClickTimerRef.current);
+        rowClickTimerRef.current = null;
+      }
+      if (playbackSession.isTrajectoryChangeBlocked('playlist-double-click')) {
+        return;
+      }
+      void playSong(song, { userInitiated: true });
+    },
+    [playSong, playbackSession],
+  );
 
   const handlePlaylistDoubleClick = useCallback(
     async (artistId: number) => {
       if (
-        isVcPlayLockBlocking(playLockRef.current, 'playlist-double-click', { playingSongId })
+        playbackSession.isTrajectoryChangeBlocked('playlist-double-click')
       ) {
         return;
       }
@@ -2983,61 +3379,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     ],
   );
 
-  const playNext = () => {
-    if (isVcPlayLockBlocking(playLockRef.current, 'next', { playingSongId })) return;
-
-    const role = detoursRef.current.activeRole;
-    if (role === 'play-now') {
-      void handleDetourPlaybackFailure();
-      return;
-    }
-    if (role === 'on-deck') {
-      const primary = detoursRef.current.primary;
-      if (!primary) return;
-      void advancePrimaryPlaylist(primary.anchorSongId, primary.consumedSongIds);
-      return;
-    }
-
-    if (role === 'primary' && detoursRef.current.onDeck) {
-      if (playingSongId != null && detoursRef.current.primary) {
-        detoursRef.current.primary.anchorSongId = playingSongId;
-      }
-      void playQueuedOnDeckIfAny(true);
-      return;
-    }
-
-    const primary = detoursRef.current.primary;
-    if (role === 'primary' && primary) {
-      const anchorId = playingSongIdRef.current ?? primary.anchorSongId;
-      void advancePrimaryPlaylist(anchorId, []);
-      return;
-    }
-
-    if (queueAnchorSongId == null) return;
-    const nextSongId = pickNextPlayableSongId(sortedSongs, queueAnchorSongId, {
-      shuffle,
-      repeatMode,
-      sessionSkippedIds: vcSessionSkippedIds,
-    });
-    if (nextSongId == null) return;
-    const nextSong = sortedSongs.find((song) => song.id === nextSongId);
-    if (nextSong) {
-      void playSong(nextSong, {
-        userInitiated: true,
-        startAt: nextSong.id === playingSongId ? 0 : undefined,
-      });
-    }
-  };
-  playNextRef.current = playNext;
-
-  const cycleRepeat = () => {
-    setRepeatMode((mode) => {
-      if (mode === 'off') return 'all';
-      if (mode === 'all') return 'one';
-      return 'off';
-    });
-  };
-
   const handleSeek = (time: number) => {
     if (showingYoutubePage && playingSongId != null && activeSongPage?.id === playingSongId) {
       const clamped = duration > 0 ? Math.min(duration, Math.max(0, time)) : Math.max(0, time);
@@ -3067,55 +3408,108 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     setCurrentTime(audio.currentTime);
   };
 
-  vcTransportHandlersRef.current = {
-    togglePlayPause,
-    playPrevious,
-    playNext,
+  useEffect(() => {
+    runPlaybackEffectsRef.current = (effects) => {
+      runPlaybackSessionEffects(effects, {
+        sortedSongs,
+        playingSongId,
+        playSong,
+        advancePrimaryPlaylist,
+        handleDetourPlaybackFailure,
+        playQueuedOnDeckIfAny,
+        dismissOnDeck,
+        togglePlayPause,
+        handleSeek,
+        executeTrackEndAction,
+        releasePlayLockIfScheduled: () => releaseScheduledPlayLock(),
+        resumeAfterWait: () => specialPlay.playNextAfterPause(),
+        applyVolumeDelta: (delta) => {
+          setVolume((current) => Math.min(1, Math.max(0, current + delta)));
+        },
+        restartDetour: (role) => {
+          const current = playingSongRowRef.current;
+          if (current) void playSong(current, { detour: true, role, startAt: 0 });
+        },
+      });
+    };
+  }, [
+    advancePrimaryPlaylist,
+    dismissOnDeck,
+    executeTrackEndAction,
+    handleDetourPlaybackFailure,
     handleSeek,
+    playQueuedOnDeckIfAny,
     playSong,
     sortedSongs,
-    handleYoutubeEnded,
-    handleSoundcloudEnded,
-    handleYoutubeDuration,
-    applyYoutubeTiming,
-  };
+    specialPlay.playNextAfterPause,
+    releaseScheduledPlayLock,
+    togglePlayPause,
+    playingSongId,
+  ]);
+
+  const playerBarTransport = useMemo(
+    () => createPlayerBarTransportHandlers(playbackSession),
+    [playbackSession],
+  );
 
   const handleContentResize = (deltaY: number) => {
     const column = mainColumnRef.current;
     setContentHeight((height) => clampContentHeight(column, height + deltaY));
   };
 
+  const canLikeSong = useCallback(
+    (song: SongRow | null | undefined) =>
+      song != null &&
+      (song.id > 0 || isSunoDemoSong(song) || isUserPlaylistSongId(song.id)),
+    [],
+  );
+
+  const toggleLikeForSong = useCallback(
+    async (song: SongRow) => {
+      if (!canLikeSong(song)) return;
+
+      const app = getApp();
+      if (!app) return;
+
+      setLikeBusy(true);
+      const result = await app.listener.toggleLikeSong(song.id);
+      setLikeBusy(false);
+
+      if (!result.ok || !result.data) {
+        setError(result.error || 'Could not update Liked Songs.');
+        return;
+      }
+
+      if (previewSongId === song.id) {
+        setCurrentSongLiked(result.data.liked);
+      }
+      setLikedSongCount(result.data.count);
+      setLikedSongIds((prev) => {
+        const next = new Set(prev);
+        if (result.data!.liked) next.add(song.id);
+        else next.delete(song.id);
+        return next;
+      });
+
+      addToast(result.data.liked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
+
+      await loadLibrary();
+
+      if (isLikedPlaylist && !result.data.liked) {
+        setSongs((prev) => prev.filter((row) => row.id !== song.id));
+      }
+    },
+    [addToast, canLikeSong, isLikedPlaylist, loadLibrary, previewSongId],
+  );
+
   const handleToggleLike = async () => {
     if (!canToggleLike || previewSong == null) return;
+    await toggleLikeForSong(previewSong);
+  };
 
-    const app = getApp();
-    if (!app) return;
-
-    setLikeBusy(true);
-    const result = await app.listener.toggleLikeSong(previewSong.id);
-    setLikeBusy(false);
-
-    if (!result.ok || !result.data) {
-      setError(result.error || 'Could not update Liked Songs.');
-      return;
-    }
-
-    setCurrentSongLiked(result.data.liked);
-    setLikedSongCount(result.data.count);
-    setLikedSongIds((prev) => {
-      const next = new Set(prev);
-      if (result.data!.liked) next.add(previewSong.id);
-      else next.delete(previewSong.id);
-      return next;
-    });
-
-    addToast(result.data.liked ? 'Added to Liked Songs' : 'Removed from Liked Songs');
-
-    await loadLibrary();
-
-    if (isLikedPlaylist && !result.data.liked) {
-      setSongs((prev) => prev.filter((row) => row.id !== previewSong.id));
-    }
+  const handleToggleLikedFromContext = (song: SongRow) => {
+    setPlaylistContextMenu(null);
+    void toggleLikeForSong(song);
   };
 
   const handlePageLoadError = useCallback(
@@ -3171,6 +3565,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           song={activeSongPage}
           lyricsSettings={lyricsDisplaySettings}
           onRemoveBracketsChange={setLyricsRemoveBrackets}
+          onViewModeChange={setLyricsViewMode}
+          showPromptInformation={playerSettings.showSunoPromptInformation}
+          fontIncreaseLevel={playerSettings.songPageFontIncreaseLevel}
         />
       );
     }
@@ -3181,6 +3578,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           song={activeSongPage}
           lyricsSettings={lyricsDisplaySettings}
           onRemoveBracketsChange={setLyricsRemoveBrackets}
+          onViewModeChange={setLyricsViewMode}
+          fontIncreaseLevel={playerSettings.songPageFontIncreaseLevel}
         />
       );
     }
@@ -3192,12 +3591,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           song={activeSongPage}
           playerRef={youtubePlayerRef}
           playbackGeneration={playbackGenerationRef.current}
-          shouldPlay={playingSongId === activeSongPage.id && isPlaying && !vcYoutubeCaptureActive}
-          captureInVc={vcYoutubeCaptureActive}
+          shouldPlay={playingSongId === activeSongPage.id && isPlaying && !youtubeRemoteCaptureActive}
+          volume={volume}
+          captureInVc={youtubeRemoteCaptureActive}
           onReady={handleYoutubeReady}
-          onPlayingChange={setIsPlaying}
-          onEnded={handleYoutubeEnded}
-          onDuration={handleYoutubeDuration}
+          onPlayingChange={handleWidgetPlayingChange}
+          onEnded={handleMainPaneYoutubeEnded}
+          onDuration={handleMainPaneWidgetDuration}
           onError={handleYoutubeError}
         />
       );
@@ -3212,10 +3612,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           playbackGeneration={playbackGenerationRef.current}
           shouldPlay={playingSongId === activeSongPage.id && isPlaying && !vcSoundcloudCaptureActive}
           captureInVc={vcSoundcloudCaptureActive}
+          fontIncreaseLevel={playerSettings.songPageFontIncreaseLevel}
           onReady={handleYoutubeReady}
-          onPlayingChange={setIsPlaying}
-          onEnded={handleSoundcloudEnded}
-          onDuration={handleYoutubeDuration}
+          onPlayingChange={handleWidgetPlayingChange}
+          onEnded={handleMainPaneSoundcloudEnded}
+          onDuration={handleMainPaneWidgetDuration}
           onError={handleYoutubeError}
         />
       );
@@ -3230,7 +3631,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             url={pageUrl}
             songManifestUrl={activeSongPage?.song_manifest_url}
             lyricsSettings={lyricsDisplaySettings}
+            fontIncreaseLevel={playerSettings.songPageFontIncreaseLevel}
             onRemoveBracketsChange={setLyricsRemoveBrackets}
+            onViewModeChange={setLyricsViewMode}
             onLoadError={handlePageLoadError}
             onCoverModalChange={setCoverModalOpen}
           />
@@ -3302,6 +3705,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         onSidebarReorder={sidebarLibrary.reorderSidebarRows}
         onEnterReorderMode={sidebarLibrary.activateManualOrderSort}
         selectedArtistId={selectedArtistId}
+        nowPlayingPlaylistId={playingSongId != null ? playingSourcePlaylistId : null}
+        nowPlayingIsPlaying={playingSongId != null && isPlaying}
         collapsed={sidebarCollapsed}
         busy={busy}
         onToggleCollapsed={toggleSidebarCollapsed}
@@ -3326,21 +3731,22 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           <PlayerBar
             disabled={!songs.length || activeSongPage == null}
             isPlaying={playingSongId != null && isPlaying}
-            nowPlayingTitle={activeSongPage?.title ?? ''}
-            nowPlayingArtist={activeSongPage?.artist_name ?? ''}
-            nowPlayingCoverUrl={activeSongPage?.cover_url ?? null}
+            nowPlayingTitle={playingSong?.title ?? activeSongPage?.title ?? ''}
+            nowPlayingArtist={nowPlayingArtistName}
+            nowPlayingCoverUrl={playingSong?.cover_url ?? activeSongPage?.cover_url ?? null}
+            onRevealNowPlaying={playingSongId != null ? handleRevealNowPlaying : undefined}
             shuffle={shuffle}
             repeatMode={repeatMode}
             volume={volume}
             currentTime={playingSongId != null ? currentTime : 0}
             duration={transportDuration}
-            onToggleShuffle={() => setShuffle((value) => !value)}
-            onPrevious={playPrevious}
-            onTogglePlayPause={togglePlayPause}
-            onNext={playNext}
-            onCycleRepeat={cycleRepeat}
+            onToggleShuffle={playerBarTransport.onToggleShuffle}
+            onPrevious={playerBarTransport.onPrevious}
+            onTogglePlayPause={playerBarTransport.onTogglePlayPause}
+            onNext={playerBarTransport.onNext}
+            onCycleRepeat={playerBarTransport.onCycleRepeat}
             onVolumeChange={setVolume}
-            onSeek={handleSeek}
+            onSeek={playerBarTransport.onSeek}
             embeddedVisualizerActive={visualizer.embeddedActive}
             canUseVisualizer={visualizer.canVisualize && !vc.vcOpen}
             onToggleEmbeddedVisualizer={visualizer.toggleEmbedded}
@@ -3362,6 +3768,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             onToggleChromeMinified={() => setChromeMinified((on) => !on)}
             onDeck={onDeckInfo}
             onClearOnDeck={dismissOnDeck}
+            onRevealOnDeck={onDeckInfo ? handleRevealOnDeck : undefined}
             songHistoryOpen={songHistoryOpen}
             onSongHistoryOpenChange={setSongHistoryOpen}
             songHistoryEntries={songHistoryEntries}
@@ -3386,7 +3793,15 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         <div className="listener-main" ref={mainColumnRef}>
           <section className="song-page-panel panel" style={{ height: contentHeight, flex: 'none' }}>
             <h2 className="sr-only">Listener content</h2>
-            {mainContentView === 'song' && pageUrl && !showingSunoDemoPage && !showingFlowPage && !coverModalOpen && !visualizer.embeddedActive ? (
+            {/* YouTube embed covers the panel corner — omit there. Flow/Suno/SC/guest pages can like. */}
+            {mainContentView === 'song' &&
+            !showingYoutubePage &&
+            !coverModalOpen &&
+            !visualizer.embeddedActive &&
+            (showingSunoDemoPage ||
+              showingFlowPage ||
+              showingSoundcloudPage ||
+              Boolean(pageUrl)) ? (
               <SongLikeButton
                 liked={currentSongLiked}
                 disabled={!canToggleLike || likeBusy}
@@ -3426,6 +3841,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
               playingSongId={playingSongId}
               previewSongId={previewSongId}
               scrollToSongId={scrollToSongId}
+              scrollToSongNonce={scrollToSongNonce}
+              isPlaying={playingSongId != null && isPlaying}
+              onDeckSongId={onDeckInfo?.songId ?? null}
               likedSongIds={likedSongIds}
               isLikedPlaylist={isLikedPlaylist}
               catalogOrderBySongId={catalogOrderBySongId}
@@ -3465,6 +3883,16 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           x={playlistContextMenu.x}
           y={playlistContextMenu.y}
           playingSongId={playingSongId}
+          liked={
+            playlistKind === 'personal' || likedSongIds.has(playlistContextMenu.song.id)
+          }
+          onToggleLiked={
+            playlistKind === 'personal'
+              ? (song) => void handlePlaylistSongRemove(song)
+              : canLikeSong(playlistContextMenu.song)
+                ? handleToggleLikedFromContext
+                : undefined
+          }
           onAddToPlaylist={handleOpenAddToPlaylist}
           onCopyLink={(song) => void handleCopySongPageLink(song)}
           onPlayNow={(song) => void handlePlayNowFromContext(song)}
@@ -3608,7 +4036,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           }
           audioContext={vc.butterchurnVcMirrorActive ? vc.audioContext : visualizer.audioContext}
           butterchurnTap={vc.butterchurnVcMirrorActive ? vc.butterchurnTap : visualizer.butterchurnTap}
-          analyser={vc.butterchurnVcMirrorActive ? null : visualizer.analyser}
+          analyser={vc.butterchurnVcMirrorActive ? vc.analyser : visualizer.analyser}
+          frequencyData={visualizer.frequencyData}
           applyButterchurnAudioSettings={
             vc.butterchurnVcMirrorActive
               ? vc.applyButterchurnAudioSettings
@@ -3625,12 +4054,15 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       ) : null}
 
       <AudioDebugPanel surface="main" />
+      <MeydaLabPanel mirrorAudioRef={analyserAudioRef} isPlaying={isPlaying} />
       <EffectsLabPanel
         state={effectsLab}
         onChange={setEffectsLabSynced}
         crossfades={crossfades}
         onCrossfadesChange={setCrossfades}
         effectsOffline={audioEffectsOffline}
+        vcMirrorPlaybackActive={vc.vcOpen}
+        onPerformanceRouteChange={setPerformanceFxActive}
         mainAudioRef={audioRef}
         mirrorAudioRef={analyserAudioRef}
         mainVolume={volume}

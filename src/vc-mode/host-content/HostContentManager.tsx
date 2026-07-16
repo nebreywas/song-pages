@@ -8,6 +8,7 @@ import {
   contentTypeLabel,
   createHostContentItem,
   fallbackDisplayName,
+  hostContentTypeHelp,
   HOST_CONTENT_TYPE_LABELS,
   HOST_FALLBACK_SLOT_IDS,
   HOST_FONT_SIZE_IDS,
@@ -24,6 +25,7 @@ import {
   type HostFallbackItem,
 } from '@shared/hostContent';
 
+import { HelpTooltip } from '../../components/HelpTooltip';
 import { DesignerOverlayLayer } from '../designer/DesignerOverlayLayer';
 import { VcColorField } from '../../components/color/VcColorField';
 import { getApp } from '../../lib/bridge';
@@ -300,7 +302,11 @@ function HostContentEditor({
               <option value="">—</option>
               {listItemsByType(
                 catalog,
-                item.slotId === 'video-cover' ? 'video' : item.slotId === 'lyrics' || item.slotId === 'about-song' ? 'area-text' : 'graphic',
+                item.slotId === 'video-cover' || item.slotId === 'lyrics-video'
+                  ? 'video'
+                  : item.slotId === 'lyrics' || item.slotId === 'about-song'
+                    ? 'area-text'
+                    : 'graphic',
               ).map((linked) => (
                 <option key={linked.id} value={linked.id}>
                   {linked.name}
@@ -650,7 +656,18 @@ export function HostContentManager() {
 
       <div className="hc-workspace">
         <div className="hc-pane-column">
-          <h3 className="hc-pane-title">Settings</h3>
+          <div className="hc-pane-title-row">
+            {selectedForSection ? (
+              <>
+                <h3 className="hc-pane-title">{contentTypeLabel(selectedForSection)} Settings</h3>
+                <HelpTooltip ariaLabel={`About ${contentTypeLabel(selectedForSection)} content`}>
+                  {hostContentTypeHelp(selectedForSection.type)}
+                </HelpTooltip>
+              </>
+            ) : (
+              <h3 className="hc-pane-title">Settings</h3>
+            )}
+          </div>
           <div className="hc-edit-pane">
             {selectedForSection ? (
               <HostContentEditor

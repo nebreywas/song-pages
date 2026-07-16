@@ -2,7 +2,7 @@ import type { FC } from 'react';
 
 import type { VisualizerSongInfo } from '@shared/visualizerMessages';
 
-import type { ButterchurnAudioSettings } from '../audioGraph';
+import type { ButterchurnAudioSettings } from '../../audio/types';
 import type { VisualizerContext } from './context/types';
 import type { VisualizerSettingField, VisualizerSettingsValues } from './settings/schema/types';
 import type { PresentationTarget } from './runtime/types';

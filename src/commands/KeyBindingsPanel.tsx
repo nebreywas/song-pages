@@ -19,6 +19,10 @@ import {
   type CommandMappingState,
 } from '@shared/commands';
 import { KUDOS_SETTINGS_KEY, migrateKudosState } from '@shared/kudos';
+import {
+  migrateVcSurfaceDesignCatalog,
+  VC_SURFACE_DESIGNS_KEY,
+} from '@shared/vcSurfaceDesigns';
 
 import { getApp } from '../lib/bridge';
 import { HelpTooltip } from '../components/HelpTooltip';
@@ -105,33 +109,39 @@ export function KeyBindingsPanel() {
   } = useCommandMappings();
 
   const [kudoPresets, setKudoPresets] = useState<Array<{ id: string; name: string }>>([]);
+  const [surfaceDesigns, setSurfaceDesigns] = useState<Array<{ id: string; name: string }>>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [gatePreviewOpen, setGatePreviewOpen] = useState(false);
   const [reassignCommandId, setReassignCommandId] = useState<string | null>(null);
   const [sidebarPreviewId, setSidebarPreviewId] = useState<string | null>(null);
 
   useEffect(() => {
-    void getApp()
-      ?.getSettings?.(KUDOS_SETTINGS_KEY)
-      .then((raw) => {
-        setKudoPresets(
-          migrateKudosState(raw).presets.map((row) => ({ id: row.id, name: row.name })),
-        );
-      });
+    const app = getApp();
+    void app?.getSettings?.(KUDOS_SETTINGS_KEY).then((raw) => {
+      setKudoPresets(migrateKudosState(raw).presets.map((row) => ({ id: row.id, name: row.name })));
+    });
+    // Every saved VC surface becomes a bindable "switch to surface" catalog action.
+    void app?.getSettings?.(VC_SURFACE_DESIGNS_KEY).then((raw) => {
+      const catalog = migrateVcSurfaceDesignCatalog(raw, null);
+      setSurfaceDesigns(catalog.designs.map((row) => ({ id: row.id, name: row.name })));
+    });
   }, []);
 
-  const catalog = useMemo(() => listCatalogCommands(kudoPresets), [kudoPresets]);
+  const catalog = useMemo(
+    () => listCatalogCommands(kudoPresets, surfaceDesigns),
+    [kudoPresets, surfaceDesigns],
+  );
   const configuredRows = useMemo(
-    () => listConfiguredActionRows(state, kudoPresets),
-    [state, kudoPresets],
+    () => listConfiguredActionRows(state, kudoPresets, surfaceDesigns),
+    [state, kudoPresets, surfaceDesigns],
   );
   const unassignedActions = useMemo(
     () => listUnassignedCatalogActions(state, catalog),
     [catalog, state],
   );
   const overlayPreviewRows = useMemo(
-    () => listOverlayMappings(state, kudoPresets, { vcModeActive: true }),
-    [state, kudoPresets],
+    () => listOverlayMappings(state, kudoPresets, { vcModeActive: true }, surfaceDesigns),
+    [state, kudoPresets, surfaceDesigns],
   );
   const sidebarPreview = catalog.find((row) => row.id === sidebarPreviewId) ?? null;
 
@@ -141,7 +151,7 @@ export function KeyBindingsPanel() {
   ) => {
     setSaveStatus('saving');
     try {
-      const result = await updateCommandBinding(commandId, patch, kudoPresets);
+      const result = await updateCommandBinding(commandId, patch, kudoPresets, surfaceDesigns);
       if (result === undefined) {
         setSaveStatus('idle');
         return;
@@ -269,7 +279,11 @@ export function KeyBindingsPanel() {
               <tbody>
                 {configuredRows.map((row) => {
                   const slot = getBindingSlotForCommand(state, row.commandId);
-                  const canRemove = canRemoveCommandFromConfig(row.commandId, kudoPresets);
+                  const canRemove = canRemoveCommandFromConfig(
+                    row.commandId,
+                    kudoPresets,
+                    surfaceDesigns,
+                  );
                   const canReassign = canReassignConfiguredCommand(row.commandId);
 
                   return (
@@ -300,7 +314,12 @@ export function KeyBindingsPanel() {
                           commandId={row.commandId}
                           layer="direct"
                           value={slot.direct}
-                          disabled={isBindingLayerLocked(row.commandId, 'direct', kudoPresets)}
+                          disabled={isBindingLayerLocked(
+                            row.commandId,
+                            'direct',
+                            kudoPresets,
+                            surfaceDesigns,
+                          )}
                           state={state}
                           onChange={(patch) => void persistBinding(row.commandId, patch)}
                         />
@@ -310,7 +329,12 @@ export function KeyBindingsPanel() {
                           commandId={row.commandId}
                           layer="gated"
                           value={slot.gated}
-                          disabled={isBindingLayerLocked(row.commandId, 'gated', kudoPresets)}
+                          disabled={isBindingLayerLocked(
+                            row.commandId,
+                            'gated',
+                            kudoPresets,
+                            surfaceDesigns,
+                          )}
                           state={state}
                           formatLabel={(key) => key.toUpperCase()}
                           onChange={(patch) => void persistBinding(row.commandId, patch)}
@@ -321,7 +345,12 @@ export function KeyBindingsPanel() {
                           commandId={row.commandId}
                           layer="extended-function"
                           value={slot.extendedFunction}
-                          disabled={isBindingLayerLocked(row.commandId, 'extendedFunction', kudoPresets)}
+                          disabled={isBindingLayerLocked(
+                            row.commandId,
+                            'extendedFunction',
+                            kudoPresets,
+                            surfaceDesigns,
+                          )}
                           state={state}
                           formatLabel={formatExtendedBindingLabel}
                           onChange={(patch) => void persistBinding(row.commandId, patch)}
@@ -333,7 +362,9 @@ export function KeyBindingsPanel() {
                             type="button"
                             className="keybindings-remove"
                             aria-label={`Remove ${row.label}`}
-                            onClick={() => void removeConfiguredCommand(row.commandId, kudoPresets)}
+                            onClick={() =>
+                              void removeConfiguredCommand(row.commandId, kudoPresets, surfaceDesigns)
+                            }
                           >
                             <TrashIcon />
                           </button>
@@ -416,7 +447,7 @@ export function KeyBindingsPanel() {
             <ActionPickerPopover
               commands={catalog.filter((row) => row.id !== reassignCommandId)}
               onAssign={(command) => {
-                void reassignCommand(reassignCommandId, command.id, kudoPresets);
+                void reassignCommand(reassignCommandId, command.id, kudoPresets, surfaceDesigns);
                 setReassignCommandId(null);
               }}
             />

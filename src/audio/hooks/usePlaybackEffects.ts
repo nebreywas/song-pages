@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 
+import { applyMainMirrorRouting } from '../AudioEffectsEngine';
 import type { EffectsLabState } from '../effectsLab/types';
 import {
-  configureMirrorPlaybackEffectsGraph,
-  isMirrorPlaybackAudible,
-  resetMirrorToTapGraph,
-} from '../graph/configureMirrorPlaybackEffects';
-import { getAudioGraphIfExists } from '../graph/registry';
+  applyElementPlaybackRate,
+  clampPlaybackRateHold,
+  PLAYBACK_RATE_HOLD_DEFAULT,
+} from '../effectsLab/playbackRate';
+import { isPlaybackRateBurstActive } from '../effectsLab/performance/rateBurst';
 
 type UsePlaybackEffectsOptions = {
   /** Audible player — ducked while FX run on the mirror element. Never gets Web Audio. */
@@ -23,6 +24,8 @@ type UsePlaybackEffectsOptions = {
    * VC Mode is open — main speakers stay silent; the VC window carries audible output.
    */
   vcMirrorPlaybackActive?: boolean;
+  /** Dry performance FX path (filter sweeps, etc.) while no whole-song preset is active. */
+  performanceFxActive?: boolean;
 };
 
 /** Bass boost / lo-fi / effects lab on the mirror element; main stays native for capture when FX off. */
@@ -35,47 +38,45 @@ export function usePlaybackEffects({
   lofi,
   effectsLab,
   vcMirrorPlaybackActive = false,
+  performanceFxActive = false,
 }: UsePlaybackEffectsOptions): void {
-  const input = { bassBoost, lofi, effectsLab };
-  const mirrorAudible = isMirrorPlaybackAudible(input);
-
   useEffect(() => {
     const main = mainAudioRef.current;
     const mirror = analyserAudioRef.current;
     if (!main || !mirror) return;
 
-    // VC window plays the track for capture with FX — main mirror stays analyser-only.
-    if (mirrorAudible && vcMirrorPlaybackActive) {
-      main.volume = 0;
-      resetMirrorToTapGraph(mirror, 0);
-      return;
-    }
+    applyMainMirrorRouting({
+      mainAudio: main,
+      mirrorAudio: mirror,
+      volume,
+      isPlaying,
+      bassBoost,
+      lofi,
+      effectsLab,
+      vcMirrorPlaybackActive,
+      performanceFxActive,
+    });
 
-    if (mirrorAudible) {
-      main.volume = 0;
-      configureMirrorPlaybackEffectsGraph(mirror, input, { speakerGain: 1, isPlaying });
-      return;
+    // Coupled rate hold on both elements so mirror drift correction stays peaceful.
+    // Skip while a rate burst owns the transport.
+    if (!isPlaybackRateBurstActive()) {
+      const hold = clampPlaybackRateHold(effectsLab?.playbackRateHold ?? PLAYBACK_RATE_HOLD_DEFAULT);
+      applyElementPlaybackRate(main, hold);
+      applyElementPlaybackRate(mirror, hold);
     }
-
-    if (vcMirrorPlaybackActive) {
-      main.volume = 0;
-    } else {
-      main.volume = volume;
-    }
-    if (!getAudioGraphIfExists(mirror)) return;
-    resetMirrorToTapGraph(mirror, 0);
   }, [
     analyserAudioRef,
     bassBoost,
     effectsLab?.abBypass,
     effectsLab?.effectId,
     effectsLab?.outputTrimDb,
+    effectsLab?.playbackRateHold,
     effectsLab?.workletEnhance,
     effectsLab?.enabled,
     isPlaying,
     lofi,
     mainAudioRef,
-    mirrorAudible,
+    performanceFxActive,
     vcMirrorPlaybackActive,
     volume,
   ]);

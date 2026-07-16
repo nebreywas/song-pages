@@ -806,6 +806,43 @@ html:has(.listener-layout) #root {
   font-size: 0.74rem;
 }
 
+.library-now-playing-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0.85rem;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.library-row--now-playing .library-col-name.is-now-playing {
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.library-row--now-playing:not(.active) {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.library-row-compact.library-row--now-playing {
+  position: relative;
+}
+
+.library-compact-now-playing {
+  position: absolute;
+  right: 0.15rem;
+  bottom: 0.1rem;
+  font-size: 0.62rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
+  pointer-events: none;
+}
+
+.now-playing-speaker-emoji {
+  font-style: normal;
+  font-weight: 400;
+}
+
 .library-col-songs {
   padding-left: 0.5rem;
   text-align: right;
@@ -1147,6 +1184,12 @@ html:has(.listener-layout) #root {
   white-space: nowrap;
 }
 
+.playlist-on-deck-badge {
+  color: #f5c518;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
 .liked-song-indicator {
   flex: none;
   display: inline-flex;
@@ -1221,14 +1264,18 @@ html:has(.listener-layout) #root {
   }
 }
 
-/* Custom playlists — source column appears only when the panel is wide enough. */
+/* Custom + Liked playlists — source column appears only when the panel is wide enough. */
 .playlist-panel.custom-playlist .playlist-grid-cell.col-source,
 .playlist-panel.custom-playlist .playlist-grid-gutter:has(+ .playlist-grid-cell.col-source),
-.playlist-panel.custom-playlist .playlist-grid-cell.col-source + .playlist-grid-gutter {
+.playlist-panel.custom-playlist .playlist-grid-cell.col-source + .playlist-grid-gutter,
+.playlist-panel.liked-playlist .playlist-grid-cell.col-source,
+.playlist-panel.liked-playlist .playlist-grid-gutter:has(+ .playlist-grid-cell.col-source),
+.playlist-panel.liked-playlist .playlist-grid-cell.col-source + .playlist-grid-gutter {
   display: none;
 }
 
-.playlist-panel.custom-playlist .playlist-grid-row .playlist-grid-cell.col-source {
+.playlist-panel.custom-playlist .playlist-grid-row .playlist-grid-cell.col-source,
+.playlist-panel.liked-playlist .playlist-grid-row .playlist-grid-cell.col-source {
   padding-left: 0.25rem;
   padding-right: 0.25rem;
   text-align: center;
@@ -1284,7 +1331,10 @@ html:has(.listener-layout) #root {
 @container playlist (min-width: 560px) {
   .playlist-panel.custom-playlist .playlist-grid-cell.col-source,
   .playlist-panel.custom-playlist .playlist-grid-gutter:has(+ .playlist-grid-cell.col-source),
-  .playlist-panel.custom-playlist .playlist-grid-cell.col-source + .playlist-grid-gutter {
+  .playlist-panel.custom-playlist .playlist-grid-cell.col-source + .playlist-grid-gutter,
+  .playlist-panel.liked-playlist .playlist-grid-cell.col-source,
+  .playlist-panel.liked-playlist .playlist-grid-gutter:has(+ .playlist-grid-cell.col-source),
+  .playlist-panel.liked-playlist .playlist-grid-cell.col-source + .playlist-grid-gutter {
     display: block;
   }
 }
@@ -1857,7 +1907,7 @@ html:has(.listener-layout) #root {
   border: none;
   background: none;
   padding: 0;
-  margin: 0;
+  margin: -1px 0 0;
   cursor: pointer;
   flex-shrink: 0;
   border-radius: 0.45rem;
@@ -1870,8 +1920,9 @@ html:has(.listener-layout) #root {
 
 .player-now-playing-cover {
   display: block;
-  width: 2.75rem;
-  height: 2.75rem;
+  /* +1px so the art spans the three-line now-playing stack more evenly. */
+  width: calc(2.75rem + 1px);
+  height: calc(2.75rem + 1px);
   border-radius: 0.45rem;
   object-fit: cover;
   background: var(--surface-2);
@@ -1921,6 +1972,27 @@ html:has(.listener-layout) #root {
   mask-image: linear-gradient(90deg, #000 92%, transparent);
 }
 
+.player-now-playing-title-btn {
+  appearance: none;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player-now-playing-title-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 .player-now-playing-title {
   display: inline-block;
   width: max-content;
@@ -1943,6 +2015,8 @@ html:has(.listener-layout) #root {
   white-space: nowrap;
   font-size: 0.8rem;
   line-height: 1.15;
+  /* Reserve the line so missing artist does not shift “Now playing” / title. */
+  min-height: calc(0.8rem * 1.15);
   color: var(--muted);
 }
 
@@ -2229,6 +2303,13 @@ html:has(.listener-layout) #root {
   color: #f5c518;
 }
 
+.player-on-deck-popover-label-hint {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color: var(--muted);
+}
+
 .player-on-deck-popover-title {
   margin: 0.35rem 0 0;
   font-size: 0.82rem;
@@ -2237,18 +2318,45 @@ html:has(.listener-layout) #root {
   color: var(--text);
 }
 
+.player-on-deck-popover-title-btn {
+  appearance: none;
+  display: block;
+  width: 100%;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player-on-deck-popover-title-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 .player-on-deck-popover-meta {
   margin: 0.15rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
   font-size: 0.72rem;
   line-height: 1.3;
   color: var(--muted);
 }
 
-.player-on-deck-popover-hint {
-  margin: 0.45rem 0 0;
-  font-size: 0.68rem;
-  line-height: 1.35;
-  color: var(--muted);
+.player-on-deck-popover-artist,
+.player-on-deck-popover-playlist {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-on-deck-popover-footer {
@@ -2998,6 +3106,60 @@ html:has(.listener-layout) #root {
   margin: 0;
 }
 
+.lyrics-settings-view-fieldset {
+  margin: 0.65rem 0 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.lyrics-settings-view-legend {
+  margin: 0 0 0.35rem;
+  padding: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.lyrics-settings-view-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+/* Pretty Lyrics in native listener song pages — tune canvas to the page, not the lab. */
+.listener-pretty-lyrics {
+  margin-top: 0.35rem;
+  overflow: visible;
+}
+
+.listener-pretty-lyrics .pretty-lyric-view {
+  min-height: 0;
+  padding: 0.25rem 0 1rem;
+  /* Song page already has a surface — don't paint the theme swatch behind lyrics. */
+  background: transparent;
+  background-color: transparent;
+  --pretty-bg: transparent;
+}
+
+/* Dense magazine is left-flush copy; keep blocks from centering as a column. */
+.listener-pretty-lyrics .pretty-lyric-view.preset-dense-magazine .pretty-lyric-block,
+.listener-pretty-lyrics .pretty-lyric-block.align-left {
+  margin-left: 0;
+  margin-right: auto;
+  text-align: left;
+}
+
+/* Drop the lead-in pad under the Lyrics heading — only inter-stanza gaps should breathe. */
+.listener-pretty-lyrics .pretty-lyric-block:first-child {
+  padding-top: 0;
+}
+
+.listener-pretty-lyrics .pretty-lyric-token {
+  cursor: default;
+}
+
 .playlist-grid-row.selected-row .col-title,
 .playlist-grid-row.playing-row .col-title {
   color: var(--accent);
@@ -3301,6 +3463,19 @@ html:has(.listener-layout) #root {
   margin: 0.75rem 0 0;
   font-size: 0.8125rem;
   color: var(--muted);
+}
+
+.about-page {
+  text-align: center;
+}
+
+.about-logo {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 1rem;
+  border-radius: 18px;
+  object-fit: contain;
 }
 
 .about-meta {

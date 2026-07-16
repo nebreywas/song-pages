@@ -1,17 +1,28 @@
-import type { ListenerLyricsDisplaySettings } from '@shared/listener/lyricsDisplaySettings';
+import type {
+  ListenerLyricsDisplaySettings,
+  ListenerLyricsViewMode,
+} from '@shared/listener/lyricsDisplaySettings';
 
 type LyricsSettingsPopoverProps = {
   anchor: { x: number; y: number };
   settings: ListenerLyricsDisplaySettings;
   onRemoveBracketsChange: (value: boolean) => void;
+  onViewModeChange: (value: ListenerLyricsViewMode) => void;
   onClose: () => void;
 };
+
+const VIEW_MODE_OPTIONS: { value: ListenerLyricsViewMode; label: string }[] = [
+  { value: 'plain', label: 'Plain text' },
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'pretty', label: 'Pretty Lyrics' },
+];
 
 /** Contextual lyrics display options — anchored near the Lyrics heading. */
 export function LyricsSettingsPopover({
   anchor,
   settings,
   onRemoveBracketsChange,
+  onViewModeChange,
   onClose,
 }: LyricsSettingsPopoverProps) {
   return (
@@ -33,7 +44,25 @@ export function LyricsSettingsPopover({
           />
           <span>Remove brackets</span>
         </label>
+
+        <fieldset className="lyrics-settings-view-fieldset">
+          <legend className="lyrics-settings-view-legend">View</legend>
+          <div className="lyrics-settings-view-group" role="radiogroup" aria-label="Lyrics view">
+            {VIEW_MODE_OPTIONS.map((option) => (
+              <label key={option.value} className="lyrics-settings-toggle">
+                <input
+                  type="radio"
+                  name="listener-lyrics-view-mode"
+                  value={option.value}
+                  checked={settings.viewMode === option.value}
+                  onChange={() => onViewModeChange(option.value)}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
       </div>
     </>
   );
-};
+}

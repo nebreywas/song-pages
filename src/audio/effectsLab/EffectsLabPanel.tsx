@@ -1,14 +1,25 @@
 import { useState } from 'react';
 
+import { getApp } from '../../lib/bridge';
+import { useFloatingPanelDrag } from '../../lib/useFloatingPanelDrag';
 import { PERFORMANCE_EFFECT_DEFINITIONS } from './performance/definitions';
 import { runPerformanceEffect } from './performance/runPerformanceEffect';
 import type { PerformanceEffectId, PerformanceEffectPhase } from './performance/types';
+import {
+  clampPlaybackRateHold,
+  isPlaybackRateHoldActive,
+  PLAYBACK_RATE_HOLD_MAX,
+  PLAYBACK_RATE_HOLD_MIN,
+  PLAYBACK_RATE_HOLD_PRESETS,
+} from './playbackRate';
 import { getLabEffectDefinition, WHOLE_SONG_EFFECT_MENU_ORDER } from './presets';
 import type { EffectsLabState, LabEffectId } from './types';
 import { presetSupportsWorkletEnhance } from './worklet/loadWorkletProcessors';
 import { isEffectsLabAudible } from './types';
 
 import '../../styles/effects-lab.css';
+
+const EFFECTS_LAB_POS_KEY = 'songpages:effects-lab-panel-pos';
 
 const WORKLET_ENHANCE_LABELS: Partial<Record<LabEffectId, string>> = {
   alive: 'Harmonic exciter (AudioWorklet A/B)',
@@ -22,6 +33,13 @@ type EffectsLabPanelProps = {
   onCrossfadesChange: (enabled: boolean) => void;
   /** Widget transport (YouTube / SoundCloud) — mirror FX path unavailable while playing. */
   effectsOffline?: boolean;
+  /**
+   * When true, performance pads IPC to the VC capture stream; whole-song Activate/A/B
+   * continue via vc:state projection.
+   */
+  vcMirrorPlaybackActive?: boolean;
+  /** Tell ListenerMode to keep the dry mirror route up for performance FX (main path). */
+  onPerformanceRouteChange?: (active: boolean) => void;
   mainAudioRef: React.RefObject<HTMLAudioElement | null>;
   mirrorAudioRef: React.RefObject<HTMLAudioElement | null>;
   mainVolume: number;
@@ -34,11 +52,14 @@ export function EffectsLabPanel({
   crossfades,
   onCrossfadesChange,
   effectsOffline = false,
+  vcMirrorPlaybackActive = false,
+  onPerformanceRouteChange,
   mainAudioRef,
   mirrorAudioRef,
   mainVolume,
 }: EffectsLabPanelProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const drag = useFloatingPanelDrag(EFFECTS_LAB_POS_KEY);
 
   if (!state.panelVisible) return null;
 
@@ -54,17 +75,29 @@ export function EffectsLabPanel({
   };
 
   const firePerformance = (effectId: PerformanceEffectId, phase: PerformanceEffectPhase) => {
+    if (effectsOffline) return;
+
+    // VC open — pads target the capture stream so Discord/OBS hear the sweep.
+    if (vcMirrorPlaybackActive) {
+      getApp()?.vc?.sendPerformanceEffect?.({ effectId, phase });
+      return;
+    }
+
     const main = mainAudioRef.current;
     const mirror = mirrorAudioRef.current;
     if (!main || !mirror) return;
 
     runPerformanceEffect({
-      mirrorAudio: mirror,
-      mainAudio: main,
-      mainVolume,
-      keepMirrorAudible: isEffectsLabAudible(state),
+      targetAudio: mirror,
+      duckAudio: main,
+      duckRestoreVolume: mainVolume,
+      keepDuckMuted: isEffectsLabAudible(state),
+      speakerGain: 1,
+      syncFromAudio: main,
       effectId,
       phase,
+      onRouteActiveChange: onPerformanceRouteChange,
+      restorePlaybackRate: state.playbackRateHold,
     });
   };
 
@@ -75,9 +108,26 @@ export function EffectsLabPanel({
   const showActiveEffectPill =
     collapsed && !effectsOffline && isEffectsLabAudible(state) && Boolean(activeEffectLabel);
 
+  const performanceDisabled = effectsOffline;
+  const performanceDisabledTitle = effectsOffline
+    ? 'Effects path unavailable for this source'
+    : undefined;
+
   return (
-    <div className={`effects-lab-panel${collapsed ? ' collapsed' : ''}`}>
-      <header className="effects-lab-header">
+    <div
+      ref={drag.panelRef}
+      className={`effects-lab-panel${collapsed ? ' collapsed' : ''}${drag.dragging ? ' is-dragging' : ''}`}
+      style={drag.style}
+    >
+      <header
+        className="effects-lab-header effects-lab-header--drag"
+        title="Drag to move · double-click to reset"
+        onPointerDown={drag.onHeaderPointerDown}
+        onPointerMove={drag.onHeaderPointerMove}
+        onPointerUp={drag.onHeaderPointerUp}
+        onPointerCancel={drag.onHeaderPointerCancel}
+        onDoubleClick={drag.onHeaderDoubleClick}
+      >
         <strong className="effects-lab-title">
           Audio &amp; Effects
           {showActiveEffectPill ? (
@@ -86,6 +136,14 @@ export function EffectsLabPanel({
           {effectsOffline ? (
             <span className="effects-lab-offline-pill" title="This source plays outside the effects path">
               offline
+            </span>
+          ) : null}
+          {vcMirrorPlaybackActive && !effectsOffline ? (
+            <span
+              className="effects-lab-vc-pill"
+              title="Effects target the VC window stream while VC Mode is open"
+            >
+              → VC
             </span>
           ) : null}
         </strong>
@@ -154,9 +212,15 @@ export function EffectsLabPanel({
             />
           </label>
 
+          {/*
+            Same abBypass flag both ways: isEffectsLabAudible treats hold as
+            temporary remove when Activate is on, temporary apply when off.
+            With VC open, state projects to the VC stream via audioMirror.playbackEffects.
+          */}
           <button
             type="button"
             className={`effects-lab-btn effects-lab-ab${state.abBypass ? ' active' : ''}`}
+            disabled={effectsOffline || state.effectId === 'bypass'}
             onPointerDown={() => patch({ abBypass: true })}
             onPointerUp={() => patch({ abBypass: false })}
             onPointerLeave={() => patch({ abBypass: false })}
@@ -167,6 +231,46 @@ export function EffectsLabPanel({
               : 'Hold to temporarily apply effect'}
           </button>
 
+          <section className="effects-lab-rate-hold">
+            <h3 className="effects-lab-section-title">Speed / Pitch Hold</h3>
+            <p className="effects-lab-concept">
+              Steady coupled speed+pitch (DJ-style). Resets to normal on the next song. Bursts below
+              always return to this hold.
+            </p>
+            <label className="effects-lab-field">
+              <span>
+                Rate: {state.playbackRateHold.toFixed(2)}×
+                {isPlaybackRateHoldActive(state.playbackRateHold) ? '' : ' (normal)'}
+              </span>
+              <input
+                type="range"
+                min={PLAYBACK_RATE_HOLD_MIN}
+                max={PLAYBACK_RATE_HOLD_MAX}
+                step={0.01}
+                value={state.playbackRateHold}
+                disabled={effectsOffline}
+                onChange={(e) =>
+                  patch({ playbackRateHold: clampPlaybackRateHold(Number(e.target.value)) })
+                }
+              />
+            </label>
+            <div className="effects-lab-rate-presets">
+              {PLAYBACK_RATE_HOLD_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className={`effects-lab-btn effects-lab-rate-preset${
+                    Math.abs(state.playbackRateHold - preset.rate) < 0.005 ? ' active' : ''
+                  }`}
+                  disabled={effectsOffline}
+                  onClick={() => patch({ playbackRateHold: preset.rate })}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </section>
+
           <section className="effects-lab-performance">
             <h3 className="effects-lab-section-title">Audio Effects</h3>
             <div className="effects-lab-performance-grid">
@@ -176,7 +280,13 @@ export function EffectsLabPanel({
                     key={row.id}
                     type="button"
                     className="effects-lab-btn effects-lab-perf-btn"
-                    title={row.concept}
+                    title={
+                      performanceDisabledTitle ??
+                      (vcMirrorPlaybackActive
+                        ? `${row.concept} (VC stream)`
+                        : row.concept)
+                    }
+                    disabled={performanceDisabled}
                     onPointerDown={() => firePerformance(row.id, 'hold')}
                     onPointerUp={() => firePerformance(row.id, 'release')}
                     onPointerLeave={() => firePerformance(row.id, 'release')}
@@ -190,7 +300,13 @@ export function EffectsLabPanel({
                     key={row.id}
                     type="button"
                     className="effects-lab-btn effects-lab-perf-btn"
-                    title={row.concept}
+                    title={
+                      performanceDisabledTitle ??
+                      (vcMirrorPlaybackActive
+                        ? `${row.concept} (VC stream)`
+                        : row.concept)
+                    }
+                    disabled={performanceDisabled}
                     onClick={() => firePerformance(row.id, 'trigger')}
                   >
                     {row.label}

@@ -14,8 +14,42 @@ import {
   type HostFontStyleId,
   type HostGraphicsGroupItem,
 } from '../hostContent';
+import {
+  DEFAULT_LYRIC_PRESENTATION_EFFECT,
+  LYRIC_EFFECT_IDS,
+  type LyricEffectId,
+  sanitizeLyricPresentationEffect,
+} from '../lyricEffects';
 import { DEFAULT_VC_GRID_DESIGN, type VcGridDefaultTypography } from './gridDesign';
 import type { VcCellContent } from '../vcModeTypes';
+import {
+  DEFAULT_VC_SOURCE_DISPLAY_MODE,
+  VC_SOURCE_DISPLAY_MODE_IDS,
+  type VcSourceDisplayMode,
+} from './songSourceDisplay';
+import {
+  clampWavesurferBarGap,
+  clampWavesurferBarWidth,
+  normalizeWavesurferViewMode,
+  resolveWavesurferPresentation,
+  type VcWavesurferViewMode,
+} from './wavesurferSettings';
+
+export type { VcWavesurferViewMode, EffectiveWavesurferPresentation } from './wavesurferSettings';
+export {
+  VC_WAVESURFER_VIEW_MODE_IDS,
+  VC_WAVESURFER_VIEW_MODE_LABELS,
+  DEFAULT_VC_WAVESURFER_PRESENTATION,
+  resolveWavesurferPresentation,
+  isWavesurferDecodableUrl,
+} from './wavesurferSettings';
+
+export type { LyricEffectId };
+export {
+  DEFAULT_LYRIC_PRESENTATION_EFFECT,
+  LYRIC_EFFECT_IDS,
+  LYRIC_EFFECT_LABELS,
+} from '../lyricEffects';
 
 export type VcMediaFitMode = 'stretch' | 'max-x' | 'max-y' | 'original';
 export type VcGraphicOverflow = 'static' | 'scroll' | 'auto-scroll' | 'bounce';
@@ -64,6 +98,24 @@ export const VC_LYRIC_TRACKING_LABELS: Record<VcLyricTracking, string> = {
 
 export const DEFAULT_VC_LYRIC_TRACKING: VcLyricTracking = 'simple-scroll';
 
+/**
+ * Pretty Lyrics typography — orthogonal to agnostic presentation effects
+ * (`lyricPresentationEffect`) and to ALARE / Simple Scroll tracking.
+ */
+export type VcLyricTypographyMode = 'plain' | 'pretty';
+
+export const VC_LYRIC_TYPOGRAPHY_MODE_IDS = [
+  'plain',
+  'pretty',
+] as const satisfies readonly VcLyricTypographyMode[];
+
+export const VC_LYRIC_TYPOGRAPHY_MODE_LABELS: Record<VcLyricTypographyMode, string> = {
+  plain: 'Plain',
+  pretty: 'Pretty (Sample 1)',
+};
+
+export const DEFAULT_VC_LYRIC_TYPOGRAPHY_MODE: VcLyricTypographyMode = 'plain';
+
 /** Sparse overrides stored on hostSlotA / hostSlotB — only explicit diffs from inherited defaults. */
 export type VcAssignmentOverrides = {
   insetPct?: number;
@@ -102,10 +154,43 @@ export type VcAssignmentOverrides = {
   lyricsRemoveBracketed?: boolean;
   /** Lyrics progression — Simple Scroll (default) or ALARE approximate timeline. */
   lyricTracking?: VcLyricTracking;
+  /**
+   * Agnostic lyric presentation effect (Beat Pulse, Matrix Reveal, …).
+   * Orthogonal to tracking / timed lyric engines — never invents semantic emphasis.
+   */
+  lyricPresentationEffect?: LyricEffectId;
+  /**
+   * Text-analysis typography (Pretty Lyrics). Independent of lyricPresentationEffect.
+   * When `pretty`, VC uses Sample 1 builtins and never paints theme background.
+   */
+  lyricTypographyMode?: VcLyricTypographyMode;
+  /**
+   * Pretty only: soft-return long/dense lines at a mid-clause comma/semicolon
+   * (or mid-word). Related visual rows use ~10% tighter spacing. Default off —
+   * can artifact with uniform ALARE slots; toggle to experiment.
+   */
+  prettySoftBreakLongLines?: boolean;
   /** ALARE: per-line opacity fade (default on). */
   alareFadeEnabled?: boolean;
   /** ALARE: host preference for visible lines; renderer clamps to geometry. */
   alareTargetVisibleLines?: number;
+  /** Source cell: icon / title / both. */
+  sourceDisplayMode?: VcSourceDisplayMode;
+  /** Source cell: click opens share URL in the system browser. */
+  sourceOpenInBrowser?: boolean;
+  /** Song URL: show scheme+host or host only. */
+  songUrlRootOnly?: boolean;
+  /** Song URL: keep https:// prefix (default strips it). */
+  songUrlIncludeHttps?: boolean;
+  /** Song URL: underline text. */
+  songUrlUnderline?: boolean;
+  /** Song URL: hover style like a link. */
+  songUrlHoverEffect?: boolean;
+  /** WaveSurfer: waveform / spectrogram / barwave / squiggly / gradient. */
+  wavesurferViewMode?: VcWavesurferViewMode;
+  wavesurferBarWidth?: number;
+  wavesurferBarGap?: number;
+  wavesurferPaintProgress?: boolean;
 };
 
 export type EffectiveMediaPresentation = {
@@ -168,6 +253,8 @@ const UPCOMING_SCROLL_MODES = new Set<VcUpcomingScroll>([
 ]);
 const TEXT_ALIGNS = new Set<VcTextAlign>(VC_TEXT_ALIGN_IDS);
 const LYRIC_TRACKING_MODES = new Set<VcLyricTracking>(VC_LYRIC_TRACKING_IDS);
+const LYRIC_TYPOGRAPHY_MODES = new Set<VcLyricTypographyMode>(VC_LYRIC_TYPOGRAPHY_MODE_IDS);
+const SOURCE_DISPLAY_MODES = new Set<VcSourceDisplayMode>(VC_SOURCE_DISPLAY_MODE_IDS);
 
 export const SYSTEM_ASSIGNMENT_DEFAULTS = {
   insetPct: 0,
@@ -185,6 +272,7 @@ export const SYSTEM_ASSIGNMENT_DEFAULTS = {
 const OVERRIDE_KEYS_BY_CONTENT: Partial<Record<VcCellContent, Array<keyof VcAssignmentOverrides>>> = {
   cover: ['insetPct', 'fitMode', 'overflow'],
   'video-cover': ['insetPct', 'fitMode', 'playback'],
+  'lyrics-video': ['insetPct', 'fitMode', 'playback'],
   'artist-image': ['insetPct', 'fitMode', 'overflow'],
   lyrics: [
     'fontStyle',
@@ -195,6 +283,9 @@ const OVERRIDE_KEYS_BY_CONTENT: Partial<Record<VcCellContent, Array<keyof VcAssi
     'lyricsEdgeFade',
     'lyricsRemoveBracketed',
     'lyricTracking',
+    'lyricPresentationEffect',
+    'lyricTypographyMode',
+    'prettySoftBreakLongLines',
     'alareFadeEnabled',
     'alareTargetVisibleLines',
   ],
@@ -218,6 +309,23 @@ const OVERRIDE_KEYS_BY_CONTENT: Partial<Record<VcCellContent, Array<keyof VcAssi
     'upcomingShowTitle',
     'upcomingClickToZoom',
     'color',
+  ],
+  source: ['sourceDisplayMode', 'sourceOpenInBrowser'],
+  'song-url': [
+    'songUrlRootOnly',
+    'songUrlIncludeHttps',
+    'songUrlUnderline',
+    'songUrlHoverEffect',
+    'fontStyle',
+    'fontSize',
+    'color',
+    'textAlign',
+  ],
+  wavesurfer: [
+    'wavesurferViewMode',
+    'wavesurferBarWidth',
+    'wavesurferBarGap',
+    'wavesurferPaintProgress',
   ],
   'host-graphic': ['insetPct', 'fitMode', 'overflow'],
   'host-video': ['insetPct', 'fitMode', 'playback'],
@@ -317,9 +425,34 @@ export function sanitizeAssignmentOverrides(raw: unknown): VcAssignmentOverrides
   if (typeof value.lyricsRemoveBracketed === 'boolean') next.lyricsRemoveBracketed = value.lyricsRemoveBracketed;
   const lyricTracking = pickEnum(value.lyricTracking, LYRIC_TRACKING_MODES);
   if (lyricTracking) next.lyricTracking = lyricTracking;
+  const lyricPresentationEffect = sanitizeLyricPresentationEffect(value.lyricPresentationEffect);
+  if (lyricPresentationEffect) next.lyricPresentationEffect = lyricPresentationEffect;
+  const lyricTypographyMode = pickEnum(value.lyricTypographyMode, LYRIC_TYPOGRAPHY_MODES);
+  if (lyricTypographyMode) next.lyricTypographyMode = lyricTypographyMode;
+  if (typeof value.prettySoftBreakLongLines === 'boolean') {
+    next.prettySoftBreakLongLines = value.prettySoftBreakLongLines;
+  }
   if (typeof value.alareFadeEnabled === 'boolean') next.alareFadeEnabled = value.alareFadeEnabled;
   if (typeof value.alareTargetVisibleLines === 'number' && Number.isFinite(value.alareTargetVisibleLines)) {
     next.alareTargetVisibleLines = Math.min(15, Math.max(1, Math.round(value.alareTargetVisibleLines)));
+  }
+  const sourceDisplayMode = pickEnum(value.sourceDisplayMode, SOURCE_DISPLAY_MODES);
+  if (sourceDisplayMode) next.sourceDisplayMode = sourceDisplayMode;
+  if (typeof value.sourceOpenInBrowser === 'boolean') next.sourceOpenInBrowser = value.sourceOpenInBrowser;
+  if (typeof value.songUrlRootOnly === 'boolean') next.songUrlRootOnly = value.songUrlRootOnly;
+  if (typeof value.songUrlIncludeHttps === 'boolean') next.songUrlIncludeHttps = value.songUrlIncludeHttps;
+  if (typeof value.songUrlUnderline === 'boolean') next.songUrlUnderline = value.songUrlUnderline;
+  if (typeof value.songUrlHoverEffect === 'boolean') next.songUrlHoverEffect = value.songUrlHoverEffect;
+  const wavesurferViewMode = normalizeWavesurferViewMode(value.wavesurferViewMode);
+  if (wavesurferViewMode) next.wavesurferViewMode = wavesurferViewMode;
+  if (typeof value.wavesurferBarWidth === 'number' && Number.isFinite(value.wavesurferBarWidth)) {
+    next.wavesurferBarWidth = clampWavesurferBarWidth(value.wavesurferBarWidth);
+  }
+  if (typeof value.wavesurferBarGap === 'number' && Number.isFinite(value.wavesurferBarGap)) {
+    next.wavesurferBarGap = clampWavesurferBarGap(value.wavesurferBarGap);
+  }
+  if (typeof value.wavesurferPaintProgress === 'boolean') {
+    next.wavesurferPaintProgress = value.wavesurferPaintProgress;
   }
 
   return next;
@@ -398,7 +531,7 @@ export function getAssignmentDefaults(
     };
   }
 
-  if (content === 'video-cover') {
+  if (content === 'video-cover' || content === 'lyrics-video') {
     return {
       insetPct: base.insetPct,
       fitMode: base.fitMode,
@@ -442,6 +575,9 @@ export function getAssignmentDefaults(
       lyricsEdgeFade: true,
       lyricsRemoveBracketed: false,
       lyricTracking: DEFAULT_VC_LYRIC_TRACKING,
+      lyricPresentationEffect: DEFAULT_LYRIC_PRESENTATION_EFFECT,
+      lyricTypographyMode: DEFAULT_VC_LYRIC_TYPOGRAPHY_MODE,
+      prettySoftBreakLongLines: false,
       alareFadeEnabled: true,
     };
   }
@@ -572,7 +708,7 @@ export function resolveSongGraphicPresentation(overrides: VcAssignmentOverrides)
   };
 }
 
-/** Resolve song video presentation (video cover) from assignment overrides. */
+/** Resolve song video presentation (video cover / lyrics video) from assignment overrides. */
 export function resolveSongVideoPresentation(overrides: VcAssignmentOverrides): EffectiveVideoPresentation {
   const defaults = getAssignmentDefaults('video-cover', null, { version: 1, items: [] });
   return {
@@ -621,6 +757,23 @@ export function resolveLyricsRemoveBracketed(overrides: VcAssignmentOverrides): 
 
 export function resolveLyricTracking(overrides: VcAssignmentOverrides): VcLyricTracking {
   return overrides.lyricTracking ?? DEFAULT_VC_LYRIC_TRACKING;
+}
+
+export function resolveLyricPresentationEffect(
+  overrides: VcAssignmentOverrides,
+): LyricEffectId {
+  return overrides.lyricPresentationEffect ?? DEFAULT_LYRIC_PRESENTATION_EFFECT;
+}
+
+export function resolveLyricTypographyMode(
+  overrides: VcAssignmentOverrides,
+): VcLyricTypographyMode {
+  return overrides.lyricTypographyMode ?? DEFAULT_VC_LYRIC_TYPOGRAPHY_MODE;
+}
+
+/** Pretty soft-breaks for long/dense lines — off until hosts opt in. */
+export function resolvePrettySoftBreakLongLines(overrides: VcAssignmentOverrides): boolean {
+  return overrides.prettySoftBreakLongLines ?? false;
 }
 
 export function resolveAlareFadeEnabled(overrides: VcAssignmentOverrides): boolean {
@@ -822,5 +975,43 @@ export function resolveUpcomingCoversPresentation(
     showTitle: pickOverride(overrides, 'upcomingShowTitle', false, false),
     clickToZoom: pickOverride(overrides, 'upcomingClickToZoom', false, false),
     textColor: pickOverride(overrides, 'color', gridTypography.color, gridTypography.color),
+  };
+}
+
+export type EffectiveSourcePresentation = {
+  displayMode: VcSourceDisplayMode;
+  openInBrowser: boolean;
+};
+
+export type EffectiveSongUrlPresentation = EffectiveTextPresentation & {
+  rootOnly: boolean;
+  includeHttps: boolean;
+  underline: boolean;
+  hoverEffect: boolean;
+};
+
+export function resolveSourcePresentation(overrides: VcAssignmentOverrides): EffectiveSourcePresentation {
+  return {
+    displayMode: pickOverride(
+      overrides,
+      'sourceDisplayMode',
+      DEFAULT_VC_SOURCE_DISPLAY_MODE,
+      DEFAULT_VC_SOURCE_DISPLAY_MODE,
+    ),
+    openInBrowser: pickOverride(overrides, 'sourceOpenInBrowser', false, false),
+  };
+}
+
+export function resolveSongUrlPresentation(
+  overrides: VcAssignmentOverrides,
+  gridTypography: VcGridDefaultTypography = DEFAULT_VC_GRID_DESIGN.defaultTypography,
+): EffectiveSongUrlPresentation {
+  const text = resolveSongTitleTextPresentation(overrides, gridTypography);
+  return {
+    ...text,
+    rootOnly: pickOverride(overrides, 'songUrlRootOnly', false, false),
+    includeHttps: pickOverride(overrides, 'songUrlIncludeHttps', false, false),
+    underline: pickOverride(overrides, 'songUrlUnderline', false, false),
+    hoverEffect: pickOverride(overrides, 'songUrlHoverEffect', false, false),
   };
 }

@@ -49,7 +49,7 @@ We treat audio as **tier‑0 infrastructure**, not a feature bolt-on. Regression
 │             │ HLS (primary)                  │ HLS (mirror)              │
 │             │                                │                           │
 │  usePlaybackEffects ──ducks main when FX──► speakerGain on graph        │
-│  useAudioAnalyser ─────────────────────────► AnalyserNode                 │
+│  useAnalyserBus ───────────────────────────► AnalyserNode                 │
 │  useVisualizerFrameLoop / IPC sender ─────► projection window FFT       │
 └─────────────────────────────────────────────────────────────────────────┘
 
@@ -69,9 +69,9 @@ We treat audio as **tier‑0 infrastructure**, not a feature bolt-on. Regression
 
 | Element | Role | Web Audio? | Audible when |
 |---------|------|------------|--------------|
-| **Main `<audio>`** | Primary HLS player; timing source | **Never** | Always (except FX-on ducking) |
+| **Main `<audio>`** | Primary HLS player; timing source | **Never** | VC closed (ducked when FX on or VC open) |
 | **Mirror `<audio>`** | Duplicate HLS for analysis/FX | **Yes** (`createMediaElementSource`) | FX on only (`speakerGain=1`); silent in tap mode (`speakerGain=0`) |
-| **VC `<audio>`** | Capture target for VC window share | **No** | VC window open; main stays audible for main-window share |
+| **VC `<audio>`** | Capture target for VC window share | **Yes** when Effects Lab audible | VC window open — **audible** path for screen capture |
 
 **Why two elements in the main window?**  
 A single element cannot both stay on Chromium's native capturable path *and* feed a permanent Web Audio graph. Splitting playback (main) from analysis/FX (mirror) preserves Discord capture on the main window when effects are off.
@@ -85,12 +85,18 @@ Audio is a **first-class module**, not scattered one-offs. Visualizer-specific I
 ```text
 src/audio/
   index.ts                 — public barrel exports
+  MediaCoordinator.ts      — HLS/direct attach, generation guards (main + mirrors)
+  AudioEffectsEngine.ts    — main/mirror vs VC audible FX routing
+  AnalyserBus.ts           — single Web Audio graph per mirror element
+  adapters/
+    attachPlaybackSource.ts — shared hls.js / direct / native HLS loader
   constants.ts             — FFT_SIZE, effect tuning, smoke thresholds
   types.ts                 — AudioGraph, ButterchurnAudioSettings, etc.
   graph/
     buildGraph.ts          — buildAudioGraphFromSource, applyPlaybackEffects (pure + Web Audio)
     registry.ts            — WeakMap, getOrCreate* (mirror element lifecycle)
     mirrorElement.ts       — ensureMirrorElementFeedsGraph (Chromium mute fix)
+    configureMirrorPlaybackEffects.ts — bass / lo-fi / Effects Lab chains
     analyserSmoke.ts       — runOscillatorAnalyserSmoke (CI)
     *.test.ts
   analysis/
@@ -98,16 +104,14 @@ src/audio/
     snapshotElement.ts     — snapshotAudioElement (debug panel)
     frequencyBins.test.ts
   hooks/
-    useAudioAnalyser.ts    — attach graph to mirror ref
-    useAnalyserPlaybackMirror.ts — duplicate HLS on mirror
-    usePlaybackEffects.ts  — bass boost / lo-fi
+    useAnalyserBus.ts      — subscribe to AnalyserBus (visualizer + VC share one graph)
+    useAudioAnalyser.ts    — legacy shim → AnalyserBus
+    useAnalyserPlaybackMirror.ts — duplicate HLS on mirror (via MediaCoordinator)
+    usePlaybackEffects.ts  — bass boost / lo-fi / lab (via AudioEffectsEngine)
   debug/
     types.ts, audioDebug.ts, AudioDebugPanel.tsx, useAudioDebugReporter.ts
 
-Legacy re-export shims (deprecated — import from `src/audio`):
-  src/visualizers/audioGraph.ts
-  src/listener/usePlaybackEffects.ts
-  src/visualizers/debug/*
+Legacy re-export shims removed in Phase 7 — import from `src/audio` directly.
 ```
 
 **Not in `src/audio/` (by design):**
@@ -125,11 +129,14 @@ Legacy re-export shims (deprecated — import from `src/audio`):
 | Concern | Path |
 |---------|------|
 | Public API | `src/audio/index.ts` |
+| Media load / generation | `src/audio/MediaCoordinator.ts`, `adapters/attachPlaybackSource.ts` |
+| Effects routing | `src/audio/AudioEffectsEngine.ts` |
+| Shared FFT tap | `src/audio/AnalyserBus.ts`, `hooks/useAnalyserBus.ts` |
 | Web Audio graph | `src/audio/graph/registry.ts`, `buildGraph.ts` |
-| Analyser hook | `src/audio/hooks/useAudioAnalyser.ts` |
 | Mirror HLS sync | `src/audio/hooks/useAnalyserPlaybackMirror.ts` |
-| Bass boost / lo-fi | `src/audio/hooks/usePlaybackEffects.ts` |
-| Visualizer session | `src/visualizers/useVisualizerManager.ts` |
+| Bass boost / lo-fi / lab | `src/audio/hooks/usePlaybackEffects.ts`, `vc-window/useVcPlaybackEffects.ts` |
+| Visualizer session | `src/visualizers/useVisualizerManager.ts` (`consumerId: visualizer-main`) |
+| VC analyser | `src/vc-mode/useVcModeManager.ts` (`consumerId: vc-visualizer`) |
 | Projection IPC | `src/visualizers/useVisualizerStream.ts` |
 | Audio debug | `src/audio/debug/*` |
 | Listener wiring | `src/listener/ListenerMode.tsx` |
@@ -167,9 +174,9 @@ Unrelated to audio routing but caused false "data loss" scares during testing: `
 ## Main playback
 
 - **Element:** `<audio ref={audioRef}>` in `ListenerMode.tsx` — no `crossOrigin`, no Web Audio.
-- **Source:** HLS via `hls.js` (or native HLS on Safari/WebKit builds).
-- **Volume:** User volume slider applies to `main.volume` when FX are off.
-- **Capture:** This is the path Discord should capture when sharing the **main Song Pages window** with FX **off**.
+- **Source:** HLS via `MediaCoordinator` + `attachPlaybackSource` (hls.js, direct MP3, or native HLS).
+- **Volume:** User volume slider applies to `main.volume` when FX are off and VC is closed.
+- **VC open:** `main.volume = 0` — VC window owns audible output for capture.
 
 ---
 
@@ -203,7 +210,7 @@ This matches [Web Audio / HTMLMediaElement interaction](https://github.com/WebAu
 
 ---
 
-## Web Audio graph (`audioGraph.ts`)
+## Web Audio graph (`src/audio/graph/registry.ts`)
 
 One graph per mirror `<audio>` element (WeakMap). `createMediaElementSource` may only be called **once per element** for the app lifetime.
 
@@ -242,7 +249,7 @@ Legacy/alternate path using `captureStream()` + `MediaStreamSource` without hija
 
 See [visualizer-architecture.md](./visualizer-architecture.md) for experiences and IPC.
 
-**Embedded:** `useAudioAnalyser` → `useVisualizerFrameLoop` → canvas components (e.g. Spectrum bars).
+**Embedded:** `useAnalyserBus` → `useVisualizerFrameLoop` → canvas components (e.g. Spectrum bars).
 
 **Projection window:** Main window sends FFT via IPC (`useVisualizerIpcSender`); projection window has **no** local analyser. Frames sent as `Uint8Array` copies (~60 Hz). Receiver stall &gt; 500ms triggers debug warning.
 
@@ -349,6 +356,19 @@ Built-in **Audio debug panel** (dev default on):
 Panel surfaces: main/mirror state, graph mode, FFT peak/avg, IPC send/receive rates, stall alerts, recent event log.
 
 **Use this first** for any "silent analyser", "visualizer blank", or "projection frozen" report.
+
+### Meyda Lab (experimental feature playground)
+
+[Meyda](https://meyda.js.org) audio-feature extraction as a **read-only** Listener overlay (same lifecycle as Effects Lab — not a product route).
+
+- **Toggle:** `Ctrl/Cmd+Alt+M` or Debug menu → Toggle Meyda Lab Panel
+- **Persistence:** `localStorage['songpages:meyda-lab-panel']`
+- **Tap:** AnalyserBus consumer `meyda-lab` → `getFloatTimeDomainData` + `Meyda.extract` (not `createMeydaAnalyzer`, which routes ScriptProcessor to `destination` and can leak mirror audio)
+- **Does not:** create `MediaElementSource`, duck main, or mute Effects Lab DSP
+- **Note:** Meyda 5.6.3 `spectralFlux` extractor is broken; lab uses a tiny DIY flux for punch detection
+- **Why:** audition RMS / brightness / chroma / toy session narrative before deciding lyric-pulse or visualizer drive wiring
+
+Code: `src/audio/meydaLab/`
 
 ---
 

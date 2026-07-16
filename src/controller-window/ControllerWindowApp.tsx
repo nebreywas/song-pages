@@ -4,6 +4,7 @@ import {
   getBuiltinCommand,
   listOverlayMappings,
   parseKudoPresetIdFromCommandId,
+  parseSurfaceDesignIdFromCommandId,
   type CommandRuntimeContext,
 } from '@shared/commands';
 import {
@@ -114,11 +115,20 @@ export function ControllerWindowApp() {
         showInvokeFeedback(`Kudo: ${preset?.name ?? presetId}`);
         return;
       }
+      const designId =
+        typeof payload.surfaceDesignId === 'string'
+          ? payload.surfaceDesignId
+          : parseSurfaceDesignIdFromCommandId(payload.commandId);
+      if (designId) {
+        const design = vcState?.surfaceDesigns?.designs.find((row) => row.id === designId);
+        showInvokeFeedback(`Surface: ${design?.name ?? designId}`);
+        return;
+      }
       const command = getBuiltinCommand(payload.commandId);
       if (command) showInvokeFeedback(command.label);
     });
     return () => offInvoke?.();
-  }, [kudoPresets]);
+  }, [kudoPresets, vcState?.surfaceDesigns?.designs]);
 
   useEffect(() => {
     const app = getApp();
@@ -144,14 +154,17 @@ export function ControllerWindowApp() {
     return () => window.clearInterval(intervalId);
   }, [gateState.open, gateState.openedAt, gateState.timeoutMs]);
 
+  const surfaceDesigns = vcState?.surfaceDesigns;
+
   const overlayRows = useMemo(() => {
     if (!mappingState) return [];
     return listOverlayMappings(
       mappingState,
       kudoPresets.map((row) => ({ id: row.id, name: row.name })),
       runtimeContext,
+      (surfaceDesigns?.designs ?? []).map((row) => ({ id: row.id, name: row.name })),
     );
-  }, [mappingState, kudoPresets, runtimeContext]);
+  }, [mappingState, kudoPresets, runtimeContext, surfaceDesigns?.designs]);
 
   const fireKudo = (presetId: string) => {
     void getApp()?.commands?.dispatch?.({
@@ -171,8 +184,6 @@ export function ControllerWindowApp() {
       timestamp: Date.now(),
     });
   };
-
-  const surfaceDesigns = vcState?.surfaceDesigns;
   const switchSurface = (designId: string) => {
     if (!surfaceDesigns || designId === surfaceDesigns.activeDesignId || surfaceSwitching) return;
     setSurfaceSwitching(true);

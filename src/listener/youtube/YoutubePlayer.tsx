@@ -19,18 +19,28 @@ export type YoutubePlayerHandle = {
   seek: (seconds: number) => void;
   getCurrentTime: () => number;
   getDuration: () => number;
+  /** Match the native player slider (0–1). */
+  setVolume: (volume01: number) => void;
 };
 
 type YoutubePlayerProps = {
   videoId: string;
   playbackGeneration: number;
   shouldPlay: boolean;
+  /** App-native volume (0–1). Synced onto the YT iframe when ready / when it changes. */
+  volume?: number;
   onReady?: () => void;
   onPlayingChange?: (playing: boolean) => void;
   onEnded?: () => void;
   onDuration?: (seconds: number) => void;
   onError?: (message: string) => void;
 };
+
+/** Convert Song Pages 0–1 volume to YouTube’s 0–100 API scale. */
+function youtubeVolumePercent(volume01: number): number {
+  if (!Number.isFinite(volume01)) return 85;
+  return Math.round(Math.min(1, Math.max(0, volume01)) * 100);
+}
 
 /**
  * Embedded YouTube player for custom-playlist experiment tracks.
@@ -45,6 +55,7 @@ export const YoutubePlayer = forwardRef<YoutubePlayerHandle, YoutubePlayerProps>
     videoId,
     playbackGeneration,
     shouldPlay,
+    volume = 0.85,
     onReady,
     onPlayingChange,
     onEnded,
@@ -62,6 +73,7 @@ export const YoutubePlayer = forwardRef<YoutubePlayerHandle, YoutubePlayerProps>
   const suppressEventsRef = useRef(false);
   const generationRef = useRef(playbackGeneration);
   const shouldPlayRef = useRef(shouldPlay);
+  const volumeRef = useRef(volume);
   const onReadyRef = useRef(onReady);
   const onPlayingChangeRef = useRef(onPlayingChange);
   const onEndedRef = useRef(onEnded);
@@ -70,11 +82,17 @@ export const YoutubePlayer = forwardRef<YoutubePlayerHandle, YoutubePlayerProps>
 
   generationRef.current = playbackGeneration;
   shouldPlayRef.current = shouldPlay;
+  volumeRef.current = volume;
   onReadyRef.current = onReady;
   onPlayingChangeRef.current = onPlayingChange;
   onEndedRef.current = onEnded;
   onDurationRef.current = onDuration;
   onErrorRef.current = onError;
+
+  const applyVolume = (player: YoutubePlayerInstance, volume01: number) => {
+    if (typeof player.setVolume !== 'function') return;
+    player.setVolume(youtubeVolumePercent(volume01));
+  };
 
   const readPlayerMethod = <T,>(
     method: keyof YoutubePlayerInstance,
@@ -97,6 +115,11 @@ export const YoutubePlayer = forwardRef<YoutubePlayerHandle, YoutubePlayerProps>
     },
     getCurrentTime: () => readPlayerMethod('getCurrentTime', 0),
     getDuration: () => readPlayerMethod('getDuration', 0),
+    setVolume: (volume01: number) => {
+      const player = playerRef.current;
+      if (!playerReady || !player) return;
+      applyVolume(player, volume01);
+    },
   }));
 
   const releasePlayer = () => {
@@ -153,6 +176,7 @@ export const YoutubePlayer = forwardRef<YoutubePlayerHandle, YoutubePlayerProps>
             playerRef.current = event.target;
             setPlayerReady(true);
             patchYoutubeIframePermissions(event.target);
+            applyVolume(event.target, volumeRef.current);
             const duration = event.target.getDuration();
             if (duration > 0) onDurationRef.current?.(duration);
             onReadyRef.current?.();
@@ -210,6 +234,13 @@ export const YoutubePlayer = forwardRef<YoutubePlayerHandle, YoutubePlayerProps>
       player.pauseVideo();
     }
   }, [playerReady, shouldPlay]);
+
+  useEffect(() => {
+    if (!playerReady) return;
+    const player = playerRef.current;
+    if (!player) return;
+    applyVolume(player, volume);
+  }, [playerReady, volume]);
 
   return <div className="youtube-player-shell" ref={shellRef} />;
 });

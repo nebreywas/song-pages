@@ -7,6 +7,12 @@ import {
 } from './extendedKeys';
 import { isGatedKeyAllowed, normalizeGatedKey, parseReservedBindingKey } from './gatedKeys';
 import { isSafeDirectBinding } from './safeHotkeys';
+import {
+  parseSurfaceDesignIdFromCommandId,
+  surfaceCommandDefinition,
+  surfaceCommandIdForDesign,
+  type SurfaceDesignCatalogRow,
+} from './surfaceCommands';
 import type {
   CommandDefinition,
   CommandExecutionResult,
@@ -73,6 +79,19 @@ export function resolveBindingToCommand(
     }
   }
 
+  for (const [designId, slot] of Object.entries(state.surfaceDesignBindings ?? {})) {
+    const commandId = surfaceCommandIdForDesign(designId);
+    if (source === 'direct' && slot.direct?.toLowerCase() === normalizedBinding.toLowerCase()) {
+      return { commandId, source, binding: slot.direct };
+    }
+    if (source === 'gated' && slot.gated?.toLowerCase() === normalizedBinding) {
+      return { commandId, source, binding: slot.gated };
+    }
+    if (source === 'extended-function' && slot.extendedFunction === normalizedBinding) {
+      return { commandId, source, binding: slot.extendedFunction };
+    }
+  }
+
   return null;
 }
 
@@ -108,18 +127,28 @@ export function evaluateInvocation(
   invocation: CommandInvocation,
   context: CommandRuntimeContext,
   kudoPresets: Array<{ id: string; name: string }> = [],
+  surfaceDesigns: SurfaceDesignCatalogRow[] = [],
 ): { result: CommandExecutionResult; legacyAction?: string } {
   const presetId = parseKudoPresetIdFromCommandId(invocation.commandId);
+  const designId = parseSurfaceDesignIdFromCommandId(invocation.commandId);
   const command =
     presetId != null
       ? { id: invocation.commandId, label: `Kudo`, category: 'kudos', availability: { vcMode: true } }
-      : getBuiltinCommand(invocation.commandId);
+      : designId != null
+        ? surfaceCommandDefinition(designId, 'Surface')
+        : getBuiltinCommand(invocation.commandId);
 
   if (!command) return { result: 'not-found' };
   if (!isCommandAvailable(command, context)) return { result: 'unavailable' };
 
   if (presetId != null) {
     const exists = kudoPresets.some((row) => row.id === presetId);
+    if (!exists) return { result: 'not-found' };
+    return { result: 'executed' };
+  }
+
+  if (designId != null) {
+    const exists = surfaceDesigns.some((row) => row.id === designId);
     if (!exists) return { result: 'not-found' };
     return { result: 'executed' };
   }
@@ -131,12 +160,14 @@ export function listOverlayMappings(
   state: CommandMappingState,
   kudoPresets: Array<{ id: string; name: string }> = [],
   context: CommandRuntimeContext = { vcModeActive: true },
+  surfaceDesigns: SurfaceDesignCatalogRow[] = [],
 ): CommandOverlayRow[] {
   const rows: CommandOverlayRow[] = [];
 
   const pushRow = (commandId: string, key: string, label: string) => {
     const builtin = getBuiltinCommand(commandId);
     const presetId = parseKudoPresetIdFromCommandId(commandId);
+    const designId = parseSurfaceDesignIdFromCommandId(commandId);
     const command: CommandDefinition | null =
       builtin ??
       (presetId
@@ -146,7 +177,9 @@ export function listOverlayMappings(
             category: 'kudos',
             availability: { vcMode: true },
           }
-        : null);
+        : designId
+          ? surfaceCommandDefinition(designId, label.replace(/^Surface:\s*/, '') || 'Surface')
+          : null);
     if (!command) return;
     rows.push({
       key: key.toUpperCase(),
@@ -217,6 +250,19 @@ export function listOverlayMappings(
     seenGatedKeys.add(gatedKey);
     const preset = kudoPresets.find((row) => row.id === presetId);
     pushRow(`trigger-kudo-${presetId}`, parsed.binding, `Kudo: ${preset?.name ?? presetId}`);
+  }
+
+  for (const [designId, slot] of Object.entries(state.surfaceDesignBindings ?? {})) {
+    if (!slot.gated) continue;
+    const gatedKey = slot.gated.toUpperCase();
+    if (seenGatedKeys.has(gatedKey)) continue;
+    seenGatedKeys.add(gatedKey);
+    const design = surfaceDesigns.find((row) => row.id === designId);
+    pushRow(
+      surfaceCommandIdForDesign(designId),
+      slot.gated,
+      `Surface: ${design?.name ?? designId}`,
+    );
   }
 
   rows.sort((a, b) => a.key.localeCompare(b.key));

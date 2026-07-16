@@ -15,6 +15,7 @@ const {
   fetchStudioClip,
   lyricsFromClip,
   artistFromClip,
+  yearFromClip,
   coverFromClip,
   resolveSunoCoverUrl,
   playbackFromClip,
@@ -29,6 +30,11 @@ const {
   ensureDefaultSunoDemoPlaylistId,
   getSunoDemoPlaylistById,
 } = require('./sunoDemoPlaylists');
+const {
+  metadataFromSunoClip,
+  serializeSunoProviderMetadata,
+  parseSunoProviderMetadata,
+} = require('./clipMetadata');
 
 function initSunoDemoSchema(db) {
   if (!isFeatureEnabled()) return;
@@ -125,7 +131,7 @@ function findSunoSnapshotForClipUuid(clipUuid) {
     getDatabase()
       .prepare(
         `SELECT id, title, artist_name, cover_url, playback_url, external_id, page_url, lyrics,
-                snapshot_refreshed_at, added_at
+                year, caption, provider_metadata_json, snapshot_refreshed_at, added_at
          FROM user_playlist_songs
          WHERE lower(external_id) = lower(?)
          ORDER BY added_at DESC
@@ -139,9 +145,32 @@ function snapshotRefreshTimestamp(snapshot) {
   return snapshot?.snapshot_refreshed_at ?? snapshot?.added_at ?? null;
 }
 
+/**
+ * Snapshots written before videoCoverUrl existed omit the key entirely.
+ * Treat those as stale so Studio is refetched and VC Video Cover can resolve.
+ * (`null` means "checked, no cover" and is considered complete.)
+ */
+function providerMetadataHasVideoCoverField(providerMetadataJson) {
+  const raw = String(providerMetadataJson ?? '').trim();
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    return (
+      parsed != null &&
+      typeof parsed === 'object' &&
+      Object.prototype.hasOwnProperty.call(parsed, 'videoCoverUrl')
+    );
+  } catch {
+    return false;
+  }
+}
+
 function sunoSnapshotIsFresh(snapshot) {
   return (
     Boolean(String(snapshot?.lyrics ?? '').trim()) &&
+    Boolean(String(snapshot?.year ?? '').trim()) &&
+    Boolean(String(snapshot?.provider_metadata_json ?? '').trim()) &&
+    providerMetadataHasVideoCoverField(snapshot?.provider_metadata_json) &&
     !isStoredTimestampOlderThan(snapshotRefreshTimestamp(snapshot), SUNO_SNAPSHOT_REFRESH_MS)
   );
 }
@@ -163,6 +192,10 @@ function applyClipToSunoSnapshots(clipUuid, clip) {
   const coverUrl = coverFromClip(clip, normalized);
   const playbackUrl = playbackFromClip(clip, normalized);
   const lyrics = lyricsFromClip(clip);
+  const providerMetadata = metadataFromSunoClip(clip);
+  const year = yearFromClip(clip) || providerMetadata.year;
+  const caption = providerMetadata.tags || null;
+  const providerMetadataJson = serializeSunoProviderMetadata(providerMetadata);
   const durationSeconds =
     typeof clip.metadata?.duration === 'number' && clip.metadata.duration > 0
       ? Math.round(clip.metadata.duration)
@@ -172,11 +205,25 @@ function applyClipToSunoSnapshots(clipUuid, clip) {
     .prepare(
       `UPDATE user_playlist_songs SET
          title = ?, artist_name = ?, cover_url = ?, playback_url = ?, lyrics = ?,
+         year = COALESCE(?, year),
+         caption = ?,
+         provider_metadata_json = ?,
          duration_seconds = COALESCE(?, duration_seconds),
          snapshot_refreshed_at = datetime('now')
        WHERE lower(external_id) = lower(?)`,
     )
-    .run(title, artistName, coverUrl, playbackUrl, lyrics, durationSeconds, normalized);
+    .run(
+      title,
+      artistName,
+      coverUrl,
+      playbackUrl,
+      lyrics,
+      year,
+      caption,
+      providerMetadataJson,
+      durationSeconds,
+      normalized,
+    );
 }
 
 function refreshSunoDemoRowFromClip(row, clip) {
@@ -232,39 +279,90 @@ function findSunoSnapshotForSongId(songId) {
 }
 
 function manifestFromSunoRow(row, songId) {
+  // Prefer clip-UUID snapshot metadata when the sidebar row itself doesn't store Studio fields.
+  const snapshot =
+    findSunoSnapshotForClipUuid(row.clip_uuid) || findSunoSnapshotForSongId(songId);
+  const providerMetadata = parseSunoProviderMetadata(snapshot?.provider_metadata_json);
+  const year = String(snapshot?.year ?? providerMetadata?.year ?? '').trim();
+  const caption = String(snapshot?.caption ?? providerMetadata?.tags ?? '').trim();
+  const about = String(providerMetadata?.stylePrompt ?? '').trim();
+
   return {
     schemaVersion: 1,
     siteRoot: '',
     artistSlug: 'suno-playlist',
-    artistName: row.artist_name,
+    artistName: row.artist_name || snapshot?.artist_name || 'Suno',
     id: row.clip_uuid,
     slug: row.clip_uuid,
     title: row.title,
     album: '',
-    year: '',
-    caption: '',
-    about: '',
-    lyrics: row.lyrics || '',
-    coverUrl: row.cover_url,
+    year,
+    caption,
+    about,
+    lyrics: row.lyrics || snapshot?.lyrics || '',
+    coverUrl: row.cover_url || snapshot?.cover_url || null,
     extraImageUrl: null,
     pageUrl: sunoDemoPageUrl(songId),
-    playbackUrl: row.playback_url,
+    playbackUrl: row.playback_url || snapshot?.playback_url || '',
     streamLinks: { youtube: '', spotify: '', soundcloud: '' },
     playbackScope: 'full',
     playbackQuality: 'standard',
     buildVersion: 'suno-demo',
     durationSeconds: row.duration_seconds,
+    providerMetadata: providerMetadata || null,
   };
 }
 
+function isLiveStudioClip(clip) {
+  if (!clip || typeof clip !== 'object') return false;
+  // Synthetic cache-hit stubs only carry id/title/prompt — treat those as non-live.
+  return Boolean(
+    clip.handle ||
+      clip.user_handle ||
+      clip.created_at ||
+      clip.createdAt ||
+      clip.major_model_version ||
+      clip.majorModelVersion ||
+      clip.avatar_image_url ||
+      clip.play_count != null ||
+      clip.upvote_count != null ||
+      (clip.metadata && typeof clip.metadata === 'object' && (clip.metadata.tags || clip.metadata.prompt)),
+  );
+}
+
+function resolveProviderMetadata(clip, snapshot) {
+  // Prefer a real Studio payload; otherwise keep the richer snapshot we already stored.
+  // Cache-hit stubs must not wipe creator handle / model badge / play counts.
+  if (isLiveStudioClip(clip)) {
+    return metadataFromSunoClip(clip);
+  }
+  return parseSunoProviderMetadata(snapshot?.provider_metadata_json);
+}
+
 function manifestFromSunoClip(clip, songId, snapshot) {
-  const clipUuid = String(clip.id || snapshot?.external_id || '').trim();
-  const title = String(clip.title || snapshot?.title || 'Untitled').trim() || 'Untitled';
-  const artistName = String(artistFromClip(clip) || snapshot?.artist_name || 'Suno').trim() || 'Suno';
-  const lyrics = String(snapshot?.lyrics || '').trim() || lyricsFromClip(clip);
+  const liveClip = clip && typeof clip === 'object' ? clip : null;
+  const clipUuid = String(liveClip?.id || snapshot?.external_id || '').trim();
+  const title =
+    String(liveClip?.title || snapshot?.title || 'Untitled').trim() || 'Untitled';
+  const artistName =
+    String(
+      (liveClip ? artistFromClip(liveClip) : '') || snapshot?.artist_name || 'Suno',
+    ).trim() || 'Suno';
+  const lyrics = String(snapshot?.lyrics || '').trim() || lyricsFromClip(liveClip);
+  const providerMetadata = resolveProviderMetadata(liveClip, snapshot);
+  const year =
+    yearFromClip(liveClip) ||
+    providerMetadata?.year ||
+    String(snapshot?.year ?? '').trim() ||
+    '';
+  const tags =
+    providerMetadata?.tags ||
+    String(snapshot?.caption ?? '').trim() ||
+    '';
+  const stylePrompt = providerMetadata?.stylePrompt || '';
   const durationSeconds =
-    typeof clip.metadata?.duration === 'number' && clip.metadata.duration > 0
-      ? Math.round(clip.metadata.duration)
+    typeof liveClip?.metadata?.duration === 'number' && liveClip.metadata.duration > 0
+      ? Math.round(liveClip.metadata.duration)
       : null;
   const pageUrl =
     songId != null ? sunoDemoPageUrl(songId) : sunoDemoPageUrlFromClipUuid(clipUuid);
@@ -278,19 +376,22 @@ function manifestFromSunoClip(clip, songId, snapshot) {
     slug: clipUuid,
     title,
     album: '',
-    year: '',
-    caption: '',
-    about: '',
+    year,
+    caption: tags,
+    // Style inspiration prompt — separate from lyrics (Flow uses `about` similarly).
+    about: stylePrompt,
     lyrics,
-    coverUrl: resolveSunoCoverUrl(clip, clipUuid, snapshot?.cover_url),
+    coverUrl: resolveSunoCoverUrl(liveClip, clipUuid, snapshot?.cover_url),
     extraImageUrl: null,
     pageUrl,
-    playbackUrl: playbackFromClip(clip, clipUuid) || snapshot?.playback_url || '',
+    playbackUrl:
+      (liveClip ? playbackFromClip(liveClip, clipUuid) : '') || snapshot?.playback_url || '',
     streamLinks: { youtube: '', spotify: '', soundcloud: '' },
     playbackScope: 'full',
     playbackQuality: 'standard',
     buildVersion: 'suno-demo',
     durationSeconds,
+    providerMetadata: providerMetadata || null,
   };
 }
 
@@ -405,11 +506,8 @@ async function buildManifestForClipUuidAsync(clipUuid) {
 
   const snapshot = findSunoSnapshotForClipUuid(normalized);
   if (snapshot && sunoSnapshotIsFresh(snapshot)) {
-    return manifestFromSunoClip(
-      { id: normalized, title: snapshot.title, metadata: { prompt: snapshot.lyrics } },
-      null,
-      snapshot,
-    );
+    // Pass null clip so we keep snapshot providerMetadata instead of a thin stub.
+    return manifestFromSunoClip(null, null, snapshot);
   }
 
   const row = getDatabase()

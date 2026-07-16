@@ -7,8 +7,12 @@ import { AudioDebugPanel, useAudioDebugHotkey } from '../audio/debug/AudioDebugP
 import { defaultVisualizerForSurface, getVisualizer, visualizerSupportsSurface } from '../visualizers/registry';
 import { VisualizerPluginHost } from '../visualizers/VisualizerPluginHost';
 import { useVisualizerIpcStream } from '../visualizers/useVisualizerStream';
+import { ProjectorFlowSongPage } from './ProjectorFlowSongPage';
+import { ProjectorSoundcloudSongPage } from './ProjectorSoundcloudSongPage';
+import { ProjectorSunoSongPage } from './ProjectorSunoSongPage';
+import { ProjectorYoutubeTheater } from './ProjectorYoutubeTheater';
 
-/** Projection window — song page webview or FFT visualizer streamed from the main window. */
+/** Projector window — Song Page, FFT Visualizer, or Video theater. */
 export function VisualizerWindowApp() {
   const { stream, connected } = useVisualizerIpcStream();
   useAudioDebugHotkey();
@@ -26,7 +30,7 @@ export function VisualizerWindowApp() {
     return (
       <div className="visualizer-window-shell visualizer-window-waiting">
         <p>Connecting to Song Pages…</p>
-        <p className="visualizer-window-hint">Play a song in the main window, then open projection.</p>
+        <p className="visualizer-window-hint">Open Projector from the player menu.</p>
       </div>
     );
   }
@@ -34,25 +38,82 @@ export function VisualizerWindowApp() {
   if (!stream) {
     return (
       <div className="visualizer-window-shell visualizer-window-waiting">
-        <p>Connected — waiting for playback…</p>
-        <p className="visualizer-window-hint">Start playback in the main window.</p>
+        <p>Connected — waiting for content…</p>
+        <p className="visualizer-window-hint">Select a song or playlist in the main window.</p>
+      </div>
+    );
+  }
+
+  if (stream.projectionMode === 'video') {
+    if (!stream.video || stream.video.provider !== 'youtube') {
+      return (
+        <div className="visualizer-window-shell visualizer-window-waiting">
+          <p>No video ready</p>
+          <p className="visualizer-window-hint">Play a YouTube track to use Projector: Video.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="visualizer-window-shell visualizer-window-video">
+        <ProjectorYoutubeTheater
+          videoId={stream.video.videoId}
+          songId={stream.video.songId}
+          isPlaying={stream.isPlaying}
+          currentTime={stream.currentTime}
+          duration={stream.duration}
+          volume={stream.video.volume}
+        />
       </div>
     );
   }
 
   if (stream.projectionMode === 'page') {
-    if (!stream.pageUrl) {
+    if (stream.nativePage?.kind === 'soundcloud') {
+      return (
+        <ProjectorSoundcloudSongPage
+          page={stream.nativePage}
+          fontIncreaseLevel={stream.songPageFontIncreaseLevel ?? 0}
+        />
+      );
+    }
+    if (stream.nativePage?.kind === 'flow') {
+      return (
+        <ProjectorFlowSongPage
+          page={stream.nativePage}
+          lyricsDisplay={stream.lyricsDisplay}
+          fontIncreaseLevel={stream.songPageFontIncreaseLevel ?? 0}
+        />
+      );
+    }
+    if (stream.nativePage?.kind === 'suno') {
+      return (
+        <ProjectorSunoSongPage
+          page={stream.nativePage}
+          lyricsDisplay={stream.lyricsDisplay}
+          fontIncreaseLevel={stream.songPageFontIncreaseLevel ?? 0}
+        />
+      );
+    }
+
+    const url = stream.pageUrl?.trim() || stream.homepageUrl?.trim() || '';
+    if (!url) {
       return (
         <div className="visualizer-window-shell visualizer-window-waiting">
           <p>No song page loaded</p>
-          <p className="visualizer-window-hint">Select a song in the main window, then open projection.</p>
+          <p className="visualizer-window-hint">
+            Select a song or playlist homepage in the main window, then open Projector.
+          </p>
         </div>
       );
     }
 
     return (
       <div className="visualizer-window-shell visualizer-window-page">
-        <SongPageWebview url={stream.pageUrl} />
+        <SongPageWebview
+          url={url}
+          fontIncreaseLevel={stream.songPageFontIncreaseLevel ?? 0}
+        />
       </div>
     );
   }

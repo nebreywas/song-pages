@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconAdd, IconRefresh, IconSidebarOrder } from './PlayerIcons';
 import { artistInitials, resolveArtistPhotoUrl } from './artistDisplay';
+import { AnimatedSpeakerEmoji, SpeakerIconGlyph } from './AnimatedSpeakerEmoji';
 import { isLikedSongsArtist } from './likedSongs';
 import { isUserPlaylistArtistId } from '@shared/listener/userPlaylists';
 import type { SidebarLibrarySortColumn, SidebarLibrarySortDirection } from '@shared/listener/sidebarLibraryOrder';
@@ -41,6 +42,10 @@ type ListenerSidebarProps = {
   onSidebarReorder: (fromIndex: number, toIndex: number) => void;
   onEnterReorderMode?: () => void;
   selectedArtistId: number | null;
+  /** Playlist / artist currently feeding the transport queue. */
+  nowPlayingPlaylistId?: number | null;
+  /** True when transport is actively playing (speaker animates only then). */
+  nowPlayingIsPlaying?: boolean;
   collapsed: boolean;
   busy: boolean;
   onToggleCollapsed: () => void;
@@ -166,6 +171,8 @@ export function ListenerSidebar({
   onSidebarReorder,
   onEnterReorderMode,
   selectedArtistId,
+  nowPlayingPlaylistId = null,
+  nowPlayingIsPlaying = false,
   collapsed,
   busy,
   onToggleCollapsed,
@@ -482,6 +489,7 @@ export function ListenerSidebar({
               const isPlaylistEntry = isUserPlaylistArtistId(artist.id);
               const rowDraggableIndex = isLikedEntry ? null : ++draggableIndex;
               const isActive = selectedArtistId === artist.id;
+              const isNowPlayingSource = nowPlayingPlaylistId != null && artist.id === nowPlayingPlaylistId;
               const entryType = sidebarEntryType(artist);
               const songCount =
                 typeof artist.song_count === 'number' && Number.isFinite(artist.song_count)
@@ -511,7 +519,7 @@ export function ListenerSidebar({
                   <div
                     role="button"
                     tabIndex={0}
-                    className={`library-row${isActive ? ' active' : ''}${isLikedEntry ? ' library-row-liked' : ''}${isPlaylistEntry ? ' library-row-custom' : ''}${reorderMode ? ' library-row--reorder-mode' : ''}`}
+                    className={`library-row${isActive ? ' active' : ''}${isNowPlayingSource ? ' library-row--now-playing' : ''}${isLikedEntry ? ' library-row-liked' : ''}${isPlaylistEntry ? ' library-row-custom' : ''}${reorderMode ? ' library-row--reorder-mode' : ''}`}
                     onClick={() => handleLibraryRowClick(artist.id)}
                     onDoubleClick={() => handleLibraryRowDoubleClick(artist)}
                     onContextMenu={handleContextMenu}
@@ -521,7 +529,7 @@ export function ListenerSidebar({
                         handleLibraryRowClick(artist.id);
                       }
                     }}
-                    title={label}
+                    title={isNowPlayingSource ? `${label} — now playing` : label}
                   >
                     {reorderMode && rowDraggableIndex != null ? (
                       <span
@@ -554,7 +562,18 @@ export function ListenerSidebar({
                         <span className="library-order-index">{orderNumberById.get(artist.id) ?? ''}</span>
                       ) : null}
                     </span>
-                    <span className="library-col-name">{artist.artist_name}</span>
+                    <span className={`library-col-name${isNowPlayingSource ? ' is-now-playing' : ''}`}>
+                      {isNowPlayingSource ? (
+                        <>
+                          <AnimatedSpeakerEmoji
+                            className="now-playing-speaker-emoji"
+                            animating={nowPlayingIsPlaying}
+                          />
+                          {'\u00A0'}
+                        </>
+                      ) : null}
+                      {artist.artist_name}
+                    </span>
                     <span className="library-col-type">
                       <LibraryEntryTypeCell type={entryType} />
                     </span>
@@ -587,6 +606,8 @@ export function ListenerSidebar({
                   const photoUrl =
                     isLikedEntry || isPlaylistEntry ? null : resolveArtistPhotoUrl(artist);
                   const isActive = selectedArtistId === artist.id;
+                  const isNowPlayingSource =
+                    nowPlayingPlaylistId != null && artist.id === nowPlayingPlaylistId;
 
                   const removable = isSidebarPlaylistContextTarget(entryType);
 
@@ -602,8 +623,10 @@ export function ListenerSidebar({
                         role="button"
                         tabIndex={0}
                         className={`library-row library-row-compact${isActive ? ' active' : ''}${
-                          isLikedEntry ? ' library-row-liked' : ''
-                        }${isPlaylistEntry ? ' library-row-custom' : ''}`}
+                          isNowPlayingSource ? ' library-row--now-playing' : ''
+                        }${isLikedEntry ? ' library-row-liked' : ''}${
+                          isPlaylistEntry ? ' library-row-custom' : ''
+                        }`}
                         onClick={() => handleCompactRowActivate(artist, entryType)}
                         onContextMenu={handleContextMenu}
                         onKeyDown={(event) => {
@@ -612,9 +635,9 @@ export function ListenerSidebar({
                             handleCompactRowActivate(artist, entryType);
                           }
                         }}
-                        aria-label={label}
+                        aria-label={isNowPlayingSource ? `${label} — now playing` : label}
                         aria-current={isActive ? 'true' : undefined}
-                        title={label}
+                        title={isNowPlayingSource ? `${label} — now playing` : label}
                       >
                         {isLikedEntry ? (
                           <span
@@ -634,6 +657,11 @@ export function ListenerSidebar({
                             {artistInitials(artist.artist_name)}
                           </span>
                         )}
+                        {isNowPlayingSource ? (
+                          <span className="library-compact-now-playing" aria-hidden="true">
+                            <SpeakerIconGlyph animating={nowPlayingIsPlaying} />
+                          </span>
+                        ) : null}
                       </div>
                     </li>
                   );

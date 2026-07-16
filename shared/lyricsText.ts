@@ -42,6 +42,34 @@ export function formatListenerLyricsDisplayText(lyrics: string, removeBrackets: 
 }
 
 /**
+ * Cheap heuristic: does this lyric source look like Markdown worth piping through marked?
+ * Used when the listener chooses "Markdown" — unrecognized text falls back to plain.
+ */
+export function looksLikeMarkdownLyrics(lyrics: string): boolean {
+  const text = lyrics.replace(/\r\n/g, '\n').trim();
+  if (!text) return false;
+
+  // Common block / inline markers that almost never appear in plain lyric dumps.
+  const patterns = [
+    /^#{1,6}\s+\S/m, // ATX headings
+    /^\s{0,3}(-|\*|\+)\s+\S/m, // unordered lists
+    /^\s{0,3}\d+\.\s+\S/m, // ordered lists
+    /^\s{0,3}>\s?\S/m, // blockquotes
+    /\[[^\]]+\]\([^)]+\)/, // links
+    /!\[[^\]]*\]\([^)]+\)/, // images
+    /(^|\W)\*\*[^*\n]+\*\*(\W|$)/, // bold **
+    /(^|\W)__[^_\n]+__(\W|$)/, // bold __
+    /(^|\W)\*[^*\n]+\*(\W|$)/, // italic *
+    /(^|\W)_[^_\n]+_(\W|$)/, // italic _
+    /`[^`\n]+`/, // inline code
+    /^```/m, // fenced code
+    /^\s{0,3}([-_*]\s*){3,}$/m, // thematic break
+  ];
+
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+/**
  * Remove square-bracket annotations from lyrics (e.g. [Chorus], [Verse 2]).
  * Source lyrics data is unchanged; call this at display/render time only.
  */

@@ -6,6 +6,8 @@ export type VcEffectsLabMirror = {
   outputTrimDb: number;
   abBypass: boolean;
   workletEnhance: boolean;
+  /** Steady coupled speed+pitch (1 = normal). */
+  playbackRateHold: number;
 };
 
 export type VcPlaybackEffectsMirror = {
@@ -23,6 +25,7 @@ export const DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR: VcPlaybackEffectsMirror = {
     outputTrimDb: 0,
     abBypass: false,
     workletEnhance: false,
+    playbackRateHold: 1,
   },
 };
 
@@ -30,6 +33,8 @@ export const DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR: VcPlaybackEffectsMirror = {
 export function isVcPlaybackEffectsAudible(effects: VcPlaybackEffectsMirror): boolean {
   if (effects.bassBoost || effects.lofi) return true;
   const lab = effects.effectsLab;
-  if (!lab.enabled || lab.abBypass) return false;
-  return lab.effectId !== 'bypass';
+  if (lab.effectId === 'bypass') return false;
+  // Match main-window isEffectsLabAudible: hold-to-remove vs hold-to-apply via abBypass.
+  if (lab.enabled) return !lab.abBypass;
+  return lab.abBypass;
 }

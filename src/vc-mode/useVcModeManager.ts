@@ -1,25 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SongPagesSongManifest } from '@shared/manifests';
-import type { VcModeConfig, VcPlaybackEffectsMirror, VcProjectionWindowBounds, VcSpecialPlayPauseState, VcStatePayload, VcSurfaceConfig, VcUpcomingSong } from '@shared/vcModeTypes';
+import type { VcModeConfig, VcPlaybackEffectsMirror, VcProjectionWindowBounds, VcSpecialPlayPauseState, VcStatePayload, VcSurfaceConfig } from '@shared/vcModeTypes';
 import { DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR } from '@shared/vcMode/playbackEffectsMirror';
-import { deriveCommandRuntimeContextFromVcState } from '@shared/commands';
+import type { PlaybackSession } from '../playback/types';
+import { usePlaybackSnapshot } from '../playback/hooks/usePlaybackSnapshot';
+import { buildCommandRuntimeContextFromSnapshot } from '../playback/projections/buildCommandRuntimeContextFromSnapshot';
+import { buildVcStateFromSnapshot } from '../playback/projections/buildVcStateFromSnapshot';
 import { configUsesVisualizer, normalizeVcConfig } from '@shared/vcModeTypes';
 import { isYoutubeSong, youtubeVideoIdFromSong } from '@shared/youtube/youtubeFeature';
 import { isSoundcloudSong, soundcloudPermalinkFromSong } from '@shared/soundcloud/soundcloudFeature';
 import { resolveSunoDemoManifestUrl } from '@shared/demo/sunoDemoFeature';
 
-import { resolveSongAssetUrl, resolveSongCoverUrl, normalizeSongRowAssets } from '@shared/listener/songResolution';
+import { resolveSongCoverUrl, normalizeSongRowAssets } from '@shared/listener/songResolution';
+import { shareableSongLink } from '@shared/listener/shareableSongLink';
+import { resolvePlaylistSongSource } from '@shared/listener/playlistSongSource';
+import { resolveSongLyricsVideoUrl } from '@shared/vcMode/resolveSongLyricsVideoUrl';
+import { resolveSongVideoCoverUrl } from '@shared/vcMode/resolveSongVideoCoverUrl';
 
 import { getApp } from '../lib/bridge';
 import { resolveAssetUrl } from '../lib/resolveAssetUrl';
 import { isVirtualPlaylistSong, vcArtistDisplayName } from '@shared/listener/playlistKinds';
-import { pickNextPlayableSongId, pickUpcomingPlayableSongIds } from '@shared/listener/playbackQueue';
 import type { ArtistRow, SongRow } from '../types/app';
 import { isButterchurnExperienceId } from '../visualizers/butterchurn/presets/approved/presetKeys';
 import { normalizeExperienceId } from '../visualizers/native/registry';
 import { useExperienceSettings } from '../visualizers/settings/useExperienceSettings';
-import { useAudioAnalyser } from '../visualizers/useAudioAnalyser';
+import { useAnalyserBus } from '../audio/hooks/useAnalyserBus';
 import { resolveProjectionWindowForDesign } from '@shared/vcSurfaceDesigns';
 import { createDefaultVcConfig, migrateVcConfig, VC_SETTINGS_KEY } from './vcModeDefaults';
 import {
@@ -45,27 +51,25 @@ const STATE_INTERVAL_MS = 200;
 const SURFACE_SAVE_DEBOUNCE_MS = 500;
 
 type UseVcModeManagerOptions = {
+  playbackSession: PlaybackSession;
   /** Hidden mirror for VC visualizer FFT — see useAnalyserPlaybackMirror. */
   analyserAudioRef: React.RefObject<HTMLAudioElement | null>;
   playingSong: SongRow | null | undefined;
   /** Selected song page when not actively playing — used for Surface designer preview. */
   previewSong?: SongRow | null | undefined;
   sortedSongs: SongRow[];
-  playingSongId: number | null;
-  repeatMode: 'off' | 'one' | 'all';
-  shuffle: boolean;
   artists: ArtistRow[];
   /** VC-session auto-skips — cleared when VC Mode ends. */
   sessionSkippedIds?: ReadonlySet<number>;
-  isPlaying: boolean;
-  currentTime: number;
-  duration: number;
   /** Resolved HLS URL for the active track — mirrored into the VC window for stream capture. */
   activePlaybackUrl: string | null;
   volume: number;
   /** Bass / lo-fi / Effects Lab — mirrored for audible FX in the VC capture window. */
   playbackEffects?: VcPlaybackEffectsMirror;
-  specialPlayPause?: VcSpecialPlayPauseState | null;
+  /** Countdown fields for between-song pause — active flag comes from session snapshot. */
+  specialPlayPauseCountdown?: VcSpecialPlayPauseState | null;
+  /** App-wide Live Debug mode — mirrored onto the VC HUD. */
+  liveDebugEnabled?: boolean;
 };
 
 function effectiveManifestUrlForSong(song: SongRow | null | undefined): string | null {
@@ -115,7 +119,9 @@ function buildSongPayload(
     year: normalized.year,
     caption: normalized.caption,
     coverUrl: resolveSongCoverUrl(normalized, activeManifest?.coverUrl ?? null),
-    videoCoverUrl: resolveSongAssetUrl(normalized, activeManifest?.extraImageUrl ?? null),
+    // Suno: video_cover_url → Video Cover; video_url → Lyrics Video.
+    videoCoverUrl: resolveSongVideoCoverUrl(normalized, activeManifest),
+    lyricsVideoUrl: resolveSongLyricsVideoUrl(normalized, activeManifest),
     about: activeManifest?.about ?? '',
     lyrics: activeManifest?.lyrics ?? '',
     artistId: normalized.artist_id,
@@ -127,26 +133,24 @@ function buildSongPayload(
     soundcloudPermalink: isSoundcloudSong(normalized)
       ? soundcloudPermalinkFromSong(normalized)
       : null,
+    sourceId: resolvePlaylistSongSource(normalized).id,
+    shareUrl: shareableSongLink(normalized),
   };
 }
 
 export function useVcModeManager({
+  playbackSession,
   analyserAudioRef,
   playingSong,
   previewSong,
   sortedSongs,
-  playingSongId,
-  repeatMode,
-  shuffle,
   artists,
   sessionSkippedIds,
-  isPlaying,
-  currentTime,
-  duration,
   activePlaybackUrl,
   volume,
   playbackEffects = DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR,
-  specialPlayPause = null,
+  specialPlayPauseCountdown = null,
+  liveDebugEnabled = false,
 }: UseVcModeManagerOptions) {
   const [modalOpen, setModalOpen] = useState(false);
   const [vcOpen, setVcOpen] = useState(false);
@@ -162,7 +166,9 @@ export function useVcModeManager({
   const manifestCacheRef = useRef(new Map<string, SongPagesSongManifest>());
   /** Manifest URL that `songManifest` state belongs to — prevents cross-track bleed. */
   const loadedManifestUrlRef = useRef<string | null>(null);
-  const timingRef = useRef({ currentTime, duration, isPlaying });
+  const playbackSnapshot = usePlaybackSnapshot(playbackSession);
+  const playbackSnapshotRef = useRef(playbackSnapshot);
+  playbackSnapshotRef.current = playbackSnapshot ?? playbackSession.getSnapshot();
   const canvasMirrorFrameRef = useRef<string | null>(null);
   const activeConfigRef = useRef(activeConfig);
   const surfaceSaveTimerRef = useRef<number | null>(null);
@@ -242,8 +248,10 @@ export function useVcModeManager({
   const vcVisualizerSettings = useExperienceSettings(vcVisualizerId);
 
   useEffect(() => {
-    timingRef.current = { currentTime, duration, isPlaying };
-  }, [currentTime, duration, isPlaying]);
+    playbackSnapshotRef.current = playbackSnapshot ?? playbackSession.getSnapshot();
+  }, [playbackSession, playbackSnapshot]);
+
+  const transportIsPlaying = playbackSnapshot?.playbackPhase === 'playing';
 
   const analyserEnabled =
     vcOpen &&
@@ -252,9 +260,10 @@ export function useVcModeManager({
     !isYoutubeSong(playingSong) &&
     !isSoundcloudSong(playingSong);
 
-  const { analyser, butterchurnTap, applyButterchurnAudioSettings, audioContext } = useAudioAnalyser({
+  const { analyser, butterchurnTap, applyButterchurnAudioSettings, audioContext } = useAnalyserBus({
+    consumerId: 'vc-visualizer',
     audioRef: analyserAudioRef,
-    isPlaying,
+    isPlaying: transportIsPlaying,
     enabled: analyserEnabled,
   });
 
@@ -263,48 +272,30 @@ export function useVcModeManager({
   /** Playing song, or the song page currently selected in the listener — for designer preview assets. */
   const designerSong = playingSong ?? previewSong ?? null;
   /** Queue overlays anchor on the playing track, or the selected song page when idle. */
-  const queueAnchorSongId = playingSongId ?? previewSong?.id ?? null;
-
-  const queueOptions = useMemo(
-    (): { shuffle: boolean; repeatMode: 'off' | 'one' | 'all'; sessionSkippedIds?: ReadonlySet<number> } => ({
-      shuffle,
-      repeatMode,
-      sessionSkippedIds,
-    }),
-    [repeatMode, sessionSkippedIds, shuffle],
-  );
-
-  const nextSongPreview = useMemo(() => {
-    if (queueAnchorSongId == null) return null;
-    const nextId = pickNextPlayableSongId(sortedSongs, queueAnchorSongId, queueOptions);
-    if (nextId == null) return null;
-    const next = sortedSongs.find((song) => song.id === nextId);
-    if (!next) return null;
-    return { title: next.title, artist: next.artist_name ?? '' };
-  }, [queueAnchorSongId, queueOptions, sortedSongs]);
+  const queueAnchorSongId = playbackSnapshot?.activeTrackId ?? previewSong?.id ?? null;
 
   const upcomingMax = activeConfig.upcomingOverlay.maxCount;
 
-  const upcoming = useMemo((): VcUpcomingSong[] => {
-    if (queueAnchorSongId == null) return [];
-    const ids = pickUpcomingPlayableSongIds(
+  const commandRuntimeLibrary = useMemo(
+    () => ({
       sortedSongs,
       queueAnchorSongId,
+      sessionSkippedIds,
       upcomingMax,
-      queueOptions,
-    );
-    return ids.flatMap((id) => {
-      const song = sortedSongs.find((row) => row.id === id);
-      if (!song) return [];
-      return [{
-        id: song.id,
-        title: song.title,
-        artist: song.artist_name ?? '',
-        durationSeconds: song.duration_seconds,
-        coverUrl: resolveSongCoverUrl(normalizeSongRowAssets(song)),
-      }];
-    });
-  }, [queueAnchorSongId, queueOptions, sortedSongs, upcomingMax]);
+      hasCurrentSong: designerSong != null,
+      hasCoverArt: false,
+      hasHostGraphic: Boolean(hostGraphicPopupUrl) || Boolean(activeConfig.hostGraphicPopupId),
+    }),
+    [
+      activeConfig.hostGraphicPopupId,
+      designerSong,
+      hostGraphicPopupUrl,
+      queueAnchorSongId,
+      sessionSkippedIds,
+      sortedSongs,
+      upcomingMax,
+    ],
+  );
 
   useEffect(() => {
     const song = designerSong ? normalizeSongRowAssets(designerSong) : null;
@@ -374,11 +365,21 @@ export function useVcModeManager({
     const displaySong = playingSong ?? previewSong ?? null;
     const loadedManifestUrl = loadedManifestUrlRef.current;
     const activeManifest = activeManifestForSong(displaySong, songManifest, loadedManifestUrl);
+    const snapshot = playbackSnapshot ?? playbackSession.getSnapshot();
+    const projected = buildVcStateFromSnapshot({
+      snapshot,
+      sortedSongs,
+      queueAnchorSongId,
+      sessionSkippedIds,
+      upcomingMax,
+      specialPlayPauseCountdown,
+    });
+
     return {
       config,
-      playback: { currentTime, duration, isPlaying },
+      playback: projected.playback,
       audioMirror: {
-        songId: playingSong?.id ?? null,
+        songId: projected.activeTrackId,
         playbackUrl:
           playingSong != null
             ? (activePlaybackUrl ?? playingSong.playback_url ?? null)
@@ -387,37 +388,38 @@ export function useVcModeManager({
         playbackEffects,
       },
       currentSong: buildSongPayload(displaySong, songManifest, artistProfile, loadedManifestUrl),
-      nextSong: nextSongPreview,
-      upcoming,
+      nextSong: projected.nextSong,
+      upcoming: projected.upcoming,
       hostGraphicUrl: hostGraphicPopupUrl,
       artistName: vcArtistDisplayName(displaySong, artistProfile, activeManifest?.artistName),
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
       effectiveVisualizerId: vcVisualizerId,
       kudoPresets: kudos.presets,
-      specialPlayPause,
+      specialPlayPause: projected.specialPlayPause,
       surfaceDesigns: getVcSurfaceDesignPickerState(),
       lyricsSourceReady: lyricsSourceReadyForSong(displaySong, loadedManifestUrl),
-      playLockEnabled,
-      playLockReleaseOnNextSong,
+      playLockEnabled: projected.playLockEnabled,
+      playLockReleaseOnNextSong: projected.playLockReleaseOnNextSong,
+      liveDebugEnabled: liveDebugEnabled === true,
     };
   }, [
     activeConfig,
     activePlaybackUrl,
     artistProfile,
-    currentTime,
-    duration,
-    isPlaying,
     hostGraphicPopupUrl,
     kudos.presets,
-    nextSongPreview,
-    playLockEnabled,
-    playLockReleaseOnNextSong,
+    liveDebugEnabled,
+    playbackSession,
+    playbackSnapshot,
     playingSong,
     previewSong,
+    queueAnchorSongId,
+    sessionSkippedIds,
     songManifest,
-    specialPlayPause,
-    upcoming,
+    specialPlayPauseCountdown,
+    sortedSongs,
+    upcomingMax,
     vcVisualizerId,
     volume,
     playbackEffects,
@@ -429,10 +431,20 @@ export function useVcModeManager({
     const useLivePlayback = playingSong != null && song?.id === playingSong.id;
     const loadedManifestUrl = loadedManifestUrlRef.current;
     const activeManifest = activeManifestForSong(song, songManifest, loadedManifestUrl);
+    const snapshot = playbackSnapshot ?? playbackSession.getSnapshot();
+    const projected = buildVcStateFromSnapshot({
+      snapshot,
+      sortedSongs,
+      queueAnchorSongId,
+      sessionSkippedIds,
+      upcomingMax,
+      specialPlayPauseCountdown,
+    });
+
     return {
       config: normalizeVcConfig(activeConfig),
       playback: useLivePlayback
-        ? { currentTime, duration, isPlaying }
+        ? projected.playback
         : {
             currentTime: 0,
             duration: song?.duration_seconds ?? 0,
@@ -440,35 +452,56 @@ export function useVcModeManager({
           },
       audioMirror: { songId: null, playbackUrl: null, volume, playbackEffects },
       currentSong: buildSongPayload(song, songManifest, artistProfile, loadedManifestUrl),
-      nextSong: nextSongPreview,
-      upcoming,
+      nextSong: projected.nextSong,
+      upcoming: projected.upcoming,
       hostGraphicUrl: hostGraphicPopupUrl,
       artistName: vcArtistDisplayName(song, artistProfile, activeManifest?.artistName),
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
       effectiveVisualizerId: vcVisualizerId,
       kudoPresets: kudos.presets,
-      specialPlayPause,
+      specialPlayPause: projected.specialPlayPause,
       lyricsSourceReady: lyricsSourceReadyForSong(song, loadedManifestUrl),
+      liveDebugEnabled: liveDebugEnabled === true,
     };
   }, [
     activeConfig,
     artistProfile,
-    currentTime,
     designerSong,
-    duration,
-    isPlaying,
     hostGraphicPopupUrl,
     kudos.presets,
-    nextSongPreview,
+    liveDebugEnabled,
+    playbackSession,
+    playbackSnapshot,
     playingSong,
+    queueAnchorSongId,
+    sessionSkippedIds,
     songManifest,
-    specialPlayPause,
-    upcoming,
+    specialPlayPauseCountdown,
+    sortedSongs,
+    upcomingMax,
     vcVisualizerId,
     volume,
     playbackEffects,
   ]);
+
+  const publishCommandRuntimeContext = useCallback(
+    (payload: VcStatePayload) => {
+      getApp()?.commands?.setRuntimeContext?.(
+        buildCommandRuntimeContextFromSnapshot(
+          playbackSnapshotRef.current,
+          {
+            ...commandRuntimeLibrary,
+            hasCoverArt: Boolean(payload.currentSong?.coverUrl),
+            hasHostGraphic:
+              Boolean(payload.hostGraphicUrl) || Boolean(payload.config.hostGraphicPopupId),
+          },
+          { vcModeActive: true },
+        ),
+      );
+    },
+    [commandRuntimeLibrary],
+  );
 
   const buildStatePayloadRef = useRef(buildStatePayload);
   buildStatePayloadRef.current = buildStatePayload;
@@ -612,66 +645,14 @@ export function useVcModeManager({
     };
   }, [switchVcSurface, vcOpen]);
 
-  // Play Lock toggle from VC controller or keybinding.
-  useEffect(() => {
-    const app = getApp();
-    if (!vcOpen || !app?.vc?.onTogglePlayLock) return;
-
-    const off = app.vc.onTogglePlayLock(() => {
-      setPlayLockEnabled((on) => {
-        const next = !on;
-        if (!next) {
-          playLockReleaseOnNextRef.current = false;
-          setPlayLockReleaseOnNextSong(false);
-        }
-        return next;
-      });
-    });
-
-    return () => off();
-  }, [vcOpen]);
-
-  // Release-on-next toggles from the VC controller (main process owns truth).
-  useEffect(() => {
-    const app = getApp();
-    if (!vcOpen || !app?.vc?.onTogglePlayLockReleaseOnNext) return;
-
-    const off = app.vc.onTogglePlayLockReleaseOnNext(() => {
-      setPlayLockReleaseOnNextSong((on) => {
-        const next = !on;
-        playLockReleaseOnNextRef.current = next;
-        if (next) {
-          setPlayLockEnabled(true);
-        }
-        return next;
-      });
-    });
-
-    return () => off();
-  }, [vcOpen]);
-
-  // Absolute setter kept for tests or future callers.
-  useEffect(() => {
-    const app = getApp();
-    if (!vcOpen || !app?.vc?.onSetPlayLockReleaseOnNext) return;
-
-    const off = app.vc.onSetPlayLockReleaseOnNext((enabled) => {
-      playLockReleaseOnNextRef.current = enabled;
-      setPlayLockReleaseOnNextSong(enabled);
-      if (enabled) {
-        setPlayLockEnabled(true);
-      }
-    });
-
-    return () => off();
-  }, [vcOpen]);
+  // Play Lock toggles are wired in usePlaybackTransportAdapters (Phase 4).
 
   const releasePlayLockIfScheduled = useCallback(() => {
-    if (!playLockReleaseOnNextRef.current) return;
+    if (!playLockReleaseOnNextRef.current && !playLockReleaseOnNextSong) return;
     playLockReleaseOnNextRef.current = false;
     setPlayLockReleaseOnNextSong(false);
     setPlayLockEnabled(false);
-  }, []);
+  }, [playLockReleaseOnNextSong]);
 
   useEffect(() => {
     const app = getApp();
@@ -680,9 +661,7 @@ export function useVcModeManager({
     const pushState = () => {
       const payload = buildStatePayload();
       app.vc!.sendState(payload);
-      app.commands?.setRuntimeContext?.(
-        deriveCommandRuntimeContextFromVcState(payload, { vcModeActive: true }),
-      );
+      publishCommandRuntimeContext(payload);
     };
 
     pushState();
@@ -693,7 +672,7 @@ export function useVcModeManager({
       window.clearInterval(stateId);
       offSync?.();
     };
-  }, [buildStatePayload, vcOpen]);
+  }, [buildStatePayload, publishCommandRuntimeContext, vcOpen]);
 
   /** Push play-lock flags immediately so the controller reflects toggles without interval lag. */
   useEffect(() => {
@@ -702,10 +681,14 @@ export function useVcModeManager({
 
     const payload = buildStatePayload();
     app.vc.sendState(payload);
-    app.commands?.setRuntimeContext?.(
-      deriveCommandRuntimeContextFromVcState(payload, { vcModeActive: true }),
-    );
-  }, [buildStatePayload, playLockEnabled, playLockReleaseOnNextSong, vcOpen]);
+    publishCommandRuntimeContext(payload);
+  }, [
+    buildStatePayload,
+    playbackSnapshot?.playLockEnabled,
+    playbackSnapshot?.playLockReleaseOnNext,
+    publishCommandRuntimeContext,
+    vcOpen,
+  ]);
 
   /** Push VC state when the host popup URL resolves so Toggle Host Graphic Display stays available. */
   useEffect(() => {
@@ -715,10 +698,8 @@ export function useVcModeManager({
 
     const payload = buildStatePayload();
     app.vc.sendState(payload);
-    app.commands?.setRuntimeContext?.(
-      deriveCommandRuntimeContextFromVcState(payload, { vcModeActive: true }),
-    );
-  }, [buildStatePayload, hostGraphicPopupUrl, vcOpen]);
+    publishCommandRuntimeContext(payload);
+  }, [buildStatePayload, hostGraphicPopupUrl, publishCommandRuntimeContext, vcOpen]);
 
   useEffect(() => {
     if (vcOpen) return;
@@ -730,10 +711,8 @@ export function useVcModeManager({
     if (!vcOpen) return;
     const payload = buildStatePayload();
     getApp()?.vc?.sendState(payload);
-    getApp()?.commands?.setRuntimeContext?.(
-      deriveCommandRuntimeContextFromVcState(payload, { vcModeActive: true }),
-    );
-  }, [buildStatePayload, kudos.presets, vcOpen]);
+    publishCommandRuntimeContext(payload);
+  }, [buildStatePayload, kudos.presets, publishCommandRuntimeContext, vcOpen]);
 
   useEffect(() => {
     const app = getApp();
@@ -742,14 +721,14 @@ export function useVcModeManager({
     const scratch = new Uint8Array(analyser.frequencyBinCount);
     const tick = () => {
       analyser.getByteFrequencyData(scratch as Uint8Array<ArrayBuffer>);
-      const timing = timingRef.current;
+      const snapshot = playbackSnapshotRef.current;
       app.vc!.sendFrame({
         type: 'frame',
         // Copy — scratch buffer is reused each tick; typed array IPC matches visualizer path.
         frequency: new Uint8Array(scratch),
-        currentTime: timing.currentTime,
-        duration: timing.duration,
-        isPlaying: timing.isPlaying,
+        currentTime: snapshot.currentTime,
+        duration: snapshot.duration,
+        isPlaying: snapshot.playbackPhase === 'playing',
         canvasFrame: vcUsesButterchurn ? canvasMirrorFrameRef.current : null,
       });
     };
@@ -868,6 +847,8 @@ export function useVcModeManager({
     vcVisualizerId,
     vcVisualizerSettings,
     butterchurnVcMirrorActive,
+    /** Shared bus analyser — use for Meyda bass drive (before Butterchurn EQ). */
+    analyser,
     butterchurnTap,
     applyButterchurnAudioSettings,
     audioContext,

@@ -9,7 +9,8 @@ import { isSongSkipped, isSongSkippedForPlaylist } from '@shared/listener/playli
 import type { PlaylistLengthSettings } from '@shared/listener/playlistLengthSettings';
 import { isSongLongerThanMinutes } from '@shared/listener/songDuration';
 import type { SongRow } from '../types/app';
-import { formatTime } from './formatTime';
+import { formatTime } from '@shared/listener/formatTime';
+import { AnimatedSpeakerEmoji } from './AnimatedSpeakerEmoji';
 import { LikedSongIndicator } from './LikedSongIndicator';
 import { IconClock } from './PlayerIcons';
 import { playlistColumnClassName } from './playlistColumnClasses';
@@ -36,6 +37,11 @@ export type PlaylistTableColumnContext = {
   playlistDrag: PlaylistDragHandles;
   playlistLengthSettings: PlaylistLengthSettings;
   sessionSkippedIds: ReadonlySet<number>;
+  playingSongId: number | null;
+  /** True when transport is actually outputting audio (not just queued). */
+  isPlaying: boolean;
+  /** Song id currently queued as On Deck (yellow title prefix in playlist). */
+  onDeckSongId: number | null;
 };
 
 function skippedValueClass(song: SongRow, sessionSkippedIds: ReadonlySet<number>): string {
@@ -150,21 +156,40 @@ function buildColumn(
             onSort={ctx.onSort}
           />
         ),
-        cell: ({ row }) => (
-          <span className="song-title-cell">
-            {!ctx.isLikedPlaylist && row.original.id > 0 && ctx.likedSongIds.has(row.original.id) ? (
-              <LikedSongIndicator />
-            ) : null}
-            <span
-              className={`song-title-text${
-                row.original.unavailable === 1 ? ' unavailable-title' : ''
-              }${skippedValueClass(row.original, ctx.sessionSkippedIds)}`}
-              title={row.original.title}
-            >
-              {row.original.title}
+        cell: ({ row }) => {
+          const isNowPlaying = ctx.playingSongId != null && row.original.id === ctx.playingSongId;
+          const isOnDeck = ctx.onDeckSongId != null && row.original.id === ctx.onDeckSongId;
+          return (
+            <span className="song-title-cell">
+              {!ctx.isLikedPlaylist && row.original.id > 0 && ctx.likedSongIds.has(row.original.id) ? (
+                <LikedSongIndicator />
+              ) : null}
+              <span
+                className={`song-title-text${
+                  row.original.unavailable === 1 ? ' unavailable-title' : ''
+                }${skippedValueClass(row.original, ctx.sessionSkippedIds)}`}
+                title={row.original.title}
+              >
+                {isOnDeck ? (
+                  <>
+                    <span className="playlist-on-deck-badge">On Deck</span>
+                    {'\u00A0'}
+                  </>
+                ) : null}
+                {isNowPlaying ? (
+                  <>
+                    <AnimatedSpeakerEmoji
+                      className="now-playing-speaker-emoji"
+                      animating={ctx.isPlaying}
+                    />
+                    {'\u00A0'}
+                  </>
+                ) : null}
+                {row.original.title}
+              </span>
             </span>
-          </span>
-        ),
+          );
+        },
       };
     case 'artist':
       return {

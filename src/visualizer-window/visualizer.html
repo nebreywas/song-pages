@@ -3,11 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Permissions-Policy" content="compute-pressure=*" />
+    <!--
+      Projector hosts Song Page webviews, YouTube theater, and Butterchurn (unsafe-eval).
+      Keep in sync with src/index.html / src/vc-window/vc.html widget + media allowances.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https: http: blob:;"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' https://www.youtube.com https://s.ytimg.com https://w.soundcloud.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: file: songpages-cache:; connect-src 'self' https: http: blob: songpages-cache:; media-src 'self' https: http: blob: file: songpages-cache:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://w.soundcloud.com;"
     />
-    <title>Song Pages Visualizer</title>
+    <title>Projector: Song Page</title>
   </head>
   <body class="visualizer-window-body">
     <div id="root"></div>

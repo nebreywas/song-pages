@@ -1,9 +1,16 @@
 import { createContext, useContext, type ReactNode } from 'react';
 
+type VcVisualizerNameReveal = {
+  name: string;
+  visible: boolean;
+};
+
 type VcVisualizerRotationContextValue = {
   activeVisualizerId: string;
   rotateVisualizer: () => void;
   visualizerClickEnabled: boolean;
+  /** Timed name chrome — consumed only inside the visualizer cell/float surface. */
+  nameReveal: VcVisualizerNameReveal;
 };
 
 const VcVisualizerRotationContext = createContext<VcVisualizerRotationContextValue | null>(null);

@@ -11,18 +11,26 @@ import {
   type HostContentItem,
 } from '@shared/hostContent';
 import {
+  DEFAULT_LYRIC_PRESENTATION_EFFECT,
   DEFAULT_VC_LYRIC_TRACKING,
+  DEFAULT_VC_LYRIC_TYPOGRAPHY_MODE,
   DEFAULT_VC_TEXT_ALIGN,
   DEFAULT_VC_TITLE_OVERFLOW,
   getAssignmentDefaults,
+  LYRIC_EFFECT_IDS,
+  LYRIC_EFFECT_LABELS,
   patchAssignmentOverride,
   VC_LYRIC_TRACKING_IDS,
   VC_LYRIC_TRACKING_LABELS,
+  VC_LYRIC_TYPOGRAPHY_MODE_IDS,
+  VC_LYRIC_TYPOGRAPHY_MODE_LABELS,
   VC_TEXT_ALIGN_IDS,
   VC_TEXT_ALIGN_LABELS,
   VC_TITLE_OVERFLOW_OPTIONS,
+  type LyricEffectId,
   type VcAssignmentOverrides,
   type VcLyricTracking,
+  type VcLyricTypographyMode,
   type VcTextAlign,
   type VcTitleOverflow,
 } from '@shared/vcMode/assignmentSettings';
@@ -49,6 +57,10 @@ type TextAssignmentControlsProps = {
   showLyricsRemoveBracketed?: boolean;
   /** Lyrics-only: Simple Scroll vs ALARE tracking mode. */
   showLyricsTracking?: boolean;
+  /** Lyrics-only: agnostic presentation effects (Beat Pulse, Matrix Reveal, …). */
+  showLyricPresentationEffect?: boolean;
+  /** Lyrics-only: Plain vs Pretty Lyrics typography. */
+  showLyricTypographyMode?: boolean;
   /** Vertical lyrics + ALARE only — fade profile and visible-line target. */
   showAlareFineTuning?: boolean;
 };
@@ -78,6 +90,8 @@ export function TextAssignmentControls({
   showLyricsEdgeFade = false,
   showLyricsRemoveBracketed = false,
   showLyricsTracking = false,
+  showLyricPresentationEffect = false,
+  showLyricTypographyMode = false,
   showAlareFineTuning = false,
 }: TextAssignmentControlsProps) {
   const defaults = getAssignmentDefaults(content, item, catalog, gridTypography);
@@ -92,6 +106,16 @@ export function TextAssignmentControls({
   const lyricsRemoveBracketed =
     overrides.lyricsRemoveBracketed ?? defaults.lyricsRemoveBracketed ?? false;
   const lyricTracking = overrides.lyricTracking ?? defaults.lyricTracking ?? DEFAULT_VC_LYRIC_TRACKING;
+  const lyricPresentationEffect =
+    overrides.lyricPresentationEffect ??
+    defaults.lyricPresentationEffect ??
+    DEFAULT_LYRIC_PRESENTATION_EFFECT;
+  const lyricTypographyMode =
+    overrides.lyricTypographyMode ??
+    defaults.lyricTypographyMode ??
+    DEFAULT_VC_LYRIC_TYPOGRAPHY_MODE;
+  const prettySoftBreakLongLines =
+    overrides.prettySoftBreakLongLines ?? defaults.prettySoftBreakLongLines ?? false;
   const alareFadeEnabled = overrides.alareFadeEnabled ?? defaults.alareFadeEnabled ?? true;
   const alareTargetVisibleLines = overrides.alareTargetVisibleLines ?? defaults.alareTargetVisibleLines;
   const isAlare = lyricTracking === 'alare';
@@ -169,6 +193,49 @@ export function TextAssignmentControls({
               </option>
             ))}
           </select>
+        </AssignmentField>
+      ) : null}
+
+      {showLyricPresentationEffect ? (
+        <AssignmentField label="Lyric presentation">
+          <select
+            value={lyricPresentationEffect}
+            onChange={(e) => patch('lyricPresentationEffect', e.target.value as LyricEffectId)}
+          >
+            {LYRIC_EFFECT_IDS.map((effectId) => (
+              <option key={effectId} value={effectId}>
+                {LYRIC_EFFECT_LABELS[effectId]}
+              </option>
+            ))}
+          </select>
+        </AssignmentField>
+      ) : null}
+
+      {showLyricTypographyMode ? (
+        <AssignmentField label="Lyric typography">
+          <select
+            value={lyricTypographyMode}
+            onChange={(e) => patch('lyricTypographyMode', e.target.value as VcLyricTypographyMode)}
+          >
+            {VC_LYRIC_TYPOGRAPHY_MODE_IDS.map((mode) => (
+              <option key={mode} value={mode}>
+                {VC_LYRIC_TYPOGRAPHY_MODE_LABELS[mode]}
+              </option>
+            ))}
+          </select>
+        </AssignmentField>
+      ) : null}
+
+      {showLyricTypographyMode && lyricTypographyMode === 'pretty' ? (
+        <AssignmentField label="Pretty soft breaks">
+          <label className="vc-field vc-field-inline">
+            <input
+              type="checkbox"
+              checked={prettySoftBreakLongLines}
+              onChange={(e) => patch('prettySoftBreakLongLines', e.target.checked)}
+            />
+            <span>Break long/dense lines (mid comma / word)</span>
+          </label>
         </AssignmentField>
       ) : null}
 

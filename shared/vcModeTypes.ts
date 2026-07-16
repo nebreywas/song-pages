@@ -1,5 +1,6 @@
 /** VC Mode — listening party visual mixer types (shared main ↔ VC window). */
 
+import type { PlaylistSongSourceId } from './listener/playlistSongSource';
 import type { KudoPreset } from './kudos';
 import { clampCautionMinutes, DEFAULT_CAUTION_MINUTES } from './listener/playlistLengthSettings';
 import { VC_MAX_BASE_AREAS, VC_SAFE_TEMPLATE_ID } from './vcSurface/constants';
@@ -21,6 +22,7 @@ export type VcCellContent =
   | 'visualizer'
   | 'cover'
   | 'video-cover'
+  | 'lyrics-video'
   | 'lyrics'
   | 'marquee-lyrics'
   | 'about'
@@ -37,6 +39,9 @@ export type VcCellContent =
   | 'upcoming-covers'
   | 'main-genre'
   | 'additional-genres'
+  | 'source'
+  | 'song-url'
+  | 'wavesurfer'
   | 'host-graphic'
   | 'host-video'
   | 'host-title-text'
@@ -120,6 +125,7 @@ export type SongContentSettingsRule = 'graphic' | 'video' | 'title-text' | 'area
 export const SONG_CONTENT_SETTINGS_RULE: Partial<Record<VcCellContent, SongContentSettingsRule>> = {
   cover: 'graphic',
   'video-cover': 'video',
+  'lyrics-video': 'video',
   'artist-image': 'graphic',
   lyrics: 'area-text',
   'marquee-lyrics': 'area-text',
@@ -140,6 +146,9 @@ export const VC_INTERACTIVE_SONG_CONTENT = new Set<VcCellContent>([
   'seek-bar',
   'player-controls',
   'upcoming-covers',
+  'source',
+  'song-url',
+  'wavesurfer',
 ]);
 
 /** May only be assigned to floats (fixed control palette design). */
@@ -207,6 +216,11 @@ export type VcModeConfig = {
   visualizerSequence: VcVisualizerSequence;
   /** When true, clicking the visualizer cell randomizes plugin regardless of change rule. */
   visualizerAlsoClickToChange?: boolean;
+  /**
+   * When true, show the active visualizer name on a bottom bar for the first
+   * ~10s after that visualizer becomes active (also revealable via command).
+   */
+  showVisualizerName?: boolean;
   /** When false, missing song content renders blank instead of host/system fallbacks. */
   useFallbacks: boolean;
   /** When true, YouTube/SoundCloud tracks show blank lyrics instead of the embed-provider notice. */
@@ -261,8 +275,10 @@ export type VcSongPayload = {
   year: string | null;
   caption: string | null;
   coverUrl: string | null;
-  /** Song extra asset (often video) — maps to Video Cover content. */
+  /** Short animated/uploaded cover loop — maps to Video Cover (Suno `video_cover_url`). */
   videoCoverUrl?: string | null;
+  /** Full-song lyric / "Made with Suno" MP4 — maps to Lyrics Video (Suno `video_url`). */
+  lyricsVideoUrl?: string | null;
   about: string;
   lyrics: string;
   artistId: number;
@@ -277,6 +293,10 @@ export type VcSongPayload = {
   youtubeVideoId?: string | null;
   /** Public track permalink when playbackScope is SoundCloud. */
   soundcloudPermalink?: string | null;
+  /** Provider class for Source cells (YouTube, Suno, Artist Page, …). */
+  sourceId?: PlaylistSongSourceId | null;
+  /** Share / watch / song-page URL for Source click-through and Song URL cells. */
+  shareUrl?: string | null;
 };
 
 export type VcUpcomingSong = {
@@ -329,6 +349,8 @@ export type VcStatePayload = {
    * so a prior track's empty manifest cannot trigger the humorous placeholder.
    */
   lyricsSourceReady?: boolean;
+  /** App-wide Live Debug HUD — mirrored so the VC window can show realtime readouts. */
+  liveDebugEnabled?: boolean;
 };
 
 export const VC_SONG_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: string }> = [
@@ -346,10 +368,14 @@ export const VC_SONG_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: strin
   { value: 'about', label: 'About Song' },
   { value: 'main-genre', label: 'Main Genre' },
   { value: 'additional-genres', label: 'Additional Genres' },
+  { value: 'source', label: 'Source' },
+  { value: 'song-url', label: 'Song URL' },
+  { value: 'wavesurfer', label: 'WaveSurfer' },
   { value: 'lyrics', label: 'Lyrics' },
   { value: 'marquee-lyrics', label: 'Lyrics (Marquee)' },
   { value: 'cover', label: 'Cover' },
   { value: 'video-cover', label: 'Video Cover' },
+  { value: 'lyrics-video', label: 'Lyrics Video' },
   { value: 'visualizer', label: 'Visualizer' },
 ];
 
@@ -366,6 +392,7 @@ export const VC_CONTENT_LABELS: Record<VcCellContent, string> = {
   visualizer: 'Visualizer',
   cover: 'Cover',
   'video-cover': 'Video Cover',
+  'lyrics-video': 'Lyrics Video',
   lyrics: 'Lyrics',
   'marquee-lyrics': 'Lyrics (Marquee)',
   about: 'About song',
@@ -382,6 +409,9 @@ export const VC_CONTENT_LABELS: Record<VcCellContent, string> = {
   'upcoming-covers': 'Upcoming Covers',
   'main-genre': 'Main Genre',
   'additional-genres': 'Additional Genres',
+  source: 'Source',
+  'song-url': 'Song URL',
+  wavesurfer: 'WaveSurfer',
   'host-graphic': 'Host graphic',
   'host-video': 'Host video',
   'host-title-text': 'Host title text',
@@ -423,7 +453,9 @@ export type VcHotkeyAction =
   /** Next visualizer in the catalog list. */
   | 'visualizerNext'
   /** Previous visualizer in the catalog list. */
-  | 'visualizerPrevious';
+  | 'visualizerPrevious'
+  /** Briefly reveal the active visualizer name on the VC surface. */
+  | 'showVisualizerName';
 
 export const VC_SETTINGS_KEY = 'vc.lastConfig';
 
@@ -633,6 +665,7 @@ export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
     visualizerChangeRule: migratedClick.visualizerChangeRule,
     visualizerSequence: sanitizeVisualizerSequence(config.visualizerSequence),
     visualizerAlsoClickToChange: migratedClick.visualizerAlsoClickToChange,
+    showVisualizerName: config.showVisualizerName === true,
     useFallbacks: config.useFallbacks !== false,
     suppressEmbedProviderLyricsMessages: config.suppressEmbedProviderLyricsMessages === true,
     autoSkipLongSongsEnabled: config.autoSkipLongSongsEnabled === true,

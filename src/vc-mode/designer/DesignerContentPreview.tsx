@@ -154,6 +154,8 @@ function DesignerSongResolvedPreview({
             textAlign={resolved.textAlign}
             fadeEnabled={resolved.alareFadeEnabled}
             targetVisibleLines={resolved.alareTargetVisibleLines ?? 5}
+            lyricTypographyMode={resolved.lyricTypographyMode}
+            prettySoftBreakLongLines={resolved.prettySoftBreakLongLines}
           />
         );
       }
@@ -383,8 +385,16 @@ export function DesignerContentPreview({
       {resolved.kind === 'seek-bar' ||
       resolved.kind === 'player-controls' ||
       resolved.kind === 'upcoming-covers' ||
+      resolved.kind === 'source' ||
+      resolved.kind === 'song-url' ||
+      resolved.kind === 'wavesurfer' ||
       resolved.kind === 'artist-bio-name' ? (
-        <VcResolvedContentView resolved={resolved} playback={playback} animateGroup={false} />
+        <VcResolvedContentView
+          resolved={resolved}
+          playback={playback}
+          animateGroup={false}
+          designerPreview
+        />
       ) : (
         <DesignerSongResolvedPreview resolved={resolved} playback={playback} />
       )}

@@ -1,6 +1,6 @@
 /**
- * Dedicated projection window for fullscreen visualizers.
- * Main window owns audio; FFT frames stream via IPC (one-way).
+ * Projector window — Song Page / Visualizer / Video theater.
+ * Main window owns queue authority; FFT / video transport stream via IPC.
  */
 const { BrowserWindow, screen } = require('electron');
 const path = require('path');
@@ -70,14 +70,17 @@ function openVisualizerWindow(mainWindow, options = {}) {
     height,
     minWidth: 640,
     minHeight: 360,
-    title: 'Song Pages Visualizer',
+    title: 'Projector: Song Page',
     backgroundColor: '#04060c',
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
+      // Song Page projection uses <webview> guests (same as the main Listener window).
+      // webviewTag must be on; sandbox breaks guest rendering in the parent.
       sandbox: false,
+      webviewTag: true,
       nodeIntegration: false,
       webSecurity: false,
       backgroundThrottling: false,
@@ -131,7 +134,17 @@ function openVisualizerWindow(mainWindow, options = {}) {
     visualizerWindow.loadFile(loadTarget);
   }
 
-  logger.info('Visualizer window opened');
+  logger.info('Projector window opened');
+  return { ok: true };
+}
+
+/** Keep the OS window title in sync with Song Page / Visualizer / Video. */
+function setVisualizerWindowTitle(title) {
+  if (!visualizerWindow || visualizerWindow.isDestroyed()) {
+    return { ok: false, error: 'Projector window is not open.' };
+  }
+  const next = typeof title === 'string' && title.trim() ? title.trim() : 'Projector: Song Page';
+  visualizerWindow.setTitle(next);
   return { ok: true };
 }
 
@@ -172,6 +185,7 @@ function listDisplays() {
 module.exports = {
   openVisualizerWindow,
   closeVisualizerWindow,
+  setVisualizerWindowTitle,
   setVisualizerFullScreen,
   isVisualizerWindowOpen,
   isVisualizerFullScreen,

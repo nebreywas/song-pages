@@ -63,6 +63,21 @@ function installDevMenu() {
           },
         },
         {
+          label: 'Toggle Meyda Lab Panel',
+          accelerator: process.platform === 'darwin' ? 'Cmd+Ctrl+Alt+M' : 'Ctrl+Alt+M',
+          click: (_item, focusedWindow) => {
+            if (!focusedWindow) return;
+            focusedWindow.webContents.executeJavaScript(`
+              (function () {
+                var key = 'songpages:meyda-lab-panel';
+                var next = localStorage.getItem(key) === '1' ? '0' : '1';
+                localStorage.setItem(key, next);
+                window.dispatchEvent(new Event('songpages-meyda-lab-changed'));
+              })();
+            `);
+          },
+        },
+        {
           label: 'Open User Data Folder',
           click: () => {
             shell.openPath(app.getPath('userData'));

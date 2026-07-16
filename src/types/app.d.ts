@@ -1,4 +1,4 @@
-export type AppMode = 'listener' | 'artist' | 'developer' | 'about';
+export type AppMode = 'listener' | 'artist' | 'artist2' | 'developer' | 'about' | 'pretty-lyrics';
 
 /** In-memory cache analytics event from the main process ring buffer. */
 export type CacheEventRow = {
@@ -75,6 +75,11 @@ export type SongRow = {
   library_song_id?: number | null;
   /** When the row was added to a virtual playlist (liked / custom / suno). */
   added_at?: string | null;
+  /**
+   * Provider-specific JSON blob (e.g. normalized Suno Studio clip metadata).
+   * Prefer the synthetic song manifest `providerMetadata` for display.
+   */
+  provider_metadata_json?: string | null;
 };
 
 export type SubscribeResult = {
@@ -382,6 +387,7 @@ declare global {
       };
       artist: {
         pickAudio: () => Promise<string | null>;
+        pickVideo: () => Promise<string | null>;
         pickImage: () => Promise<string | null>;
         pickOutputFolder: () => Promise<string | null>;
         compile: (payload: unknown) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
@@ -397,9 +403,231 @@ declare global {
           error?: string;
         }>;
       };
+      artist2: {
+        listArtists: () => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2Artist[];
+          error?: string;
+        }>;
+        createArtist: (payload: { name: string }) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2Artist;
+          error?: string;
+        }>;
+        updateArtist: (
+          id: string,
+          patch: { name?: string; payload?: Record<string, unknown> },
+        ) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2Artist;
+          error?: string;
+        }>;
+        listObjects: (
+          artistId: string,
+          options?: { kind?: string; search?: string },
+        ) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2CatalogObject[];
+          error?: string;
+        }>;
+        listMembershipCounts: (artistId: string) => Promise<{
+          ok: boolean;
+          data?: Record<string, number>;
+          error?: string;
+        }>;
+        listAlbumTrackSummaries: (artistId: string) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2AlbumTrackSummaries;
+          error?: string;
+        }>;
+        getObject: (id: string) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2CatalogObject | null;
+          error?: string;
+        }>;
+        createObject: (payload: {
+          artistId: string;
+          kind: import('@shared/artist2').Artist2CatalogKind;
+          contentType?: import('@shared/artist2').Artist2ContentType | null;
+          name: string;
+          payload?: Record<string, unknown>;
+        }) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2CatalogObject;
+          error?: string;
+        }>;
+        updateObject: (
+          id: string,
+          patch: {
+            name?: string;
+            status?: import('@shared/artist2').Artist2ObjectStatus;
+            payload?: Record<string, unknown>;
+          },
+        ) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2CatalogObject;
+          error?: string;
+        }>;
+        deleteObject: (id: string) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2DeleteResult;
+          error?: string;
+        }>;
+        getDeleteImpact: (id: string) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2DeleteImpact;
+          error?: string;
+        }>;
+        listDeletedObjects: (artistId: string) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2CatalogObject[];
+          error?: string;
+        }>;
+        restoreObject: (id: string) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2CatalogObject;
+          error?: string;
+        }>;
+        listDeletionReports: (
+          artistId: string,
+          options?: { includeCleared?: boolean },
+        ) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2DeletionReport[];
+          error?: string;
+        }>;
+        clearDeletionReport: (reportId: string) => Promise<{
+          ok: boolean;
+          data?: { ok: boolean; cleared: boolean };
+          error?: string;
+        }>;
+        clearAllDeletionReports: (artistId: string) => Promise<{
+          ok: boolean;
+          data?: { ok: boolean; clearedCount: number };
+          error?: string;
+        }>;
+        getCompilePreview: (artistId: string) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2CompileBuildResult;
+          error?: string;
+        }>;
+        compile: (artistId: string) => Promise<{
+          ok: boolean;
+          data?: {
+            slug: string;
+            previewUrl: string;
+            outputFolder: string;
+            songCount: number;
+            buildVersion: string;
+            generatedAt: string;
+            warnings: string[];
+            skippedSongs: Array<{ id: string; name: string; reason: string }>;
+          };
+          error?: string;
+        }>;
+        importSunoIntoSong: (
+          objectId: string,
+          rawInput: string,
+        ) => Promise<{
+          ok: boolean;
+          data?: {
+            object: import('@shared/artist2').Artist2CatalogObject;
+            coverImported: boolean;
+            coverWarning: string | null;
+            clipId: string;
+          };
+          error?: string;
+        }>;
+        resolveLocalFileUrl: (filePath: string) => Promise<{
+          ok: boolean;
+          data?: string | null;
+          error?: string;
+        }>;
+        renameCoverForObject: (objectId: string) => Promise<{
+          ok: boolean;
+          data?: {
+            object: import('@shared/artist2').Artist2CatalogObject;
+            content: import('@shared/artist2').Artist2CatalogObject | null;
+            path: string;
+            renamed: boolean;
+            filename: string;
+          };
+          error?: string;
+        }>;
+        getAlbumDetail: (albumId: string) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2AlbumDetail;
+          error?: string;
+        }>;
+        addMembership: (payload: {
+          containerId: string;
+          memberId: string;
+        }) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2AlbumDetail;
+          error?: string;
+        }>;
+        removeMembership: (membershipId: string) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2AlbumDetail | null;
+          error?: string;
+        }>;
+        reorderMemberships: (
+          containerId: string,
+          orderedMemberIds: string[],
+        ) => Promise<{
+          ok: boolean;
+          data?: import('@shared/artist2').Artist2AlbumDetail;
+          error?: string;
+        }>;
+        promoteArtwork: (payload: {
+          objectId: string;
+          name?: string;
+        }) => Promise<{
+          ok: boolean;
+          data?: {
+            object: import('@shared/artist2').Artist2CatalogObject;
+            content: import('@shared/artist2').Artist2CatalogObject;
+          };
+          error?: string;
+        }>;
+        linkRelatedSongs: (payload: {
+          fromSongId: string;
+          toSongId: string;
+          relation?: import('@shared/artist2').Artist2SongRelationKind;
+          note?: string;
+        }) => Promise<{
+          ok: boolean;
+          data?: {
+            from: import('@shared/artist2').Artist2CatalogObject;
+            to: import('@shared/artist2').Artist2CatalogObject;
+          };
+          error?: string;
+        }>;
+        unlinkRelatedSongs: (payload: {
+          fromSongId: string;
+          toSongId: string;
+        }) => Promise<{
+          ok: boolean;
+          data?: {
+            from: import('@shared/artist2').Artist2CatalogObject;
+            to: import('@shared/artist2').Artist2CatalogObject | null;
+          };
+          error?: string;
+        }>;
+        repairBrokenReference: (payload: {
+          reportId: string;
+          refIndex: number;
+        }) => Promise<{
+          ok: boolean;
+          data?: { repaired: boolean; kind: string; detail?: unknown };
+          error?: string;
+        }>;
+      };
       visualizer: {
         open: (options?: { fullscreen?: boolean; displayId?: number | null }) => Promise<{ ok: boolean; error?: string }>;
         close: () => Promise<{ ok: boolean; error?: string }>;
+        setTitle: (title: string) => Promise<{ ok: boolean; error?: string }>;
         setFullScreen: (fullscreen: boolean) => Promise<{ ok: boolean; error?: string }>;
         status: () => Promise<{
           ok: boolean;
@@ -434,6 +662,9 @@ declare global {
         }>;
         sendState: (payload: import('@shared/vcModeTypes').VcStatePayload) => void;
         sendFrame: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void;
+        sendPerformanceEffect: (
+          payload: import('@shared/vcMode/performanceEffect').VcPerformanceEffectCommand,
+        ) => void;
         sendPlaybackStatus: (payload: { active: boolean }) => void;
         sendTransport: (payload: import('@shared/vcMode/vcTransport').VcTransportCommand) => void;
         updateSurface: (patch: Partial<import('@shared/vcModeTypes').VcSurfaceConfig>) => void;
@@ -444,6 +675,9 @@ declare global {
         switchSurface: (designId: string) => void;
         onState: (callback: (payload: import('@shared/vcModeTypes').VcStatePayload) => void) => () => void;
         onFrame: (callback: (payload: import('@shared/visualizerMessages').VisualizerStreamFrame) => void) => () => void;
+        onPerformanceEffect: (
+          callback: (payload: import('@shared/vcMode/performanceEffect').VcPerformanceEffectCommand) => void,
+        ) => () => void;
         onHotkey: (callback: (payload: { action: import('@shared/vcModeTypes').VcHotkeyAction }) => void) => () => void;
         onOpened: (callback: () => void) => () => void;
         onClosed: (callback: () => void) => () => void;
@@ -515,6 +749,7 @@ declare global {
           callback: (payload: {
             commandId: string;
             kudoPresetId?: string;
+            surfaceDesignId?: string;
             source?: string;
             binding?: string;
             result?: string;

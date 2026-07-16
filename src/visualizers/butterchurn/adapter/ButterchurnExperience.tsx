@@ -17,6 +17,7 @@ export function ButterchurnExperience({
   analyser,
   butterchurnTap,
   applyButterchurnAudioSettings,
+  frequencyData,
   width,
   height,
   settings,
@@ -26,7 +27,10 @@ export function ButterchurnExperience({
   const blendSeconds = typeof settings.blendSeconds === 'number' ? settings.blendSeconds : 0.8;
   const audioNode = butterchurnTap ?? analyser;
 
-  useApplyButterchurnAudioSettings(applyButterchurnAudioSettings ?? null, settings);
+  useApplyButterchurnAudioSettings(applyButterchurnAudioSettings ?? null, settings, {
+    analyser,
+    frequencyData,
+  });
 
   const handleError = useCallback((message: string) => {
     console.warn('[Butterchurn]', message);

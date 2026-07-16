@@ -692,7 +692,21 @@ function registerIpcHandlers() {
   ipcMain.handle('artist:pickAudio', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],
-      filters: [{ name: 'MP3', extensions: ['mp3'] }],
+      filters: [
+        { name: 'Audio', extensions: ['mp3', 'wav', 'm4a', 'flac', 'ogg', 'aac'] },
+        { name: 'MP3', extensions: ['mp3'] },
+      ],
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    return result.filePaths[0];
+  });
+
+  ipcMain.handle('artist:pickVideo', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+        { name: 'Video', extensions: ['mp4', 'mov', 'webm', 'm4v', 'mkv'] },
+      ],
     });
     if (result.canceled || !result.filePaths[0]) return null;
     return result.filePaths[0];
@@ -805,7 +819,173 @@ function registerIpcHandlers() {
     }
   });
 
-  // --- Visualizer projection window ---
+  // --- Artist 2.0 catalog (authoring workspace; leaves Artist 1.0 alone) ---
+
+  /** Supports sync and async catalog ops — IPC cannot clone an unresolved Promise. */
+  async function artist2Ok(fn) {
+    try {
+      const data = await fn();
+      return { ok: true, data };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('Artist 2.0 catalog error', { error: message });
+      return { ok: false, error: message };
+    }
+  }
+
+  ipcMain.handle('artist2:listArtists', () => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.listArtists());
+  });
+
+  ipcMain.handle('artist2:createArtist', (_event, payload) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.createArtist(payload || {}));
+  });
+
+  ipcMain.handle('artist2:updateArtist', (_event, id, patch) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.updateArtist(id, patch || {}));
+  });
+
+  ipcMain.handle('artist2:listObjects', (_event, artistId, options) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.listObjects(artistId, options || {}));
+  });
+
+  ipcMain.handle('artist2:listMembershipCounts', (_event, artistId) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.listMembershipCounts(artistId));
+  });
+
+  ipcMain.handle('artist2:listAlbumTrackSummaries', (_event, artistId) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.listAlbumTrackSummaries(artistId));
+  });
+
+  ipcMain.handle('artist2:getObject', (_event, id) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.getObject(id));
+  });
+
+  ipcMain.handle('artist2:createObject', (_event, payload) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.createObject(payload || {}));
+  });
+
+  ipcMain.handle('artist2:updateObject', (_event, id, patch) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.updateObject(id, patch || {}));
+  });
+
+  ipcMain.handle('artist2:deleteObject', (_event, id) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.deleteObject(id));
+  });
+
+  ipcMain.handle('artist2:getDeleteImpact', (_event, id) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.getDeleteImpact(id));
+  });
+
+  ipcMain.handle('artist2:listDeletedObjects', (_event, artistId) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.listDeletedObjects(artistId));
+  });
+
+  ipcMain.handle('artist2:restoreObject', (_event, id) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.restoreObject(id));
+  });
+
+  ipcMain.handle('artist2:listDeletionReports', (_event, artistId, options) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.listDeletionReports(artistId, options || {}));
+  });
+
+  ipcMain.handle('artist2:clearDeletionReport', (_event, reportId) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.clearDeletionReport(reportId));
+  });
+
+  ipcMain.handle('artist2:clearAllDeletionReports', (_event, artistId) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.clearAllDeletionReports(artistId));
+  });
+
+  ipcMain.handle('artist2:getCompilePreview', (_event, artistId) => {
+    const compile = require('./artist2/compile');
+    return artist2Ok(() => compile.getCompilePreview(artistId));
+  });
+
+  ipcMain.handle('artist2:compile', (_event, artistId) => {
+    const compile = require('./artist2/compile');
+    return artist2Ok(() => compile.compileArtistCatalog(artistId));
+  });
+
+  ipcMain.handle('artist2:importSunoIntoSong', (_event, objectId, rawInput) => {
+    const sunoImport = require('./artist2/sunoImport');
+    return artist2Ok(() => sunoImport.importSunoIntoSong(objectId, rawInput));
+  });
+
+  ipcMain.handle('artist2:resolveLocalFileUrl', (_event, filePath) => {
+    return artist2Ok(() => {
+      const fs = require('fs');
+      const path = require('path');
+      const { pathToFileURL } = require('url');
+      if (!filePath || typeof filePath !== 'string') return null;
+      const absolute = path.resolve(filePath.trim());
+      if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) return null;
+      return pathToFileURL(absolute).href;
+    });
+  });
+
+  ipcMain.handle('artist2:renameCoverForObject', (_event, objectId) => {
+    const renameCover = require('./artist2/renameCover');
+    return artist2Ok(() => renameCover.renameCoverForObject(objectId));
+  });
+
+  ipcMain.handle('artist2:getAlbumDetail', (_event, albumId) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.getAlbumDetail(albumId));
+  });
+
+  ipcMain.handle('artist2:addMembership', (_event, payload) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.addMembership(payload || {}));
+  });
+
+  ipcMain.handle('artist2:removeMembership', (_event, membershipId) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.removeMembership(membershipId));
+  });
+
+  ipcMain.handle('artist2:reorderMemberships', (_event, containerId, orderedMemberIds) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.reorderMemberships(containerId, orderedMemberIds));
+  });
+
+  ipcMain.handle('artist2:promoteArtwork', (_event, payload) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.promoteArtwork(payload || {}));
+  });
+
+  ipcMain.handle('artist2:linkRelatedSongs', (_event, payload) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.linkRelatedSongs(payload || {}));
+  });
+
+  ipcMain.handle('artist2:unlinkRelatedSongs', (_event, payload) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.unlinkRelatedSongs(payload || {}));
+  });
+
+  ipcMain.handle('artist2:repairBrokenReference', (_event, payload) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.repairBrokenReference(payload || {}));
+  });
+
+  // --- Projector window (Song Page / Visualizer / Video) ---
 
   ipcMain.handle('visualizer:open', (event, options = {}) => {
     const mainWindow = BrowserWindow.fromWebContents(event.sender);
@@ -814,6 +994,10 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('visualizer:close', () => visualizerWindow.closeVisualizerWindow());
+
+  ipcMain.handle('visualizer:setTitle', (_event, title) =>
+    visualizerWindow.setVisualizerWindowTitle(title),
+  );
 
   ipcMain.handle('visualizer:setFullScreen', (_event, fullscreen) =>
     visualizerWindow.setVisualizerFullScreen(fullscreen),
@@ -867,6 +1051,10 @@ function registerIpcHandlers() {
 
   ipcMain.on('vc:sendFrame', (_event, payload) => {
     vcWindow.sendVcFrame(payload);
+  });
+
+  ipcMain.on('vc:sendPerformanceEffect', (_event, payload) => {
+    vcWindow.sendVcPerformanceEffect(payload);
   });
 
   ipcMain.on('vc:sendPlaybackStatus', (_event, payload) => {

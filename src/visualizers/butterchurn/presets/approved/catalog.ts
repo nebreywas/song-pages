@@ -1,4 +1,4 @@
-import type { VisualizerSettingField } from '../../../../core/settings/schema/types';
+import type { VisualizerSettingField } from '../../../core/settings/schema/types';
 import { createButterchurnExperienceComponent } from '../../adapter/ButterchurnExperience';
 import { approvedButterchurnPresets } from './presetKeys';
 
@@ -17,11 +17,20 @@ const sharedSettings: VisualizerSettingField[] = [
     key: 'bassEmphasis',
     type: 'range',
     label: 'Bass emphasis',
-    description: 'Weights kick and bass for the visualizer only — does not change what you hear.',
+    description:
+      'Weights kick and bass for the visualizer only — does not change what you hear. With Meyda bass drive on, this is drive intensity.',
     min: 0,
     max: 1,
     step: 0.05,
     default: 0,
+  },
+  {
+    key: 'meydaBassDrive',
+    type: 'boolean',
+    label: 'Meyda bass drive',
+    description:
+      'Auto-steer bass emphasis from live kick/bass energy (same signal as Meyda Lab). Remembers across presets and songs. Manual bass slider becomes drive strength.',
+    default: false,
   },
   {
     key: 'blendSeconds',

@@ -17,6 +17,7 @@ type AddKeybindingDialogProps = {
   open: boolean;
   state: CommandMappingState;
   kudoPresets: Array<{ id: string; name: string }>;
+  surfaceDesigns?: Array<{ id: string; name: string }>;
   onClose: () => void;
   onAssign: (layer: BindingLayer, binding: string, commandId: string) => void;
 };
@@ -35,13 +36,17 @@ export function AddKeybindingDialog({
   open,
   state,
   kudoPresets,
+  surfaceDesigns = [],
   onClose,
   onAssign,
 }: AddKeybindingDialogProps) {
   const [layer, setLayer] = useState<BindingLayer>('gated');
   const [selectedBinding, setSelectedBinding] = useState<string>('');
 
-  const catalog = useMemo(() => listCatalogCommands(kudoPresets), [kudoPresets]);
+  const catalog = useMemo(
+    () => listCatalogCommands(kudoPresets, surfaceDesigns),
+    [kudoPresets, surfaceDesigns],
+  );
   const actionChoices = useMemo(
     () => listUnassignedCatalogActions(state, catalog),
     [catalog, state],

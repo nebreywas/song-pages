@@ -4,7 +4,7 @@ import type { VisualizerStreamFrame } from '@shared/visualizerMessages';
 import type { VcHotkeyAction, VcOverlayId, VcStatePayload, VcSurfaceConfig } from '@shared/vcModeTypes';
 
 import { getApp } from '../lib/bridge';
-import { FFT_SIZE } from '../visualizers/audioGraph';
+import { FFT_SIZE } from '../audio/constants';
 
 export const VC_CELL_CLICK_COOLDOWN_MS = 800;
 
@@ -21,6 +21,8 @@ export type VcWindowContext = {
   frame: number;
   canvasFrame: string | null;
   activeOverlay: VcOverlayId | null;
+  /** Clear the hotkey overlay (e.g. click outside Upcoming). */
+  dismissOverlay: () => void;
   kudoTrigger: KudoTriggerState;
   /** Fullscreen layout editing — toggled by ⌘⌥L / Ctrl+Alt+L. */
   layoutMode: boolean;
@@ -100,12 +102,17 @@ export function useVcWindowState(): VcWindowContext {
     app?.vc?.updateSurface?.(patch);
   }, []);
 
+  const dismissOverlay = useCallback(() => {
+    setActiveOverlay(null);
+  }, []);
+
   return {
     state,
     frequencyData,
     frame,
     canvasFrame,
     activeOverlay,
+    dismissOverlay,
     kudoTrigger,
     layoutMode,
     onChangeSurface,

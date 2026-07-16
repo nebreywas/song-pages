@@ -18,12 +18,22 @@ export {
   canClearBindingLayer,
   canReassignConfiguredCommand,
   canRemoveCommandFromConfig,
+  commandIdForSurfaceDesignId,
   getCommandBindingPolicy,
   isBindingLayerLocked,
   isCommandRequiredInConfig,
   listCatalogCommands,
   listRequiredBuiltinCommandIds,
+  surfaceDesignIdFromCommandId,
 } from './bindingPolicy';
+export {
+  listSurfaceCommands,
+  parseSurfaceDesignIdFromCommandId,
+  surfaceCommandDefinition,
+  surfaceCommandIdForDesign,
+  SWITCH_SURFACE_COMMAND_PREFIX,
+  type SurfaceDesignCatalogRow,
+} from './surfaceCommands';
 export {
   addCommandToConfiguredSet,
   getBindingSlotForCommand,

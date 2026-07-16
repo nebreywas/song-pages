@@ -5,10 +5,13 @@ import {
   SONG_PAGES_GUEST_PARTITION,
   SONG_PAGES_GUEST_WEB_PREFERENCES,
 } from '@shared/appClient';
-import type { ListenerLyricsDisplaySettings } from '@shared/listener/lyricsDisplaySettings';
+import type {
+  ListenerLyricsDisplaySettings,
+  ListenerLyricsViewMode,
+} from '@shared/listener/lyricsDisplaySettings';
 import { DEFAULT_LISTENER_LYRICS_DISPLAY_SETTINGS } from '@shared/listener/lyricsDisplaySettings';
-import { renderLyricsMarkdownPreview } from '../lib/markdownPreview';
 import { LyricsSettingsPopover } from './LyricsSettingsPopover';
+import { renderListenerLyricsHtml } from './renderListenerLyrics';
 import { SongCoverPopover } from './SongCoverPopover';
 import {
   INSTALL_COVER_CLICK_BRIDGE,
@@ -24,6 +27,11 @@ import {
   READ_LYRICS_HEADING_TICK,
   type GuestLyricsHeadingRect,
 } from './songPageLyricsBridge';
+import { buildApplySongPageFontScaleScript } from './songPageFontScaleBridge';
+import {
+  type SongPageFontIncreaseLevel,
+  songPageFontScaleFromLevel,
+} from '@shared/listener/playerSettings';
 
 type SongPageWebviewProps = {
   url: string;
@@ -33,7 +41,10 @@ type SongPageWebviewProps = {
   loadKey?: string | number;
   /** Omitted in projection / embed contexts — defaults apply; no lyrics settings popover. */
   lyricsSettings?: ListenerLyricsDisplaySettings;
+  /** Player setting — guest root font-size scale (rem-based templates). */
+  fontIncreaseLevel?: SongPageFontIncreaseLevel;
   onRemoveBracketsChange?: (value: boolean) => void;
+  onViewModeChange?: (value: ListenerLyricsViewMode) => void;
   onLoadError?: (message: string) => void;
   /** Fired when the host cover popover opens or closes. */
   onCoverModalChange?: (open: boolean) => void;
@@ -68,11 +79,13 @@ export function SongPageWebview({
   songManifestUrl,
   loadKey,
   lyricsSettings = DEFAULT_LISTENER_LYRICS_DISPLAY_SETTINGS,
+  fontIncreaseLevel = 0,
   onRemoveBracketsChange,
+  onViewModeChange,
   onLoadError,
   onCoverModalChange,
 }: SongPageWebviewProps) {
-  const lyricsSettingsEnabled = onRemoveBracketsChange != null;
+  const lyricsSettingsEnabled = onRemoveBracketsChange != null && onViewModeChange != null;
   const containerRef = useRef<HTMLDivElement>(null);
   const onLoadErrorRef = useRef(onLoadError);
   onLoadErrorRef.current = onLoadError;
@@ -80,6 +93,8 @@ export function SongPageWebview({
   onCoverModalChangeRef.current = onCoverModalChange;
   const lyricsSettingsRef = useRef(lyricsSettings);
   lyricsSettingsRef.current = lyricsSettings;
+  const fontIncreaseLevelRef = useRef(fontIncreaseLevel);
+  fontIncreaseLevelRef.current = fontIncreaseLevel;
   const onRemoveBracketsChangeRef = useRef(onRemoveBracketsChange);
   onRemoveBracketsChangeRef.current = onRemoveBracketsChange;
   const sourceLyricsTextRef = useRef('');
@@ -161,10 +176,7 @@ export function SongPageWebview({
       const sourceLyricsText = sourceLyricsTextRef.current;
       if (!sourceLyricsText.trim()) return;
 
-      const html = renderLyricsMarkdownPreview(
-        sourceLyricsText,
-        lyricsSettingsRef.current.removeBrackets,
-      );
+      const html = renderListenerLyricsHtml(sourceLyricsText, lyricsSettingsRef.current);
       if (!html.trim()) return;
 
       try {
@@ -175,6 +187,16 @@ export function SongPageWebview({
     };
     applyLyricsDisplayRef.current = () => {
       void applyLyricsDisplay();
+    };
+
+    const applyFontScale = async () => {
+      if (disposed || !guestReady || !webview.executeJavaScript) return;
+      const scale = songPageFontScaleFromLevel(fontIncreaseLevelRef.current);
+      try {
+        await webview.executeJavaScript(buildApplySongPageFontScaleScript(scale), false);
+      } catch {
+        /* guest may be mid-navigation */
+      }
     };
 
     const readGuestLyricsFallback = () => {
@@ -194,66 +216,78 @@ export function SongPageWebview({
         });
     };
 
+    /** Electron throws synchronously if <webview> left the DOM before executeJavaScript. */
+    const webviewAttached = () =>
+      !disposed && guestReady && Boolean(webview.isConnected) && typeof webview.executeJavaScript === 'function';
+
     const pollCoverClick = () => {
-      if (disposed || !guestReady || !webview.executeJavaScript) return;
+      if (!webviewAttached()) return;
 
-      void webview
-        .executeJavaScript(READ_COVER_CLICK_TICK, false)
-        .then(async (tickValue) => {
-          if (disposed) return;
-          const tick = typeof tickValue === 'number' ? tickValue : Number(tickValue);
-          if (!Number.isFinite(tick) || tick === lastCoverClickTick) return;
-          lastCoverClickTick = tick;
+      try {
+        void webview
+          .executeJavaScript(READ_COVER_CLICK_TICK, false)
+          .then(async (tickValue) => {
+            if (!webviewAttached()) return;
+            const tick = typeof tickValue === 'number' ? tickValue : Number(tickValue);
+            if (!Number.isFinite(tick) || tick === lastCoverClickTick) return;
+            lastCoverClickTick = tick;
 
-          if (coverPopoverRef.current) {
-            setCoverPopover(null);
-            onCoverModalChangeRef.current?.(false);
-            return;
-          }
+            if (coverPopoverRef.current) {
+              setCoverPopover(null);
+              onCoverModalChangeRef.current?.(false);
+              return;
+            }
 
-          const data = (await webview.executeJavaScript(
-            READ_COVER_ART_DATA,
-            false,
-          )) as GuestCoverArtData | null;
-          if (disposed || !data?.src) return;
+            const data = (await webview.executeJavaScript(
+              READ_COVER_ART_DATA,
+              false,
+            )) as GuestCoverArtData | null;
+            if (!webviewAttached() || !data?.src) return;
 
-          setCoverPopover({
-            src: data.src,
-            title: typeof data.title === 'string' ? data.title : '',
+            setCoverPopover({
+              src: data.src,
+              title: typeof data.title === 'string' ? data.title : '',
+            });
+            onCoverModalChangeRef.current?.(true);
+          })
+          .catch(() => {
+            /* guest may be mid-navigation */
           });
-          onCoverModalChangeRef.current?.(true);
-        })
-        .catch(() => {
-          /* guest may be mid-navigation */
-        });
+      } catch {
+        /* webview detached mid-poll */
+      }
     };
 
     const pollLyricsHeading = () => {
-      if (disposed || !guestReady || !webview.executeJavaScript) return;
+      if (!webviewAttached()) return;
 
-      void webview
-        .executeJavaScript(READ_LYRICS_HEADING_TICK, false)
-        .then(async (tickValue) => {
-          if (disposed) return;
-          const tick = typeof tickValue === 'number' ? tickValue : Number(tickValue);
-          if (!Number.isFinite(tick) || tick === lastLyricsMenuTick) return;
-          lastLyricsMenuTick = tick;
+      try {
+        void webview
+          .executeJavaScript(READ_LYRICS_HEADING_TICK, false)
+          .then(async (tickValue) => {
+            if (!webviewAttached()) return;
+            const tick = typeof tickValue === 'number' ? tickValue : Number(tickValue);
+            if (!Number.isFinite(tick) || tick === lastLyricsMenuTick) return;
+            lastLyricsMenuTick = tick;
 
-          const rect = (await webview.executeJavaScript(
-            READ_LYRICS_HEADING_RECT,
-            false,
-          )) as GuestLyricsHeadingRect | null;
-          if (disposed || !rect) return;
+            const rect = (await webview.executeJavaScript(
+              READ_LYRICS_HEADING_RECT,
+              false,
+            )) as GuestLyricsHeadingRect | null;
+            if (!webviewAttached() || !rect) return;
 
-          const webviewRect = webview.getBoundingClientRect();
-          setLyricsPopoverAnchor({
-            x: webviewRect.left + rect.left,
-            y: webviewRect.top + rect.bottom + 4,
+            const webviewRect = webview.getBoundingClientRect();
+            setLyricsPopoverAnchor({
+              x: webviewRect.left + rect.left,
+              y: webviewRect.top + rect.bottom + 4,
+            });
+          })
+          .catch(() => {
+            /* guest may be mid-navigation */
           });
-        })
-        .catch(() => {
-          /* guest may be mid-navigation */
-        });
+      } catch {
+        /* webview detached mid-poll — common during song-page remount */
+      }
     };
 
     const onFailLoad = (event: Event) => {
@@ -316,6 +350,7 @@ export function SongPageWebview({
       if (sourceLyricsTextRef.current.trim()) {
         void applyLyricsDisplay();
       }
+      void applyFontScale();
 
       coverClickPollId = window.setInterval(pollCoverClick, COVER_CLICK_POLL_MS);
       if (lyricsSettingsEnabled) {
@@ -355,15 +390,26 @@ export function SongPageWebview({
     const webview = container.querySelector('webview') as WebviewElement | null;
     if (!webview?.executeJavaScript || !sourceLyricsTextRef.current.trim()) return;
 
-    const html = renderLyricsMarkdownPreview(
-      sourceLyricsTextRef.current,
-      lyricsSettings.removeBrackets,
-    );
+    const html = renderListenerLyricsHtml(sourceLyricsTextRef.current, lyricsSettings);
 
     void webview.executeJavaScript(buildApplyLyricsBodyHtmlScript(html), false).catch(() => {
       /* guest may be mid-navigation */
     });
-  }, [lyricsSettings.removeBrackets, loadState, url, loadKey, lyricsSourceRevision]);
+  }, [lyricsSettings, loadState, url, loadKey, lyricsSourceRevision]);
+
+  // Re-apply when the Player slider changes without remounting the guest.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || loadState !== 'ready') return;
+
+    const webview = container.querySelector('webview') as WebviewElement | null;
+    if (!webview?.executeJavaScript) return;
+
+    const scale = songPageFontScaleFromLevel(fontIncreaseLevel);
+    void webview.executeJavaScript(buildApplySongPageFontScaleScript(scale), false).catch(() => {
+      /* guest may be mid-navigation */
+    });
+  }, [fontIncreaseLevel, loadState, url, loadKey]);
 
   return (
     <div className="song-webview-wrap">
@@ -386,11 +432,12 @@ export function SongPageWebview({
           onClose={closeCoverPopover}
         />
       ) : null}
-      {lyricsPopoverAnchor && onRemoveBracketsChange ? (
+      {lyricsPopoverAnchor && onRemoveBracketsChange && onViewModeChange ? (
         <LyricsSettingsPopover
           anchor={lyricsPopoverAnchor}
           settings={lyricsSettings}
           onRemoveBracketsChange={onRemoveBracketsChange}
+          onViewModeChange={onViewModeChange}
           onClose={() => setLyricsPopoverAnchor(null)}
         />
       ) : null}

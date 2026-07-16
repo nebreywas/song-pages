@@ -40,6 +40,10 @@ function initDatabase() {
   const { initListenerSchema } = require('./listener/library');
   initListenerSchema();
 
+  // Artist 2.0 catalog (authoring) — separate from Listener subscribe mirrors
+  const { initArtist2Schema } = require('./artist2/schema');
+  initArtist2Schema(db);
+
   logger.info('SQLite database ready', { path: dbPath });
   return db;
 }
@@ -112,6 +116,9 @@ function openTestDatabase(dbPath) {
 
   const { initListenerSchema } = require('./listener/library');
   initListenerSchema();
+
+  const { initArtist2Schema } = require('./artist2/schema');
+  initArtist2Schema(db);
   return db;
 }
 

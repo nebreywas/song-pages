@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Hls from 'hls.js';
 
 import type { VcStatePayload } from '@shared/vcModeTypes';
-import { shouldUseDirectAudioPlayback, loadDirectAudioPlayback } from '../listener/directAudioPlayback';
+import { shouldUseDirectAudioPlayback } from '../listener/directAudioPlayback';
+import { MediaCoordinator } from '../audio/MediaCoordinator';
+import { isPlaybackSourceReady } from '../audio/adapters/attachPlaybackSource';
 
 import { getApp } from '../lib/bridge';
 
 const SEEK_DRIFT_SECONDS = 0.4;
 
-function isMirrorReady(audio: HTMLAudioElement, hls: Hls | null, directAudio: boolean): boolean {
-  return directAudio ? audio.readyState >= HTMLMediaElement.HAVE_METADATA : hls != null || audio.readyState >= HTMLMediaElement.HAVE_METADATA;
+function isMirrorReady(audio: HTMLAudioElement, coordinator: MediaCoordinator, playbackUrl: string): boolean {
+  const holder = coordinator.getHlsHolder();
+  return shouldUseDirectAudioPlayback(playbackUrl)
+    ? audio.readyState >= HTMLMediaElement.HAVE_METADATA
+    : isPlaybackSourceReady(audio, playbackUrl, holder);
 }
 
 /** Main listener owns queue advance — mirror must not loop after a natural `ended`. */
@@ -24,7 +28,10 @@ function canMirrorResume(audio: HTMLAudioElement, isPlaying: boolean): boolean {
  * capture includes music. The main listener window stays the timing source via IPC.
  */
 export function useVcPlaybackAudio(state: VcStatePayload | null) {
-  const hlsRef = useRef<Hls | null>(null);
+  const coordinatorRef = useRef<MediaCoordinator | null>(null);
+  if (!coordinatorRef.current) {
+    coordinatorRef.current = new MediaCoordinator();
+  }
   const loadGenerationRef = useRef(0);
   const loadedSongIdRef = useRef<number | null>(null);
   const loadedPlaybackUrlRef = useRef<string | null>(null);
@@ -53,11 +60,9 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
   }, [state?.playback.currentTime, state?.playback.isPlaying, state?.audioMirror?.songId]);
 
   useEffect(() => {
+    const coordinator = coordinatorRef.current;
     return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
+      coordinator?.invalidateLoads();
       reportPlaybackStatus(null);
     };
   }, [reportPlaybackStatus]);
@@ -76,15 +81,16 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
   useEffect(() => {
     const audio = audioEl;
     const mirror = state?.audioMirror;
-    if (!audio || !mirror?.playbackUrl || mirror.songId == null) {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
+    const coordinator = coordinatorRef.current;
+    if (!audio || !mirror?.playbackUrl || mirror.songId == null || !coordinator) {
+      if (audio) {
+        coordinator.teardownElement(audio);
+      } else {
+        coordinator.invalidateLoads();
       }
       loadedSongIdRef.current = null;
       loadedPlaybackUrlRef.current = null;
       audio?.pause();
-      if (audio) audio.removeAttribute('src');
       reportPlaybackStatus(null);
       return;
     }
@@ -92,7 +98,7 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
     if (
       loadedSongIdRef.current === mirror.songId &&
       loadedPlaybackUrlRef.current === mirror.playbackUrl &&
-      isMirrorReady(audio, hlsRef.current, shouldUseDirectAudioPlayback(mirror.playbackUrl))
+      isMirrorReady(audio, coordinator, mirror.playbackUrl)
     ) {
       tryPlay(audio);
       return;
@@ -104,11 +110,8 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
     loadedSongIdRef.current = null;
     loadedPlaybackUrlRef.current = null;
 
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
     suppressMirrorEndedRef.current = true;
+    coordinator.invalidateLoads();
     audio.pause();
     reportPlaybackStatus(audio);
 
@@ -123,49 +126,12 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
       tryPlay(audio);
     };
 
-    if (shouldUseDirectAudioPlayback(playbackUrl)) {
-      const cleanup = loadDirectAudioPlayback(audio, playbackUrl, {
-        onReady: startPlayback,
-        onError: () => reportPlaybackStatus(audio),
-      });
-      return cleanup;
-    }
-
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        xhrSetup: (xhr) => {
-          xhr.withCredentials = false;
-        },
-      });
-      hlsRef.current = hls;
-      hls.loadSource(playbackUrl);
-      hls.attachMedia(audio);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (generation !== loadGenerationRef.current) return;
-        startPlayback();
-      });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (generation !== loadGenerationRef.current) return;
-        if (data.fatal) {
-          console.warn('[VC mirror] HLS fatal error', data.type, data.details);
-          hls.destroy();
-          if (hlsRef.current === hls) hlsRef.current = null;
-          reportPlaybackStatus(audio);
-        }
-      });
-      return;
-    }
-
-    if (audio.canPlayType('application/vnd.apple.mpegurl')) {
-      audio.src = playbackUrl;
-      const onLoaded = () => {
-        if (generation !== loadGenerationRef.current) return;
-        startPlayback();
-      };
-      audio.addEventListener('loadedmetadata', onLoaded, { once: true });
-      return () => audio.removeEventListener('loadedmetadata', onLoaded);
-    }
+    return coordinator.attach(audio, playbackUrl, {
+      generation,
+      isGenerationCurrent: (g) => g === loadGenerationRef.current,
+      onReady: startPlayback,
+      onError: () => reportPlaybackStatus(audio),
+    });
   }, [
     audioEl,
     state?.audioMirror?.playbackUrl,
@@ -194,6 +160,18 @@ export function useVcPlaybackAudio(state: VcStatePayload | null) {
     tryPlay,
     reportPlaybackStatus,
   ]);
+
+  // Keep HTML volume in sync even before Effects Lab graph wiring runs.
+  useEffect(() => {
+    if (!audioEl) return;
+    const next = state?.audioMirror?.volume;
+    if (typeof next !== 'number' || !Number.isFinite(next)) return;
+    // Web Audio (when FX attach) owns loudness via speakerGain — leave encode level high.
+    if (audioEl.volume <= 0 && next > 0) {
+      audioEl.volume = next;
+    }
+    audioEl.muted = false;
+  }, [audioEl, state?.audioMirror?.volume]);
 
   useEffect(() => {
     if (!audioEl || !state?.audioMirror?.playbackUrl || !state.playback.isPlaying) return;

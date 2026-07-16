@@ -3,8 +3,10 @@ import {
   canRemoveCommandFromConfig,
   canReassignConfiguredCommand,
   commandIdForPresetId,
+  commandIdForSurfaceDesignId,
   listRequiredBuiltinCommandIds,
   presetIdFromCommandId,
+  surfaceDesignIdFromCommandId,
 } from './bindingPolicy';
 import { getBuiltinCommand } from './catalog';
 import { BUILTIN_COMMAND_CATALOG } from './catalog';
@@ -20,6 +22,7 @@ import {
 import { EXTENDED_FUNCTION_KEYS, normalizeExtendedFunctionKey } from './extendedKeys';
 import { GATED_KEY_POOL, normalizeGatedKey, parseReservedBindingKey, reservedBindingKey } from './gatedKeys';
 import { listEnabledSafeDirectBindings } from './safeHotkeys';
+import type { SurfaceDesignCatalogRow } from './surfaceCommands';
 import type { CommandBindingSlot, CommandDefinition, CommandInputSource, CommandMappingState } from './types';
 import { resolveBindingToCommand } from './resolve';
 
@@ -46,6 +49,8 @@ export function getBindingSlotForCommand(
 ): CommandBindingSlot {
   const presetId = presetIdFromCommandId(commandId);
   if (presetId) return state.kudoPresetBindings[presetId] ?? {};
+  const designId = surfaceDesignIdFromCommandId(commandId);
+  if (designId) return state.surfaceDesignBindings[designId] ?? {};
   return state.commands[commandId] ?? {};
 }
 
@@ -120,6 +125,7 @@ export function listBindingOptionsForCommand(
 export function listConfiguredActionRows(
   state: CommandMappingState,
   kudoPresets: Array<{ id: string; name: string }> = [],
+  surfaceDesigns: SurfaceDesignCatalogRow[] = [],
 ): ConfiguredActionRow[] {
   const rows: ConfiguredActionRow[] = [];
 
@@ -165,6 +171,20 @@ export function listConfiguredActionRows(
     });
   }
 
+  for (const designId of state.configuredSurfaceDesignIds) {
+    const design = surfaceDesigns.find((row) => row.id === designId);
+    if (!design) continue;
+    const commandId = commandIdForSurfaceDesignId(designId);
+    rows.push({
+      commandId,
+      label: `Surface: ${design.name}`,
+      category: 'surfaces',
+      description: 'Switch the active VC control surface to this saved design.',
+      slot: state.surfaceDesignBindings[designId] ?? {},
+      requiredInConfig: false,
+    });
+  }
+
   return rows;
 }
 
@@ -175,6 +195,7 @@ export function listUnassignedCatalogActions(
   const configured = new Set([
     ...state.configuredCommandIds.filter((id) => !isReserveKudoSlotCommandId(id)),
     ...state.configuredKudoPresetIds.map((presetId) => commandIdForPresetId(presetId)),
+    ...state.configuredSurfaceDesignIds.map((designId) => commandIdForSurfaceDesignId(designId)),
   ]);
   return catalog.filter((row) => {
     if (isReserveKudoSlotTemplateId(row.id)) return true;
@@ -205,6 +226,19 @@ export function addCommandToConfiguredSet(
       kudoPresetBindings: {
         ...state.kudoPresetBindings,
         [presetId]: state.kudoPresetBindings[presetId] ?? {},
+      },
+    };
+  }
+
+  const designId = surfaceDesignIdFromCommandId(commandId);
+  if (designId) {
+    if (state.configuredSurfaceDesignIds.includes(designId)) return state;
+    return {
+      ...state,
+      configuredSurfaceDesignIds: [...state.configuredSurfaceDesignIds, designId],
+      surfaceDesignBindings: {
+        ...state.surfaceDesignBindings,
+        [designId]: state.surfaceDesignBindings[designId] ?? {},
       },
     };
   }
@@ -247,10 +281,12 @@ export function removeCommandFromConfiguredSet(
   state: CommandMappingState,
   commandId: string,
   kudoPresets: Array<{ id: string; name: string }> = [],
+  surfaceDesigns: SurfaceDesignCatalogRow[] = [],
 ): CommandMappingState {
-  if (!canRemoveCommandFromConfig(commandId, kudoPresets)) return state;
+  if (!canRemoveCommandFromConfig(commandId, kudoPresets, surfaceDesigns)) return state;
 
   const presetId = presetIdFromCommandId(commandId);
+  const designId = surfaceDesignIdFromCommandId(commandId);
   const slot = getBindingSlotForCommand(state, commandId);
   const bindingsToClear: Array<{ source: Exclude<CommandInputSource, 'controller-ui'>; binding: string }> = [];
   if (slot.direct) bindingsToClear.push({ source: 'direct', binding: slot.direct });
@@ -268,6 +304,16 @@ export function removeCommandFromConfiguredSet(
       ...next,
       configuredKudoPresetIds: next.configuredKudoPresetIds.filter((id) => id !== presetId),
       kudoPresetBindings,
+    };
+  }
+
+  if (designId) {
+    const surfaceDesignBindings = { ...next.surfaceDesignBindings };
+    delete surfaceDesignBindings[designId];
+    return {
+      ...next,
+      configuredSurfaceDesignIds: next.configuredSurfaceDesignIds.filter((id) => id !== designId),
+      surfaceDesignBindings,
     };
   }
 
@@ -310,11 +356,12 @@ export function reassignConfiguredCommand(
   fromCommandId: string,
   toCommandId: string,
   kudoPresets: Array<{ id: string; name: string }> = [],
+  surfaceDesigns: SurfaceDesignCatalogRow[] = [],
 ): CommandMappingState {
   if (fromCommandId === toCommandId) return state;
   if (!canReassignConfiguredCommand(fromCommandId)) return state;
   const slot = getBindingSlotForCommand(state, fromCommandId);
-  let next = removeCommandFromConfiguredSet(state, fromCommandId, kudoPresets);
+  let next = removeCommandFromConfiguredSet(state, fromCommandId, kudoPresets, surfaceDesigns);
   next = addCommandToConfiguredSet(next, toCommandId);
 
   const patch: Partial<CommandBindingSlot> = { ...slot };
@@ -326,6 +373,7 @@ export function pruneConfiguredState(state: CommandMappingState): CommandMapping
     ...new Set([...state.configuredCommandIds, ...listRequiredBuiltinCommandIds()]),
   ].filter((commandId) => Boolean(getBuiltinCommand(commandId)));
   const configuredKudoPresetIds = [...new Set(state.configuredKudoPresetIds)];
+  const configuredSurfaceDesignIds = [...new Set(state.configuredSurfaceDesignIds ?? [])];
 
   const commands: CommandMappingState['commands'] = {};
   for (const commandId of configuredCommandIds) {
@@ -337,6 +385,15 @@ export function pruneConfiguredState(state: CommandMappingState): CommandMapping
   for (const presetId of configuredKudoPresetIds) {
     if (state.kudoPresetBindings[presetId]) kudoPresetBindings[presetId] = state.kudoPresetBindings[presetId];
     else kudoPresetBindings[presetId] = {};
+  }
+
+  const surfaceDesignBindings: CommandMappingState['surfaceDesignBindings'] = {};
+  for (const designId of configuredSurfaceDesignIds) {
+    if (state.surfaceDesignBindings?.[designId]) {
+      surfaceDesignBindings[designId] = state.surfaceDesignBindings[designId];
+    } else {
+      surfaceDesignBindings[designId] = {};
+    }
   }
 
   const reservedKudoKeys = state.reservedKudoKeys.filter((reservedKey) => {
@@ -356,8 +413,10 @@ export function pruneConfiguredState(state: CommandMappingState): CommandMapping
       ...state,
       configuredCommandIds,
       configuredKudoPresetIds,
+      configuredSurfaceDesignIds,
       commands,
       kudoPresetBindings,
+      surfaceDesignBindings,
       reservedKudoKeys,
       kudoPresetByReservedKey,
     }),

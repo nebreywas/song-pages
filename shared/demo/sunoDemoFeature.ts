@@ -154,6 +154,15 @@ export function sunoShareUrlFromClipUuid(clipUuid: string | null | undefined): s
   return `https://suno.com/song/${normalized}`;
 }
 
+/** Creator profile on suno.com — opens in the system browser from the song page. */
+export function sunoCreatorProfileUrl(handle: string | null | undefined): string | null {
+  const cleaned = String(handle ?? '')
+    .trim()
+    .replace(/^@+/, '');
+  if (!cleaned) return null;
+  return `https://www.suno.com/@${encodeURIComponent(cleaned)}`;
+}
+
 /** Virtual sidebar row for one Suno playlist. */
 export function buildSunoPlaylistArtistRow(playlist: SunoDemoPlaylistRow) {
   return {

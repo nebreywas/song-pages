@@ -4,7 +4,9 @@ export type PerformanceEffectId =
   | 'filter-sweep-short'
   | 'filter-sweep-long'
   | 'momentary-lowpass'
-  | 'reverb-throw';
+  | 'reverb-throw'
+  | 'rate-dive'
+  | 'rate-climb';
 
 export type PerformanceEffectPhase = 'trigger' | 'hold' | 'release';
 
@@ -29,6 +31,10 @@ export function performanceEffectRestoreMs(effectId: PerformanceEffectId): numbe
       return 6200;
     case 'reverb-throw':
       return 4200;
+    case 'rate-dive':
+      return 450 + 900 + 1400;
+    case 'rate-climb':
+      return 350 + 700 + 1200;
     default:
       return 0;
   }

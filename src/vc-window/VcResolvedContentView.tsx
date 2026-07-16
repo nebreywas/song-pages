@@ -1,9 +1,10 @@
 import { useMemo, type CSSProperties } from 'react';
 
 import { hostTextCssStyle } from '@shared/hostContent';
+import type { LyricEffectId } from '@shared/lyricEffects';
 import type { ResolvedVcContent } from '@shared/vcMode/contentResolution';
 import type { VcPlaybackState } from '@shared/vcModeTypes';
-import type { VcTitleOverflow, VcTextAlign } from '@shared/vcMode/assignmentSettings';
+import type { VcLyricTypographyMode, VcTitleOverflow, VcTextAlign } from '@shared/vcMode/assignmentSettings';
 
 import { renderMarkdownPreview } from '../lib/markdownPreview';
 import { systemFallbackUrl } from './systemFallbackUrls';
@@ -16,11 +17,19 @@ import { VcUpcomingCoversView } from './VcUpcomingCoversView';
 import { VcAlareLyricsView } from './VcAlareLyricsView';
 import { VcMarqueeLyricsView } from './VcMarqueeLyricsView';
 import { lyricsScrollClassName } from './lyricsScrollClassName';
+import { VcSongUrlContentView, VcSourceContentView } from './VcSourceContentViews';
+import { DESIGNER_WAVESURFER_PEAKS, VcWavesurferView } from './VcWavesurferView';
 
 type VcResolvedContentViewProps = {
   resolved: Exclude<ResolvedVcContent, { kind: 'empty' } | { kind: 'visualizer' }>;
   playback: VcPlaybackState;
   animateGroup?: boolean;
+  /** FFT bins from main analyser — for agnostic lyric effects. */
+  frequencyData?: Uint8Array | null;
+  /** Direct playback URL for WaveSurfer peaks (not HLS embeds). */
+  playbackUrl?: string | null;
+  /** Designer canvas — synthetic peaks when no playable URL is on hand. */
+  designerPreview?: boolean;
 };
 
 function hostTextStyle(
@@ -79,7 +88,7 @@ function ResolvedVideoView({
 }: {
   remoteUrl?: string | null;
   mediaPath?: string | null;
-  systemAsset?: 'video-cover';
+  systemAsset?: 'video-cover' | 'lyrics-video';
   presentation?: ResolvedVcContent extends { kind: 'video' } ? ResolvedVcContent['presentation'] : never;
 }) {
   const systemUrl = systemAsset ? systemFallbackUrl(systemAsset) : null;
@@ -165,10 +174,14 @@ function ResolvedLyricsView({
   textAlign,
   lyricsEdgeFade,
   lyricTracking,
+  lyricPresentationEffect,
+  lyricTypographyMode,
+  prettySoftBreakLongLines,
   alareFadeEnabled,
   alareTargetVisibleLines,
   manifestDurationSeconds,
   songId,
+  frequencyData,
 }: {
   text: string;
   playback: VcPlaybackState;
@@ -179,10 +192,14 @@ function ResolvedLyricsView({
   textAlign?: VcTextAlign;
   lyricsEdgeFade?: boolean;
   lyricTracking?: 'simple-scroll' | 'alare';
+  lyricPresentationEffect?: LyricEffectId;
+  lyricTypographyMode?: VcLyricTypographyMode;
+  prettySoftBreakLongLines?: boolean;
   alareFadeEnabled?: boolean;
   alareTargetVisibleLines?: number;
   manifestDurationSeconds?: number | null;
   songId?: string | null;
+  frequencyData?: Uint8Array | null;
 }) {
   if (lyricTracking === 'alare' && fontStyle && fontSize && color) {
     return (
@@ -197,6 +214,10 @@ function ResolvedLyricsView({
         textAlign={textAlign}
         fadeEnabled={alareFadeEnabled}
         targetVisibleLines={alareTargetVisibleLines}
+        lyricPresentationEffect={lyricPresentationEffect}
+        lyricTypographyMode={lyricTypographyMode}
+        prettySoftBreakLongLines={prettySoftBreakLongLines}
+        frequencyData={frequencyData}
       />
     );
   }
@@ -328,6 +349,9 @@ export function VcResolvedContentView({
   resolved,
   playback,
   animateGroup = true,
+  frequencyData = null,
+  playbackUrl = null,
+  designerPreview = false,
 }: VcResolvedContentViewProps) {
   switch (resolved.kind) {
     case 'graphic':
@@ -387,10 +411,14 @@ export function VcResolvedContentView({
           textAlign={resolved.textAlign}
           lyricsEdgeFade={resolved.lyricsEdgeFade}
           lyricTracking={resolved.lyricTracking}
+          lyricPresentationEffect={resolved.lyricPresentationEffect}
+          lyricTypographyMode={resolved.lyricTypographyMode}
+          prettySoftBreakLongLines={resolved.prettySoftBreakLongLines}
           alareFadeEnabled={resolved.alareFadeEnabled}
           alareTargetVisibleLines={resolved.alareTargetVisibleLines}
           manifestDurationSeconds={resolved.manifestDurationSeconds}
           songId={resolved.songId}
+          frequencyData={frequencyData}
         />
       );
     case 'about':
@@ -453,6 +481,20 @@ export function VcResolvedContentView({
     case 'upcoming-covers':
       return (
         <VcUpcomingCoversView songs={resolved.songs} presentation={resolved.presentation} />
+      );
+    case 'source':
+      return <VcSourceContentView resolved={resolved} />;
+    case 'song-url':
+      return <VcSongUrlContentView resolved={resolved} />;
+    case 'wavesurfer':
+      return (
+        <VcWavesurferView
+          presentation={resolved.presentation}
+          playback={playback}
+          playbackUrl={playbackUrl}
+          previewPeaks={designerPreview && !playbackUrl ? DESIGNER_WAVESURFER_PEAKS : undefined}
+          previewDuration={Math.max(playback.duration, 30)}
+        />
       );
     default:
       return <div className="vc-cell-empty" />;

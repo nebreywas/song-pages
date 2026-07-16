@@ -11,7 +11,7 @@ type EmbeddedVisualizerHostProps = {
   playingSong: SongRow | null;
   analyser: AnalyserNode | null;
   butterchurnTap: GainNode | null;
-  applyButterchurnAudioSettings: ((settings: import('../audioGraph').ButterchurnAudioSettings) => void) | null;
+  applyButterchurnAudioSettings: ((settings: import('../audio/types').ButterchurnAudioSettings) => void) | null;
   audioContext: AudioContext | null;
   frequencyData: Uint8Array;
   timeDomainData: Uint8Array;

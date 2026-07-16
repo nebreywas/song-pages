@@ -5,7 +5,7 @@ const { BrowserWindow, nativeImage } = require('electron');
 const path = require('path');
 const pkg = require('../package.json');
 
-const LOGO_PATH = path.resolve(__dirname, '..', 'images', 'song-pages-round-logo.png');
+const LOGO_PATH = path.resolve(__dirname, '..', 'images', 'app-icon.png');
 
 /** @type {BrowserWindow | null} */
 let aboutWindow = null;

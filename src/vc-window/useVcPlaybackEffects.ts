@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 
 import type { VcAudioMirror } from '@shared/vcModeTypes';
-import { isVcPlaybackEffectsAudible } from '@shared/vcMode/playbackEffectsMirror';
+import { applyVcAudibleRouting } from '../audio/AudioEffectsEngine';
 import {
-  configureMirrorPlaybackEffectsGraph,
-  resetMirrorToTapGraph,
-} from '../audio/graph/configureMirrorPlaybackEffects';
+  applyElementPlaybackRate,
+  clampPlaybackRateHold,
+  PLAYBACK_RATE_HOLD_DEFAULT,
+} from '../audio/effectsLab/playbackRate';
+import { isPlaybackRateBurstActive } from '../audio/effectsLab/performance/rateBurst';
 
 /**
  * Bass / lo-fi / Effects Lab on the VC window <audio> element so screen capture
@@ -18,39 +20,34 @@ export function useVcPlaybackEffects(
 ): void {
   const volume = audioMirror?.volume ?? 1;
   const effects = audioMirror?.playbackEffects;
-  const bassBoost = effects?.bassBoost ?? false;
-  const lofi = effects?.lofi ?? false;
-  const effectsLab = effects?.effectsLab;
-  const mirrorAudible = effects ? isVcPlaybackEffectsAudible(effects) : false;
 
   useEffect(() => {
     if (!audioEl) return;
 
-    if (mirrorAudible) {
-      // Web Audio pulls from the element — keep full-scale decode; loudness via speakerGain.
-      audioEl.volume = 1;
-      configureMirrorPlaybackEffectsGraph(
-        audioEl,
-        { bassBoost, lofi, effectsLab },
-        { speakerGain: volume, isPlaying },
-      );
-      return;
-    }
+    applyVcAudibleRouting({
+      audio: audioEl,
+      volume,
+      isPlaying,
+      effects,
+    });
 
-    // Dry path — native volume unless a prior FX session left a graph on this element.
-    audioEl.volume = volume;
-    resetMirrorToTapGraph(audioEl, volume);
+    if (!isPlaybackRateBurstActive()) {
+      const hold = clampPlaybackRateHold(
+        effects?.effectsLab?.playbackRateHold ?? PLAYBACK_RATE_HOLD_DEFAULT,
+      );
+      applyElementPlaybackRate(audioEl, hold);
+    }
   }, [
     audioEl,
-    bassBoost,
-    effectsLab?.abBypass,
-    effectsLab?.effectId,
-    effectsLab?.enabled,
-    effectsLab?.outputTrimDb,
-    effectsLab?.workletEnhance,
+    effects?.bassBoost,
+    effects?.effectsLab?.abBypass,
+    effects?.effectsLab?.effectId,
+    effects?.effectsLab?.enabled,
+    effects?.effectsLab?.outputTrimDb,
+    effects?.effectsLab?.playbackRateHold,
+    effects?.effectsLab?.workletEnhance,
+    effects?.lofi,
     isPlaying,
-    lofi,
-    mirrorAudible,
     volume,
   ]);
 }

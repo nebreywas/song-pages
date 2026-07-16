@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
+  projectorKindFromProjectionMode,
+  projectorTitleForKind,
+} from '@shared/projector/titles';
+import {
+  resolveInitialProjectionMode,
+  resolveLiveProjectionMode,
+} from '@shared/projector/resolveProjectionMode';
+import {
   DEFAULT_VISUALIZER_ID,
   type ProjectionMode,
+  type ProjectorNativePagePayload,
+  type ProjectorVideoPayload,
   type VisualizerSongInfo,
 } from '@shared/visualizerMessages';
+import type { ListenerLyricsDisplaySettings } from '@shared/listener/lyricsDisplaySettings';
+import type { SongPageFontIncreaseLevel } from '@shared/listener/playerSettings';
+import { youtubeVideoIdFromSong, isYoutubeSong } from '@shared/youtube/youtubeFeature';
 
 import { normalizeSongRowAssets, resolveSongCoverUrl } from '@shared/listener/songResolution';
 
@@ -23,7 +36,7 @@ import {
   VISUALIZER_LEGACY_PLUGIN_KEY,
   VISUALIZER_MAIN_PLAYER_PREFERENCE_KEY,
 } from './settings/persistence/keys';
-import { useAudioAnalyser } from './useAudioAnalyser';
+import { useAnalyserBus } from '../audio/hooks/useAnalyserBus';
 import { useVisualizerIpcSender } from './useVisualizerStream';
 
 type UseVisualizerManagerOptions = {
@@ -34,6 +47,16 @@ type UseVisualizerManagerOptions = {
   currentTime: number;
   duration: number;
   pageUrl?: string | null;
+  /** Artist / playlist homepage when no song page is open. */
+  homepageUrl?: string | null;
+  /** Native in-app pages (SoundCloud, …) that Projector should render without a webview. */
+  nativePage?: ProjectorNativePagePayload | null;
+  /** Listener lyrics display prefs mirrored onto Projector native song pages. */
+  lyricsDisplay?: ListenerLyricsDisplaySettings | null;
+  /** Song page font bump mirrored onto Projector song pages. */
+  songPageFontIncreaseLevel?: SongPageFontIncreaseLevel | null;
+  /** Native player volume (0–1) — forwarded to Projector: Video embeds. */
+  volume?: number;
 };
 
 /** POST 1.0: one active rendering session — embedded OR external projection visualizer. */
@@ -50,6 +73,11 @@ export function useVisualizerManager({
   currentTime,
   duration,
   pageUrl,
+  homepageUrl,
+  nativePage = null,
+  lyricsDisplay = null,
+  songPageFontIncreaseLevel = null,
+  volume = 0.85,
 }: UseVisualizerManagerOptions) {
   const [embeddedActive, setEmbeddedActive] = useState(false);
   const [activeExperienceId, setActiveExperienceId] = useState(DEFAULT_VISUALIZER_ID);
@@ -57,6 +85,8 @@ export function useVisualizerManager({
   const [windowOpen, setWindowOpen] = useState(false);
   const [windowFullscreen, setWindowFullscreen] = useState(false);
   const [projectionMode, setProjectionMode] = useState<ProjectionMode>('page');
+  /** Once the user opens Projector as Visualizer, stay there until close / mode resolve on re-open. */
+  const [stickyVisualizer, setStickyVisualizer] = useState(false);
   const [canvasMirrorFrame, setCanvasMirrorFrame] = useState<string | null>(null);
 
   const canVisualize = playingSong != null;
@@ -74,11 +104,13 @@ export function useVisualizerManager({
   const visualizerContext = useMemo(() => buildVisualizerContext(playingSong ?? null), [playingSong]);
 
   const visualizerProjectionActive = windowOpen && projectionMode === 'visualizer';
+  const videoProjectionActive = windowOpen && projectionMode === 'video';
   const activeSession = resolveActiveSession(embeddedActive, visualizerProjectionActive);
   const analyserEnabled = canVisualize && activeSession !== 'none';
 
   const { analyser, butterchurnTap, applyButterchurnAudioSettings, frequencyData, timeDomainData, audioContext } =
-    useAudioAnalyser({
+    useAnalyserBus({
+    consumerId: 'visualizer-main',
     audioRef: analyserAudioRef,
     isPlaying,
     enabled: analyserEnabled,
@@ -96,6 +128,18 @@ export function useVisualizerManager({
   const butterchurnMirrorActive =
     visualizerProjectionActive && !embeddedActive && isButterchurnExperience && analyserEnabled;
 
+  const projectorVideo = useMemo<ProjectorVideoPayload | null>(() => {
+    if (!videoProjectionActive || !playingSong || !isYoutubeSong(playingSong)) return null;
+    const videoId = youtubeVideoIdFromSong(playingSong);
+    if (!videoId) return null;
+    return {
+      provider: 'youtube',
+      videoId,
+      songId: playingSong.id,
+      volume,
+    };
+  }, [playingSong, videoProjectionActive, volume]);
+
   useVisualizerIpcSender({
     enabled: windowOpen,
     sendFrames: visualizerProjectionActive && analyserEnabled,
@@ -107,8 +151,30 @@ export function useVisualizerManager({
     duration,
     projectionMode,
     pageUrl: pageUrl ?? null,
+    homepageUrl: homepageUrl ?? null,
+    nativePage,
+    lyricsDisplay,
+    songPageFontIncreaseLevel,
+    video: projectorVideo,
     canvasFrame: butterchurnMirrorActive ? canvasMirrorFrame : null,
   });
+
+  // Keep OS title aligned with Projector: Song Page / Visualizer / Video.
+  useEffect(() => {
+    if (!windowOpen) return;
+    const title = projectorTitleForKind(projectorKindFromProjectionMode(projectionMode));
+    void getApp()?.visualizer?.setTitle?.(title);
+  }, [projectionMode, windowOpen]);
+
+  // Auto-switch Song Page ↔ Video while open (Visualizer stays sticky until close).
+  useEffect(() => {
+    if (!windowOpen) return;
+    const next = resolveLiveProjectionMode({
+      stickyVisualizer,
+      playingSong,
+    });
+    setProjectionMode((current) => (current === next ? current : next));
+  }, [playingSong, stickyVisualizer, windowOpen]);
 
   useEffect(() => {
     const app = getApp();
@@ -150,6 +216,7 @@ export function useVisualizerManager({
     const offClosed = app.visualizer.onClosed(() => {
       setWindowOpen(false);
       setWindowFullscreen(false);
+      setStickyVisualizer(false);
     });
     const offFullScreen = app.visualizer.onFullScreenChanged((fullscreen) => {
       setWindowFullscreen(fullscreen);
@@ -174,36 +241,53 @@ export function useVisualizerManager({
       const next = !value;
       if (next) {
         void getApp()?.vc?.close();
-        // Single-active invariant: projection shows song page while embedded runs.
-        if (windowOpen) setProjectionMode('page');
+        // Single-active invariant: Projector shows Song Page / Video while embedded runs.
+        if (windowOpen) {
+          setStickyVisualizer(false);
+          setProjectionMode(
+            resolveLiveProjectionMode({ stickyVisualizer: false, playingSong }),
+          );
+        }
       }
       return next;
     });
-  }, [windowOpen]);
+  }, [playingSong, windowOpen]);
 
   const openWindow = useCallback(
     async (options: { mode?: ProjectionMode; fullscreen?: boolean } = {}) => {
       const app = getApp();
       if (!app?.visualizer) return;
 
-      const mode = options.mode ?? (embeddedActive ? 'visualizer' : 'page');
+      const mode =
+        options.mode ??
+        resolveInitialProjectionMode({
+          embeddedVisualizerActive: embeddedActive,
+          playingSong,
+        });
       await app.vc?.close();
 
       if (mode === 'visualizer') {
         // Single-active invariant: external visualizer replaces in-player visualizer.
         setEmbeddedActive(false);
+        setStickyVisualizer(true);
+      } else {
+        setStickyVisualizer(false);
       }
 
       setProjectionMode(mode);
       setWindowOpen(true);
       await app.visualizer.open({ fullscreen: options.fullscreen ?? false });
+      void app.visualizer.setTitle?.(
+        projectorTitleForKind(projectorKindFromProjectionMode(mode)),
+      );
     },
-    [embeddedActive],
+    [embeddedActive, playingSong],
   );
 
   const closeWindow = useCallback(async () => {
     const app = getApp();
     if (!app?.visualizer) return;
+    setStickyVisualizer(false);
     await app.visualizer.close();
   }, []);
 
@@ -213,9 +297,8 @@ export function useVisualizerManager({
       return;
     }
 
-    const mode: ProjectionMode = embeddedActive ? 'visualizer' : 'page';
-    await openWindow({ mode });
-  }, [closeWindow, embeddedActive, openWindow, windowOpen]);
+    await openWindow({});
+  }, [closeWindow, openWindow, windowOpen]);
 
   const toggleFullscreen = useCallback(async () => {
     const app = getApp();
@@ -226,14 +309,18 @@ export function useVisualizerManager({
   const dismissVisualizer = useCallback(() => {
     setEmbeddedActive(false);
     setWindowOpen(false);
+    setStickyVisualizer(false);
     void getApp()?.visualizer?.close();
   }, []);
 
   const launchEmbedded = useCallback(() => {
     void getApp()?.vc?.close();
-    if (windowOpen) setProjectionMode('page');
+    if (windowOpen) {
+      setStickyVisualizer(false);
+      setProjectionMode(resolveLiveProjectionMode({ stickyVisualizer: false, playingSong }));
+    }
     setEmbeddedActive(true);
-  }, [windowOpen]);
+  }, [playingSong, windowOpen]);
 
   const openSettingsDialog = useCallback(() => {
     setSettingsDialogOpen(true);
@@ -252,6 +339,7 @@ export function useVisualizerManager({
     windowOpen,
     windowFullscreen,
     projectionMode,
+    videoProjectionActive,
     settingsDialogOpen,
     canVisualize,
     analyser,

@@ -29,7 +29,8 @@ test('accumulateAlareSpeedNudgeLines adds line offset proportional to nudge', ()
 
 test('clampAlareSpeedNudge respects step range', () => {
   assert.equal(clampAlareSpeedNudge(ALARE_SPEED_NUDGE_STEP * 4), ALARE_SPEED_NUDGE_STEP * 4);
-  assert.equal(clampAlareSpeedNudge(ALARE_SPEED_NUDGE_STEP * 10), ALARE_SPEED_NUDGE_MAX);
+  assert.equal(clampAlareSpeedNudge(ALARE_SPEED_NUDGE_STEP * 20), ALARE_SPEED_NUDGE_MAX);
   assert.equal(clampAlareSpeedNudge(ALARE_SPEED_NUDGE_MAX + 1), ALARE_SPEED_NUDGE_MAX);
   assert.equal(clampAlareSpeedNudge(-ALARE_SPEED_NUDGE_MAX - 1), -ALARE_SPEED_NUDGE_MAX);
+  assert.equal(ALARE_SPEED_NUDGE_MAX, 0.5);
 });

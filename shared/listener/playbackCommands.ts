@@ -7,4 +7,5 @@ export type ListenerPlaybackCommand =
   | { type: 'stutter'; durationMs: number }
   | { type: 'playNextSong' }
   | { type: 'volumeDelta'; delta: number }
-  | { type: 'visualizerStep'; direction: 1 | -1 };
+  | { type: 'visualizerStep'; direction: 1 | -1 }
+  | { type: 'toggleLiveDebug' };

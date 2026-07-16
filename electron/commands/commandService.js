@@ -61,6 +61,7 @@ const MAIN_PLAYBACK_BY_COMMAND = {
   'volume-down': { type: 'volumeDelta', delta: -0.05 },
   'visualizer-next': { type: 'visualizerStep', direction: 1 },
   'visualizer-previous': { type: 'visualizerStep', direction: -1 },
+  'toggle-live-debug': { type: 'toggleLiveDebug' },
 };
 
 /** Player commands that work without VC Mode — keep in sync with shared/commands/appWideCommands.ts */
@@ -235,6 +236,12 @@ function parseKudoPresetId(commandId) {
   return commandId.slice(prefix.length) || null;
 }
 
+function parseSurfaceDesignId(commandId) {
+  const prefix = 'switch-surface-';
+  if (!commandId.startsWith(prefix)) return null;
+  return commandId.slice(prefix.length) || null;
+}
+
 function dispatchCommand(invocation) {
   const { commandId, source, binding } = invocation;
   logger.debug('Command dispatch', { commandId, source, binding });
@@ -263,6 +270,21 @@ function dispatchCommand(invocation) {
     broadcast('command:invoke', {
       commandId,
       kudoPresetId,
+      source,
+      binding,
+      result: 'executed',
+      timestamp: Date.now(),
+    });
+    return { ok: true, result: 'executed' };
+  }
+
+  const surfaceDesignId = parseSurfaceDesignId(commandId);
+  if (surfaceDesignId) {
+    if (!vcModeActive) return { ok: false, result: 'vc-inactive' };
+    sendToWindow(mainWindowRef, 'vc:switch-surface', surfaceDesignId);
+    broadcast('command:invoke', {
+      commandId,
+      surfaceDesignId,
       source,
       binding,
       result: 'executed',
@@ -342,6 +364,14 @@ function registerActiveShortcuts() {
 
   for (const [presetId, slot] of Object.entries(mappingState.kudoPresetBindings)) {
     const commandId = `trigger-kudo-${presetId}`;
+    if (slot.direct) bindings.push({ commandId, source: 'direct', binding: slot.direct });
+    if (slot.extendedFunction) {
+      bindings.push({ commandId, source: 'extended-function', binding: slot.extendedFunction });
+    }
+  }
+
+  for (const [designId, slot] of Object.entries(mappingState.surfaceDesignBindings || {})) {
+    const commandId = `switch-surface-${designId}`;
     if (slot.direct) bindings.push({ commandId, source: 'direct', binding: slot.direct });
     if (slot.extendedFunction) {
       bindings.push({ commandId, source: 'extended-function', binding: slot.extendedFunction });

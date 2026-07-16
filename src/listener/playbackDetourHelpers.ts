@@ -3,10 +3,9 @@ import {
   playlistKeyForArtistId,
 } from '@shared/listener/playlistOrder';
 import {
-  pickNextPlayableSongId,
+  pickNextPrimarySongId as pickNextPrimaryFromPlanner,
   type PlaybackQueueOptions,
-} from '@shared/listener/playbackQueue';
-import { skipSongIdsForPrimaryAdvance } from '@shared/listener/playbackDetours';
+} from '@shared/playback/queue/planner';
 import type { SongRow } from '../types/app';
 import { getApp } from '../lib/bridge';
 import { sortPlaylistSongs } from './sortPlaylist';
@@ -40,8 +39,5 @@ export function pickNextPrimarySongId(
   queueOptions: PlaybackQueueOptions,
   consumedSongIds: readonly number[],
 ): number | null {
-  return pickNextPlayableSongId(orderedSongs, anchorSongId, {
-    ...queueOptions,
-    skipSongIds: skipSongIdsForPrimaryAdvance(consumedSongIds),
-  });
+  return pickNextPrimaryFromPlanner(orderedSongs, anchorSongId, queueOptions, consumedSongIds);
 }

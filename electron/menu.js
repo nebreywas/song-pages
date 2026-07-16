@@ -1,5 +1,5 @@
 /**
- * Application menu — Listener, Artist, Developer, About modes.
+ * Application menu — Listener, Artist, Developer, Pretty Lyrics Lab, About modes.
  */
 const { app, BrowserWindow, Menu, shell } = require('electron');
 const { showAboutPanel } = require('./aboutPanel');
@@ -66,9 +66,19 @@ function buildAppMenu(isDev) {
         click: () => sendNavigate('artist'),
       },
       {
+        label: 'Artist 2.0',
+        accelerator: 'CmdOrCtrl+Shift+2',
+        click: () => sendNavigate('artist2'),
+      },
+      {
         label: 'Developer',
         accelerator: 'CmdOrCtrl+3',
         click: () => sendNavigate('developer'),
+      },
+      {
+        label: 'Pretty Lyrics Lab',
+        accelerator: 'CmdOrCtrl+4',
+        click: () => sendNavigate('pretty-lyrics'),
       },
       {
         label: 'About',

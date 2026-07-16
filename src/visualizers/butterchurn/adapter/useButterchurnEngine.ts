@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { loadButterchurn } from '../engine/loadModules';
 import type { ButterchurnVisualizer } from 'butterchurn';
-import { resumeAudioContext } from '../../audioGraph';
+import { resumeAudioContext } from '../../../audio/graph/registry';
 import { resolvePresetByKey } from '../presets/registry';
 
 type UseButterchurnEngineOptions = {

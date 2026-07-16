@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 import {
   DEFAULT_LISTENER_PLAYER_SETTINGS,
@@ -10,45 +10,76 @@ import {
 
 import { getApp } from '../lib/bridge';
 
-/** Persisted listener player chrome preferences (seek label, future options). */
+/** Shared so Settings + ListenerMode stay in sync without prop drilling. */
+let sharedSettings: ListenerPlayerSettings = { ...DEFAULT_LISTENER_PLAYER_SETTINGS };
+let sharedLoaded = false;
+let loadStarted = false;
+
+const listeners = new Set<() => void>();
+
+function emitListenerPlayerSettingsChange() {
+  for (const listener of listeners) listener();
+}
+
+function subscribeListenerPlayerSettings(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function getListenerPlayerSettingsSnapshot(): ListenerPlayerSettings {
+  return sharedSettings;
+}
+
+function getListenerPlayerSettingsLoadedSnapshot(): boolean {
+  return sharedLoaded;
+}
+
+function ensureListenerPlayerSettingsLoaded() {
+  if (loadStarted) return;
+  loadStarted = true;
+
+  const app = getApp();
+  if (!app?.getSettings) {
+    sharedLoaded = true;
+    emitListenerPlayerSettingsChange();
+    return;
+  }
+
+  void app.getSettings(LISTENER_PLAYER_SETTINGS_KEY).then((value) => {
+    sharedSettings = normalizeListenerPlayerSettings(value);
+    sharedLoaded = true;
+    emitListenerPlayerSettingsChange();
+  });
+}
+
+/** Persisted listener player chrome preferences (seek label, Suno prompts, …). */
 export function useListenerPlayerSettings() {
-  const [settings, setSettings] = useState<ListenerPlayerSettings>(DEFAULT_LISTENER_PLAYER_SETTINGS);
-  const [loaded, setLoaded] = useState(false);
+  ensureListenerPlayerSettingsLoaded();
 
-  useEffect(() => {
-    const app = getApp();
-    if (!app?.getSettings) {
-      setLoaded(true);
-      return;
-    }
-
-    let cancelled = false;
-    void app.getSettings(LISTENER_PLAYER_SETTINGS_KEY).then((value) => {
-      if (cancelled) return;
-      setSettings(normalizeListenerPlayerSettings(value));
-      setLoaded(true);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const settings = useSyncExternalStore(
+    subscribeListenerPlayerSettings,
+    getListenerPlayerSettingsSnapshot,
+    getListenerPlayerSettingsSnapshot,
+  );
+  const loaded = useSyncExternalStore(
+    subscribeListenerPlayerSettings,
+    getListenerPlayerSettingsLoadedSnapshot,
+    getListenerPlayerSettingsLoadedSnapshot,
+  );
 
   const persist = useCallback((next: ListenerPlayerSettings) => {
-    setSettings(next);
-    void getApp()?.saveSettings(LISTENER_PLAYER_SETTINGS_KEY, next);
+    sharedSettings = normalizeListenerPlayerSettings(next);
+    emitListenerPlayerSettingsChange();
+    void getApp()?.saveSettings(LISTENER_PLAYER_SETTINGS_KEY, sharedSettings);
   }, []);
 
   const toggleSeekLabel = useCallback(() => {
-    setSettings((current) => {
-      const next = {
-        ...current,
-        seekTimeDisplay: toggleSeekTimeDisplay(current.seekTimeDisplay),
-      };
-      void getApp()?.saveSettings(LISTENER_PLAYER_SETTINGS_KEY, next);
-      return next;
-    });
-  }, []);
+    const next = {
+      ...sharedSettings,
+      seekTimeDisplay: toggleSeekTimeDisplay(sharedSettings.seekTimeDisplay),
+    };
+    persist(next);
+  }, [persist]);
 
   return { settings, loaded, persist, toggleSeekLabel };
 }

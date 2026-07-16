@@ -23,6 +23,7 @@ Registry of where Song Pages stores configuration, library data, and media on di
 | `ui.listenerSidebarSort` | `SIDEBAR_LIBRARY_SORT_KEY` in `shared/listener/sidebarLibraryOrder.ts` | `useListenerSidebarLibraryLayout` | Sidebar sort column + direction |
 | `ui.listenerPlayer` | `LISTENER_PLAYER_SETTINGS_KEY` in `shared/listener/playerSettings.ts` | `useListenerPlayerSettings` | Listener player chrome (seek time label mode) |
 | `ui.listenerLyrics` | `LISTENER_LYRICS_DISPLAY_SETTINGS_KEY` in `shared/listener/lyricsDisplaySettings.ts` | `useListenerLyricsDisplaySettings` | Lyrics display options (e.g. remove brackets) |
+| `ui.liveDebug` | `LIVE_DEBUG_SETTINGS_KEY` in `shared/liveDebug/settings.ts` | `useLiveDebugSettings` | Live Debug HUD toggle (mirrored to VC state) |
 | `vc.lastConfig` | `VC_SETTINGS_KEY` in `shared/vcModeTypes.ts` | `useAutoSaveVcConfig`, designer flush on close | Active VC surface layout, assignments, grid design |
 | `vc.surfaceDesigns` | `VC_SURFACE_DESIGNS_KEY` in `shared/vcSurfaceDesigns/constants.ts` | `vcSurfaceDesignStore`, `VcModeModal` | Saved VC surface design catalog (version 1) |
 | `vc.hostContent` | `HOST_CONTENT_SETTINGS_KEY` in `shared/hostContent/constants.ts` | `useHostContentCatalog` (designer) | Host content catalog (metadata; media on disk) |
@@ -101,6 +102,7 @@ Listener library uses dedicated tables in the same SQLite database (`electron/li
 | Compiled site (browser) | `sessionStorage` `artist-site-player-v1` | Site footer player state — not used in Electron app mode |
 | Dev-only localStorage | `songpages:audio-debug`, `songpages:audio-debug-panel` | Audio debug panel |
 | Dev-only localStorage | `songpages:effects-lab-panel` | Effects lab panel visibility |
+| Dev-only localStorage | `songpages:meyda-lab-panel` | Meyda Lab panel visibility |
 
 ---
 

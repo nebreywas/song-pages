@@ -61,14 +61,22 @@ type RegionContentPopoverProps = {
   onClose: () => void;
   visualizerConfig: Pick<
     VcModeConfig,
-    'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence' | 'visualizerAlsoClickToChange'
+    | 'visualizerId'
+    | 'visualizerChangeRule'
+    | 'visualizerSequence'
+    | 'visualizerAlsoClickToChange'
+    | 'showVisualizerName'
   >;
   windowVisualizers: VisualizerPluginOption[];
   onVisualizerConfigChange: (
     patch: Partial<
       Pick<
         VcModeConfig,
-        'visualizerId' | 'visualizerChangeRule' | 'visualizerSequence' | 'visualizerAlsoClickToChange'
+        | 'visualizerId'
+        | 'visualizerChangeRule'
+        | 'visualizerSequence'
+        | 'visualizerAlsoClickToChange'
+        | 'showVisualizerName'
       >
     >,
   ) => void;
@@ -664,6 +672,7 @@ export function RegionContentPopover({
                   visualizerChangeRule={visualizerConfig.visualizerChangeRule}
                   visualizerSequence={visualizerConfig.visualizerSequence}
                   visualizerAlsoClickToChange={visualizerConfig.visualizerAlsoClickToChange === true}
+                  showVisualizerName={visualizerConfig.showVisualizerName === true}
                   visualizers={windowVisualizers}
                   onChange={onVisualizerConfigChange}
                 />
@@ -694,6 +703,7 @@ export function RegionContentPopover({
                   visualizerChangeRule={visualizerConfig.visualizerChangeRule}
                   visualizerSequence={visualizerConfig.visualizerSequence}
                   visualizerAlsoClickToChange={visualizerConfig.visualizerAlsoClickToChange === true}
+                  showVisualizerName={visualizerConfig.showVisualizerName === true}
                   visualizers={windowVisualizers}
                   onChange={onVisualizerConfigChange}
                 />

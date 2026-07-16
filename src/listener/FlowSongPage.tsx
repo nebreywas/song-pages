@@ -1,15 +1,25 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getApp } from '../lib/bridge';
-import { renderLyricsMarkdownPreview } from '../lib/markdownPreview';
 import type { SongRow } from '../types/app';
-import type { ListenerLyricsDisplaySettings } from '@shared/listener/lyricsDisplaySettings';
+import type {
+  ListenerLyricsDisplaySettings,
+  ListenerLyricsViewMode,
+} from '@shared/listener/lyricsDisplaySettings';
+import {
+  songPageFontIncreaseStyle,
+  type SongPageFontIncreaseLevel,
+} from '@shared/listener/playerSettings';
+import { ListenerLyricsBody } from './ListenerLyricsBody';
 import { LyricsHeadingButton } from './LyricsHeadingButton';
 import { SongCoverPopover } from './SongCoverPopover';
+import { SongPageSourcePill } from './SongPageSourcePill';
 
 type FlowSongPageProps = {
   song: SongRow;
   lyricsSettings: ListenerLyricsDisplaySettings;
   onRemoveBracketsChange: (value: boolean) => void;
+  onViewModeChange: (value: ListenerLyricsViewMode) => void;
+  fontIncreaseLevel?: SongPageFontIncreaseLevel;
 };
 
 /**
@@ -20,6 +30,8 @@ export function FlowSongPage({
   song,
   lyricsSettings,
   onRemoveBracketsChange,
+  onViewModeChange,
+  fontIncreaseLevel = 0,
 }: FlowSongPageProps) {
   const [lyrics, setLyrics] = useState('');
   const [about, setAbout] = useState('');
@@ -69,13 +81,11 @@ export function FlowSongPage({
     };
   }, [song.id, song.caption, song.cover_url, song.song_manifest_url]);
 
-  const lyricsHtml = useMemo(() => {
-    if (!lyrics.trim()) return '';
-    return renderLyricsMarkdownPreview(lyrics, lyricsSettings.removeBrackets);
-  }, [lyrics, lyricsSettings.removeBrackets]);
-
   return (
-    <article className="suno-demo-song-page flow-song-page">
+    <article
+      className="suno-demo-song-page flow-song-page"
+      style={songPageFontIncreaseStyle(fontIncreaseLevel)}
+    >
       <header className="suno-demo-song-header">
         {coverUrl ? (
           <button
@@ -95,6 +105,7 @@ export function FlowSongPage({
         <div className="suno-demo-song-meta">
           <h1 className="suno-demo-song-title">{song.title}</h1>
           <p className="suno-demo-song-artist">{song.artist_name ?? 'Google Flow'}</p>
+          <SongPageSourcePill song={song} sourceId="flow" />
         </div>
       </header>
 
@@ -110,13 +121,12 @@ export function FlowSongPage({
           className="lyrics-heading-btn suno-demo-song-lyrics-heading"
           settings={lyricsSettings}
           onRemoveBracketsChange={onRemoveBracketsChange}
+          onViewModeChange={onViewModeChange}
         />
         {loading ? (
           <p className="suno-demo-song-muted">Loading lyrics…</p>
-        ) : lyricsHtml ? (
-          <div className="suno-demo-song-lyrics-body" dangerouslySetInnerHTML={{ __html: lyricsHtml }} />
         ) : (
-          <p className="suno-demo-song-muted">No lyrics available for this clip.</p>
+          <ListenerLyricsBody lyrics={lyrics} settings={lyricsSettings} />
         )}
       </section>
       {coverPopoverOpen && coverUrl ? (

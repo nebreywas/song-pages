@@ -176,6 +176,23 @@ function artistFromClip(clip) {
   );
 }
 
+/**
+ * Release year for playlist/VC "Year" column — from Studio clip `created_at`
+ * (matches the date shown on suno.com song pages).
+ */
+function yearFromClip(clip) {
+  const raw = clip?.created_at ?? clip?.createdAt ?? null;
+  if (raw == null || raw === '') return null;
+  const asString = String(raw).trim();
+  const prefix = asString.match(/^(\d{4})\b/);
+  if (prefix) return prefix[1];
+  const parsed = new Date(asString);
+  if (!Number.isNaN(parsed.getTime())) {
+    return String(parsed.getUTCFullYear());
+  }
+  return null;
+}
+
 /** Canonical Suno CDN cover when the API omits image fields (cdn2, not legacy cdn1). */
 function coverUrlFromClipUuid(clipUuid) {
   const id = String(clipUuid || '').trim();
@@ -223,6 +240,7 @@ module.exports = {
   fetchStudioClip,
   lyricsFromClip,
   artistFromClip,
+  yearFromClip,
   coverUrlFromClipUuid,
   coverFromClip,
   resolveSunoCoverUrl,

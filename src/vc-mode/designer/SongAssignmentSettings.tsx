@@ -101,6 +101,8 @@ export function SongAssignmentSettings({
           showAllCaps={false}
           showMarkdown={content !== 'marquee-lyrics'}
           showLyricsTracking={content === 'lyrics' || content === 'marquee-lyrics'}
+          showLyricPresentationEffect={content === 'lyrics'}
+          showLyricTypographyMode={content === 'lyrics'}
           showAlareFineTuning={content === 'lyrics'}
           showLyricsEdgeFade={content === 'lyrics'}
           showLyricsRemoveBracketed={content === 'lyrics'}

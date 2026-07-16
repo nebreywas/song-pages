@@ -211,6 +211,7 @@ export function VcSurface({
                   frame={frame}
                   canvasFrame={canvasFrame}
                   interactionDisabled={layoutMode}
+                  regionLabel={`Area ${area.areaNumber}`}
                 />
               </div>
               {layoutMode ? (
@@ -294,6 +295,7 @@ export function VcSurface({
                   canvasFrame={canvasFrame}
                   isFloat
                   interactionDisabled={layoutMode}
+                  regionLabel={`Float ${floatNumber}`}
                 />
               </div>
               {layoutMode ? (

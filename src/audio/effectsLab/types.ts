@@ -80,10 +80,19 @@ export type EffectsLabState = {
   effectId: LabEffectId;
   /** User trim layered on preset compensation (dB). */
   outputTrimDb: number;
-  /** Hold-to-compare bypass while auditioning. */
+  /**
+   * Hold-to-compare A/B flag used by the Effects Lab pointer button:
+   * - Activate on → hold temporarily *removes* the preset (`isEffectsLabAudible` false)
+   * - Activate off → hold temporarily *applies* the selected preset
+   */
   abBypass: boolean;
   /** Phase D+ — hybrid worklet when Tape / Alive / Punch preset is active. */
   workletEnhance: boolean;
+  /**
+   * Steady coupled speed+pitch hold on HTMLMediaElement.playbackRate (1 = normal).
+   * Resets to 1 on song change — independent of Activate / whole-song EQ presets.
+   */
+  playbackRateHold: number;
 };
 
 export const DEFAULT_LAB_SPATIAL: LabSpatialParams = {
@@ -108,11 +117,23 @@ export const DEFAULT_EFFECTS_LAB_STATE: EffectsLabState = {
   outputTrimDb: 0,
   abBypass: false,
   workletEnhance: false,
+  playbackRateHold: 1,
 };
 
+/**
+ * Whether the whole-song preset should currently feed the audible FX path.
+ * Encode the dual meaning of `abBypass` here so routing / panels stay consistent.
+ */
 export function isEffectsLabAudible(state: EffectsLabState): boolean {
-  if (!state.enabled || state.abBypass) return false;
-  return state.effectId !== 'bypass';
+  if (state.effectId === 'bypass') return false;
+  if (state.enabled) return !state.abBypass;
+  // Activate off: holding A/B momentarily applies the selected preset.
+  return state.abBypass;
+}
+
+/** Flat lab params while Activate is on and the user is holding A/B to remove FX. */
+export function shouldBypassLabPreset(state: EffectsLabState): boolean {
+  return state.enabled && state.abBypass;
 }
 
 /**

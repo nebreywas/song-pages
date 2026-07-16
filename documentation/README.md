@@ -43,6 +43,8 @@
 | Document | Use when |
 |----------|----------|
 | [manifest-schemas.md](./manifest-schemas.md) | `songpages-*.json` contracts, compile output |
+| [artist2-sprint-guide.md](./artist2-sprint-guide.md) | Artist 2.0 editor tiers, compile bridge, current sprint |
+| [SongPagesArtistAssetFileSystemOutline.md](./SongPagesArtistAssetFileSystemOutline.md) | Pointer vs managed-copy asset folders (reference — not implemented) |
 | [ffmpeg-compile-prerequisites.md](./ffmpeg-compile-prerequisites.md) | Artist Mode compile (FFmpeg not bundled) |
 | [third-party-integrations.md](./third-party-integrations.md) | Suno, YouTube, Google Flow, future external source adapters |
 
@@ -50,8 +52,10 @@
 
 | Document | Use when |
 |----------|----------|
-| [audio-pipeline.md](./audio-pipeline.md) | **Canonical** — main/mirror/VC audio, Discord capture, debug |
+| [playback-session-architecture.md](./playback-session-architecture.md) | **Canonical** — PlaybackSession, adapters, projections, phase completion |
+| [audio-pipeline.md](./audio-pipeline.md) | **Canonical** — main/mirror/VC audio, Discord capture, AnalyserBus |
 | [audio-systems-baseline.md](./audio-systems-baseline.md) | Effect vocabulary, transport vs graph, encapsulation |
+| [playback-refactor/FINAL-REPORT.md](./playback-refactor/FINAL-REPORT.md) | Refactor completion summary, metrics, TODOs |
 
 ### VC Mode, visualizers, lyrics
 
@@ -60,6 +64,8 @@
 | [vc-mode-architecture.md](./vc-mode-architecture.md) | VC runtime, IPC, mirror, projection window |
 | [visualizer-architecture.md](./visualizer-architecture.md) | Web Audio graph, experiences, Butterchurn |
 | [ALARE.md](./ALARE.md) | Approximate lyric line tracking in VC |
+| [agnostic-lyric-effects.md](./agnostic-lyric-effects.md) | Presentation effects that ignore lyric timing/semantics |
+| [pretty-lyrics-prototype.md](./pretty-lyrics-prototype.md) | Text→typography compiler + Pretty Lyrics Lab (prototype) |
 | [shared-utilities.md](./shared-utilities.md) | Reusable `shared/` helpers (lyrics, time, markdown) |
 
 ---
@@ -86,6 +92,7 @@ Implemented features may still reference archived specs from code (`@see documen
 | `electron/database.js`, `electron/listener/*` | persistence-philosophy.md, settings-and-persistence.md |
 | `electron/listener/userPlaylists.js` | persistence-philosophy.md (snapshots) |
 | `shared/providers/*`, `electron/listener/youtube/`, `flow/`, `sunoDemo/` | third-party-integrations.md |
+| `src/playback/*`, `shared/playback/*` | playback-session-architecture.md |
 | `src/audio/*` | audio-pipeline.md, audio-systems-baseline.md |
 | `src/vc-mode/*`, `src/vc-window/*` | vc-mode-architecture.md |
 | `src/visualizers/*` | visualizer-architecture.md |

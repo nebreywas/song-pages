@@ -19,6 +19,7 @@ import { isSongSkippedForPlaylist } from '@shared/listener/playlistKinds';
 import type { PlaylistLengthSettings } from '@shared/listener/playlistLengthSettings';
 import { isSongLongerThanMinutes } from '@shared/listener/songDuration';
 import type { SongRow } from '../types/app';
+import { scrollElementWithin } from '../lib/scrollElementWithin';
 import { buildPlaylistTableColumns } from './buildPlaylistTableColumns';
 import { PlaylistColumnResizeHandle } from './PlaylistColumnResizeHandle';
 import { playlistColumnClassName } from './playlistColumnClasses';
@@ -50,6 +51,8 @@ type PlaylistTableProps = {
   playingSongId: number | null;
   previewSongId: number | null;
   scrollToSongId?: number | null;
+  /** Bump to re-run scroll even when scrollToSongId is unchanged. */
+  scrollToSongNonce?: number;
   likedSongIds: Set<number>;
   isLikedPlaylist: boolean;
   catalogOrderBySongId: Map<number, number>;
@@ -57,6 +60,10 @@ type PlaylistTableProps = {
   runtimeDurations: Record<number, number>;
   playlistLengthSettings: PlaylistLengthSettings;
   sessionSkippedIds: ReadonlySet<number>;
+  /** Transport is actively playing (affects speaker glyph animation). */
+  isPlaying?: boolean;
+  /** Queued On Deck song id for playlist title badge. */
+  onDeckSongId?: number | null;
   playlistDrag: PlaylistDrag;
   onRowClick: (song: SongRow) => void;
   onRowDoubleClick: (song: SongRow) => void;
@@ -74,6 +81,8 @@ type PlaylistTableBodyProps = {
   playlistLengthSettings: PlaylistLengthSettings;
   sessionSkippedIds: ReadonlySet<number>;
   runtimeDurations: Record<number, number>;
+  isPlaying?: boolean;
+  onDeckSongId?: number | null;
   playlistDrag: PlaylistDrag;
   onRowClick: (song: SongRow) => void;
   onRowDoubleClick: (song: SongRow) => void;
@@ -87,6 +96,8 @@ function playlistBodyPropsEqual(prev: PlaylistTableBodyProps, next: PlaylistTabl
     prev.gridStyle.gridTemplateColumns === next.gridStyle.gridTemplateColumns &&
     prev.playingSongId === next.playingSongId &&
     prev.previewSongId === next.previewSongId &&
+    prev.isPlaying === next.isPlaying &&
+    prev.onDeckSongId === next.onDeckSongId &&
     prev.playlistLengthSettings === next.playlistLengthSettings &&
     prev.sessionSkippedIds === next.sessionSkippedIds &&
     prev.runtimeDurations === next.runtimeDurations &&
@@ -290,6 +301,7 @@ export function PlaylistTable({
   playingSongId,
   previewSongId,
   scrollToSongId = null,
+  scrollToSongNonce = 0,
   likedSongIds,
   isLikedPlaylist,
   catalogOrderBySongId,
@@ -297,6 +309,8 @@ export function PlaylistTable({
   runtimeDurations,
   playlistLengthSettings,
   sessionSkippedIds,
+  isPlaying = false,
+  onDeckSongId = null,
   playlistDrag,
   onRowClick,
   onRowDoubleClick,
@@ -308,8 +322,10 @@ export function PlaylistTable({
   useEffect(() => {
     if (scrollToSongId == null) return;
     const row = gridRef.current?.querySelector(`[data-song-id="${scrollToSongId}"]`);
-    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [scrollToSongId, songs]);
+    if (!(row instanceof HTMLElement)) return;
+    // Scroll only the playlist body — scrollIntoView can shove the whole Electron page up.
+    scrollElementWithin(row, gridRef.current, { block: 'center', behavior: 'smooth' });
+  }, [scrollToSongId, scrollToSongNonce, songs]);
 
   const columns = useMemo(
     () =>
@@ -327,6 +343,9 @@ export function PlaylistTable({
         playlistDrag: { startDrag, setRowRef },
         playlistLengthSettings,
         sessionSkippedIds,
+        playingSongId,
+        isPlaying,
+        onDeckSongId,
       }),
     [
       profile,
@@ -341,6 +360,9 @@ export function PlaylistTable({
       runtimeDurations,
       playlistLengthSettings,
       sessionSkippedIds,
+      playingSongId,
+      isPlaying,
+      onDeckSongId,
       startDrag,
       setRowRef,
     ],
@@ -417,6 +439,8 @@ export function PlaylistTable({
         gridSlots={gridSlots}
         playingSongId={playingSongId}
         previewSongId={previewSongId}
+        isPlaying={isPlaying}
+        onDeckSongId={onDeckSongId}
         playlistLengthSettings={playlistLengthSettings}
         sessionSkippedIds={sessionSkippedIds}
         runtimeDurations={runtimeDurations}

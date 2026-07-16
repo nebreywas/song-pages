@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import type { VisualizerSettingsValues } from '../../core/settings/schema/types';
-import type { ButterchurnAudioSettings } from '../../audioGraph';
+import type { ButterchurnAudioSettings } from '../../../audio/types';
 import { useApplyButterchurnAudioSettings } from '../audioSettings';
 import { getButterchurnPresetKey } from '../presets/approved/presetKeys';
 import { useButterchurnEngine } from './useButterchurnEngine';
@@ -15,6 +15,8 @@ type ButterchurnMirrorHostProps = {
   audioContext: AudioContext | null;
   butterchurnTap: GainNode | null;
   analyser: AnalyserNode | null;
+  /** Live FFT from AnalyserBus — keeps Meyda bass drive alive when analyser is null (VC). */
+  frequencyData?: Uint8Array | null;
   applyButterchurnAudioSettings: ((settings: ButterchurnAudioSettings) => void) | null;
   settings: VisualizerSettingsValues;
   enabled: boolean;
@@ -30,6 +32,7 @@ export function ButterchurnMirrorHost({
   audioContext,
   butterchurnTap,
   analyser,
+  frequencyData = null,
   applyButterchurnAudioSettings,
   settings,
   enabled,
@@ -40,7 +43,10 @@ export function ButterchurnMirrorHost({
   const audioNode = butterchurnTap ?? analyser;
   const blendSeconds = typeof settings.blendSeconds === 'number' ? settings.blendSeconds : 0.8;
 
-  useApplyButterchurnAudioSettings(applyButterchurnAudioSettings, settings);
+  useApplyButterchurnAudioSettings(applyButterchurnAudioSettings, settings, {
+    analyser,
+    frequencyData,
+  });
 
   const { ready } = useButterchurnEngine({
     canvasRef,

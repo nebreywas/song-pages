@@ -11,7 +11,9 @@ type YoutubeSongPageProps = {
   playerRef: React.RefObject<YoutubePlayerHandle | null>;
   playbackGeneration: number;
   shouldPlay: boolean;
-  /** VC visualizer slot owns the embed — main shows metadata only to avoid dual players. */
+  /** App player volume (0–1) — mirrored onto the YouTube iframe API. */
+  volume: number;
+  /** VC or Projector owns the embed — main shows metadata only to avoid dual players. */
   captureInVc?: boolean;
   onReady: () => void;
   onPlayingChange: (playing: boolean) => void;
@@ -26,6 +28,7 @@ export function YoutubeSongPage({
   playerRef,
   playbackGeneration,
   shouldPlay,
+  volume,
   captureInVc = false,
   onReady,
   onPlayingChange,
@@ -45,7 +48,10 @@ export function YoutubeSongPage({
 
   if (captureInVc) {
     return (
-      <VcCaptureSongPage song={song} vcNote="Video plays in the VC window visualizer slot." />
+      <VcCaptureSongPage
+        song={song}
+        vcNote="Video plays in the Projector window (VC Mode or Video theater)."
+      />
     );
   }
 
@@ -57,6 +63,7 @@ export function YoutubeSongPage({
           videoId={videoId}
           playbackGeneration={playbackGeneration}
           shouldPlay={shouldPlay}
+          volume={volume}
           onReady={onReady}
           onPlayingChange={onPlayingChange}
           onEnded={onEnded}

@@ -1,8 +1,8 @@
-/** Per-press adjustment to ALARE scroll speed (fraction of playback time). */
+/** Per-press adjustment to ALARE scroll speed (fraction of base line rate). */
 export const ALARE_SPEED_NUDGE_STEP = 0.025;
 
-/** Max presses of +/- allowed in each direction while a song plays. */
-export const ALARE_SPEED_NUDGE_MAX_STEPS = 10;
+/** Max presses of +/- allowed in each direction while a song plays (±50%). */
+export const ALARE_SPEED_NUDGE_MAX_STEPS = 20;
 
 /** Max cumulative nudge — {@link ALARE_SPEED_NUDGE_MAX_STEPS} presses at {@link ALARE_SPEED_NUDGE_STEP}. */
 export const ALARE_SPEED_NUDGE_MAX = ALARE_SPEED_NUDGE_STEP * ALARE_SPEED_NUDGE_MAX_STEPS;

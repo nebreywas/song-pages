@@ -8,6 +8,10 @@ type ScrollingNowPlayingProps = {
   onDeck?: PlayerOnDeckInfo | null;
   onClearOnDeck?: () => void;
   onCoverDoubleActivate?: () => void;
+  /** Single click/press on the song title — jump playlist view to the playing row. */
+  onTitleActivate?: () => void;
+  /** Jump to the on-deck song from its popover title. */
+  onRevealOnDeck?: () => void;
 };
 
 /** Mini cover + stacked now playing / title / artist; title marquees when it overflows. */
@@ -18,12 +22,15 @@ export function ScrollingNowPlaying({
   onDeck = null,
   onClearOnDeck,
   onCoverDoubleActivate,
+  onTitleActivate,
+  onRevealOnDeck,
 }: ScrollingNowPlayingProps) {
   const titleWrapRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLSpanElement>(null);
   const lastCoverTapRef = useRef(0);
   const displayTitle = title.trim() || '—';
-  const displayArtist = artist.trim() || '—';
+  const displayArtist = artist.trim();
+  const titleClickable = Boolean(onTitleActivate && displayTitle !== '—');
 
   const syncScroll = useCallback(() => {
     const wrap = titleWrapRef.current;
@@ -104,18 +111,37 @@ export function ScrollingNowPlaying({
         <div className="player-now-playing-label-row">
           <span className="player-now-playing-label">Now playing</span>
           {onDeck && onClearOnDeck ? (
-            <PlayerOnDeckTitleSuffix onDeck={onDeck} onCancel={onClearOnDeck} />
+            <PlayerOnDeckTitleSuffix
+              onDeck={onDeck}
+              onCancel={onClearOnDeck}
+              onRevealTitle={onRevealOnDeck}
+            />
           ) : null}
         </div>
         <div ref={titleWrapRef} className="player-now-playing-title-wrap">
-          <span ref={titleRef} className="player-now-playing-title">
-            {displayTitle}
-          </span>
+          {titleClickable ? (
+            <button
+              type="button"
+              className="player-now-playing-title-btn"
+              onClick={onTitleActivate}
+              title="Show this song in the playlist"
+              aria-label={`Show ${displayTitle} in the playlist`}
+            >
+              <span ref={titleRef} className="player-now-playing-title">
+                {displayTitle}
+              </span>
+            </button>
+          ) : (
+            <span ref={titleRef} className="player-now-playing-title">
+              {displayTitle}
+            </span>
+          )}
         </div>
-        <span className="player-now-playing-artist">{displayArtist}</span>
+        <span className="player-now-playing-artist">{displayArtist || '\u00A0'}</span>
       </div>
       <span className="sr-only">
-        Now playing: {displayTitle} by {displayArtist}
+        Now playing: {displayTitle}
+        {displayArtist ? ` by ${displayArtist}` : ''}
         {onDeck ? `; on deck: ${onDeck.songTitle}` : ''}
       </span>
     </div>

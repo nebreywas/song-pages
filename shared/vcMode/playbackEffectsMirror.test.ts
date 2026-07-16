@@ -35,3 +35,18 @@ test('isVcPlaybackEffectsAudible detects enabled lab preset', () => {
     false,
   );
 });
+
+test('isVcPlaybackEffectsAudible hold-to-apply while Activate is off', () => {
+  assert.equal(
+    isVcPlaybackEffectsAudible({
+      ...DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR,
+      effectsLab: {
+        ...DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR.effectsLab,
+        enabled: false,
+        effectId: 'air',
+        abBypass: true,
+      },
+    }),
+    true,
+  );
+});

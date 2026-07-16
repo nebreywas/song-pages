@@ -94,6 +94,21 @@ export function migrateCommandMappingState(raw: unknown): CommandMappingState {
     ? row.configuredKudoPresetIds.filter((id): id is string => typeof id === 'string')
     : Object.keys(kudoPresetBindings);
 
+  const surfaceDesignBindings: CommandMappingState['surfaceDesignBindings'] = {};
+  if (row.surfaceDesignBindings && typeof row.surfaceDesignBindings === 'object') {
+    for (const [designId, value] of Object.entries(
+      row.surfaceDesignBindings as Record<string, unknown>,
+    )) {
+      const slot = sanitizeBindingSlot(value);
+      if (!slot) continue;
+      surfaceDesignBindings[designId] = { ...surfaceDesignBindings[designId], ...slot };
+    }
+  }
+
+  const configuredSurfaceDesignIds = Array.isArray(row.configuredSurfaceDesignIds)
+    ? row.configuredSurfaceDesignIds.filter((id): id is string => typeof id === 'string')
+    : Object.keys(surfaceDesignBindings);
+
   const commands: CommandMappingState['commands'] = {};
   for (const commandId of configuredCommandIds) {
     const fromRaw = rawCommands ? sanitizeBindingSlot(rawCommands[commandId]) : null;
@@ -122,10 +137,12 @@ export function migrateCommandMappingState(raw: unknown): CommandMappingState {
         : factory.gateTimeoutMs,
     configuredCommandIds,
     configuredKudoPresetIds,
+    configuredSurfaceDesignIds,
     commands,
     reservedKudoKeys,
     kudoPresetByReservedKey,
     kudoPresetBindings,
+    surfaceDesignBindings,
   };
 
   const synced = syncReservedKudoKeysFromSlots(migrated);

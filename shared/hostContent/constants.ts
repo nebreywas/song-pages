@@ -17,6 +17,7 @@ export const HOST_VIDEO_EXTENSIONS = ['mp4'] as const;
 export const HOST_FALLBACK_SLOT_IDS = [
   'cover',
   'video-cover',
+  'lyrics-video',
   'lyrics',
   'about-song',
   'artist-name',

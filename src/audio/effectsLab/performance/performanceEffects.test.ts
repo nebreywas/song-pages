@@ -8,12 +8,14 @@ import {
 } from './definitions.ts';
 import { performanceEffectRestoreMs } from './types.ts';
 
-test('performance effect list has sweep variants and no echo-out', () => {
-  assert.equal(PERFORMANCE_EFFECT_DEFINITIONS.length, 4);
+test('performance effect list has sweep variants, rate bursts, and no echo-out', () => {
+  assert.equal(PERFORMANCE_EFFECT_DEFINITIONS.length, 6);
   assert.ok(getPerformanceEffectDefinition('filter-sweep-short'));
   assert.ok(getPerformanceEffectDefinition('filter-sweep-long'));
   assert.ok(getPerformanceEffectDefinition('momentary-lowpass'));
   assert.ok(getPerformanceEffectDefinition('reverb-throw'));
+  assert.ok(getPerformanceEffectDefinition('rate-dive')?.trigger);
+  assert.ok(getPerformanceEffectDefinition('rate-climb')?.trigger);
   assert.equal(getPerformanceEffectDefinition('momentary-highpass'), undefined);
   assert.equal(getPerformanceEffectDefinition('echo-out'), undefined);
 });

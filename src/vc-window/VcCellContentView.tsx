@@ -15,7 +15,9 @@ import { isVcSoundcloudSong } from '@shared/soundcloud/soundcloudFeature';
 import { VisualizerPluginHost } from '../visualizers/VisualizerPluginHost';
 import { VcResolvedContentView } from './VcResolvedContentView';
 import { VcSoundcloudPlayer } from './VcSoundcloudPlayer';
+import { VcVisualizerNameBar } from './VcVisualizerNameBar';
 import { VcYoutubePlayer } from './VcYoutubePlayer';
+import { buildLiveVcResolutionContext } from './vcResolutionContext';
 import { useOptionalVcVisualizerRotationContext } from './VcVisualizerRotationContext';
 
 type VcCellContentViewProps = {
@@ -42,20 +44,12 @@ export function VcCellContentView({
   const rotation = useOptionalVcVisualizerRotationContext();
   const resolved = useMemo(
     () =>
-      resolveVcCellContent(content, hostBinding, {
-        song: state.currentSong,
-        artistName: state.artistName,
-        artistBio: state.artistBio,
-        artistPhotoUrl: state.artistPhotoUrl,
-        playback: state.playback,
-        upcoming: state.upcoming,
-        catalog: hostCatalog,
-        useFallbacks: state.config.useFallbacks !== false,
-        suppressEmbedProviderLyricsMessages:
-          state.config.suppressEmbedProviderLyricsMessages === true,
-        lyricsSourceReady: state.lyricsSourceReady !== false,
-        gridDesign: state.config.gridDesign,
-      }, songBinding?.overrides),
+      resolveVcCellContent(
+        content,
+        hostBinding,
+        buildLiveVcResolutionContext(state, hostCatalog),
+        songBinding?.overrides,
+      ),
     [
       content,
       hostBinding,
@@ -91,6 +85,7 @@ export function VcCellContentView({
           songId={song.id}
           playback={playback}
           mirrorSongId={state.audioMirror?.songId ?? null}
+          volume={state.audioMirror?.volume ?? 1}
         />
       );
     }
@@ -115,22 +110,35 @@ export function VcCellContentView({
     if (!plugin) return <div className="vc-cell-empty">Visualizer</div>;
     const timeDomain = new Uint8Array(frequencyData.length * 2);
     return (
-      <VisualizerPluginHost
-        key={plugin.id}
-        surface="window"
-        experienceId={plugin.id}
-        analyser={null}
-        frequencyData={frequencyData}
-        timeDomainData={timeDomain}
-        isPlaying={playback.isPlaying}
-        currentTime={playback.currentTime}
-        duration={playback.duration}
-        song={{ title: song.title, artist: song.artist, coverUrl: song.coverUrl }}
-        frame={frame}
-        canvasFrame={canvasFrame}
-      />
+      <div className="vc-visualizer-surface">
+        <VisualizerPluginHost
+          key={plugin.id}
+          surface="window"
+          experienceId={plugin.id}
+          analyser={null}
+          frequencyData={frequencyData}
+          timeDomainData={timeDomain}
+          isPlaying={playback.isPlaying}
+          currentTime={playback.currentTime}
+          duration={playback.duration}
+          song={{ title: song.title, artist: song.artist, coverUrl: song.coverUrl }}
+          frame={frame}
+          canvasFrame={canvasFrame}
+        />
+        <VcVisualizerNameBar
+          name={rotation?.nameReveal.name ?? ''}
+          visible={rotation?.nameReveal.visible === true}
+        />
+      </div>
     );
   }
 
-  return <VcResolvedContentView resolved={resolved} playback={state.playback} />;
+  return (
+    <VcResolvedContentView
+      resolved={resolved}
+      playback={state.playback}
+      frequencyData={frequencyData}
+      playbackUrl={state.audioMirror?.playbackUrl ?? null}
+    />
+  );
 }

@@ -16,6 +16,9 @@ export type VcVisualizerSequence = 'random-any' | 'random-builtin' | 'random-mil
 export const DEFAULT_VC_VISUALIZER_CHANGE_RULE: VcVisualizerChangeRule = 'never';
 export const DEFAULT_VC_VISUALIZER_SEQUENCE: VcVisualizerSequence = 'random-any';
 
+/** How long the visualizer name bar stays visible after activity or a reveal command. */
+export const VISUALIZER_NAME_REVEAL_MS = 10_000;
+
 export const VC_VISUALIZER_CHANGE_RULE_OPTIONS: Array<{
   value: VcVisualizerChangeRule;
   label: string;

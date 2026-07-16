@@ -30,8 +30,8 @@ if (process.platform === 'darwin') {
   app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
 }
 
-/** Round logo — Dock, About panel (macOS), and window icon. */
-const APP_ROUND_LOGO_PATH = path.resolve(__dirname, '..', 'images', 'song-pages-round-logo.png');
+/** App icon — Dock, About panel (win/linux), and window icon. */
+const APP_ICON_PATH = path.resolve(__dirname, '..', 'images', 'app-icon.png');
 
 /** Display name for menu bar / Dock — does not control the data folder when userData is pinned below. */
 app.setName('Song Pages');
@@ -48,7 +48,7 @@ function configureAboutPanel() {
     copyright: 'Song Pages © Ben Sawyer, 2026.',
   };
   if (process.platform === 'win32' || process.platform === 'linux') {
-    options.iconPath = APP_ROUND_LOGO_PATH;
+    options.iconPath = APP_ICON_PATH;
   }
   app.setAboutPanelOptions(options);
 }
@@ -56,9 +56,9 @@ function configureAboutPanel() {
 /** NSApplication icon — drives Dock and the native About panel graphic on macOS. */
 function applyMacAppIcon() {
   if (process.platform !== 'darwin') return;
-  const logo = nativeImage.createFromPath(APP_ROUND_LOGO_PATH);
+  const logo = nativeImage.createFromPath(APP_ICON_PATH);
   if (logo.isEmpty()) {
-    logger.warn('macOS app icon missing', { path: APP_ROUND_LOGO_PATH });
+    logger.warn('macOS app icon missing', { path: APP_ICON_PATH });
     return;
   }
   if (app.dock) {
@@ -101,7 +101,7 @@ function createMainWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'Song Pages',
-    ...(process.platform === 'darwin' ? { icon: APP_ROUND_LOGO_PATH } : {}),
+    ...(process.platform === 'darwin' ? { icon: APP_ICON_PATH } : {}),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

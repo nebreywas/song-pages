@@ -134,9 +134,9 @@ Song content kinds map to presentation rule sets via `SONG_CONTENT_SETTINGS_RULE
 
 ### Main window (timing source + visualizer FFT)
 
-- **Audible HLS** plays on the main `<audio>` element — **never** wired to Web Audio (native path; capturable when sharing the main window with FX off).
-- **Hidden mirror `<audio>`** duplicates HLS for Web Audio (visualizers, bass boost / lo-fi). See `useAnalyserPlaybackMirror`, `useAudioAnalyser`, `audioGraph.ts`.
-- When VC is open, **main playback stays audible** so hosts can share the **main Song Pages window** in Discord without silencing themselves. You may hear **doubled audio locally** (main + VC window mirror) — use headphones or share only one window.
+- **Audible HLS** plays on the main `<audio>` element while VC is **closed** — **never** wired to Web Audio (native path; capturable when sharing the main window with FX off).
+- **Hidden mirror `<audio>`** duplicates HLS for Web Audio (visualizers, bass boost / lo-fi). See `useAnalyserPlaybackMirror`, `useAnalyserBus`, `AnalyserBus.ts`.
+- When VC is open, **main playback is muted** (`audio.volume = 0`). The **VC window `<audio>`** carries audible output (including Effects Lab when enabled) for screen/window capture.
 
 ### VC window (alternate capture source)
 
@@ -153,7 +153,7 @@ Song content kinds map to presentation rule sets via `SONG_CONTENT_SETTINGS_RULE
 | Main player + visualizers in share | Main **Song Pages** window | Off for reliable capture |
 | VC layout / host content | **Song Pages — VC Mode** window | N/A (VC mirror is clean HLS) |
 
-Playback URL resolution: `activePlaybackUrl ?? playingSong?.playback_url` in `useVcModeManager.buildStatePayload()`.
+Playback URL resolution: `activePlaybackUrl ?? playingSong?.playback_url` in `useVcModeManager` (audio mirror); timing/queue/play lock from `buildVcStateFromSnapshot(session snapshot)`.
 
 ---
 
@@ -199,7 +199,7 @@ Use this when verifying window-only capture (not full desktop share).
 |-------|---------------|
 | VC window visuals | Layout, song content, host content, visualizer render in VC window |
 | VC window audio | Music audible in VC window (DevTools → check `<audio>` not paused) |
-| Main window audio | Still audible while VC open (may double with VC locally) |
+| Main window audio | Muted while VC open (`volume = 0`); timing still from main element |
 | Close VC | VC audio stops; main unchanged |
 | Skip track | Mirror loads new song; brief gap acceptable; sync within ~0.4s |
 | Pause / resume | Both windows follow transport |

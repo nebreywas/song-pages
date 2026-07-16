@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   collapseLyricsBlankLines,
   formatListenerLyricsDisplayText,
+  looksLikeMarkdownLyrics,
   normalizeAlareLyricsText,
   stripBracketedLyricsText,
   stripMarkdownLyricsText,
@@ -77,4 +78,12 @@ test('stripMarkdownLyricsText leaves plain lyrics unchanged', () => {
 
 test('normalizeAlareLyricsText applies bracket then markdown strip', () => {
   assert.equal(normalizeAlareLyricsText('[Verse]\n**Bold** line'), 'Bold line');
+});
+
+test('looksLikeMarkdownLyrics recognizes common markers', () => {
+  assert.equal(looksLikeMarkdownLyrics('Just a plain chorus line'), false);
+  assert.equal(looksLikeMarkdownLyrics('# Chorus\nWe sing'), true);
+  assert.equal(looksLikeMarkdownLyrics('**loud** refrain'), true);
+  assert.equal(looksLikeMarkdownLyrics('- line one\n- line two'), true);
+  assert.equal(looksLikeMarkdownLyrics('[link](https://example.com)'), true);
 });

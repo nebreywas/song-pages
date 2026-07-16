@@ -5,11 +5,12 @@ import {
   LISTENER_LYRICS_DISPLAY_SETTINGS_KEY,
   normalizeListenerLyricsDisplaySettings,
   type ListenerLyricsDisplaySettings,
+  type ListenerLyricsViewMode,
 } from '@shared/listener/lyricsDisplaySettings';
 
 import { getApp } from '../lib/bridge';
 
-/** Persisted listener lyrics display preferences (bracket strip, future options). */
+/** Persisted listener lyrics display preferences (brackets, view mode, …). */
 export function useListenerLyricsDisplaySettings() {
   const [settings, setSettings] = useState<ListenerLyricsDisplaySettings>(
     DEFAULT_LISTENER_LYRICS_DISPLAY_SETTINGS,
@@ -40,16 +41,21 @@ export function useListenerLyricsDisplaySettings() {
     void getApp()?.saveSettings(LISTENER_LYRICS_DISPLAY_SETTINGS_KEY, next);
   }, []);
 
-  const setRemoveBrackets = useCallback(
-    (removeBrackets: boolean) => {
-      setSettings((current) => {
-        const next = { ...current, removeBrackets };
-        void getApp()?.saveSettings(LISTENER_LYRICS_DISPLAY_SETTINGS_KEY, next);
-        return next;
-      });
-    },
-    [],
-  );
+  const setRemoveBrackets = useCallback((removeBrackets: boolean) => {
+    setSettings((current) => {
+      const next = { ...current, removeBrackets };
+      void getApp()?.saveSettings(LISTENER_LYRICS_DISPLAY_SETTINGS_KEY, next);
+      return next;
+    });
+  }, []);
 
-  return { settings, loaded, persist, setRemoveBrackets };
-};
+  const setViewMode = useCallback((viewMode: ListenerLyricsViewMode) => {
+    setSettings((current) => {
+      const next = { ...current, viewMode };
+      void getApp()?.saveSettings(LISTENER_LYRICS_DISPLAY_SETTINGS_KEY, next);
+      return next;
+    });
+  }, []);
+
+  return { settings, loaded, persist, setRemoveBrackets, setViewMode };
+}

@@ -25,6 +25,7 @@ export function createDefaultCommandMappingState(): CommandMappingState {
     gateTimeoutMs: 8000,
     configuredCommandIds: [...FACTORY_COMMAND_IDS],
     configuredKudoPresetIds: [],
+    configuredSurfaceDesignIds: [],
     commands: {
       'toggle-cover': { direct: `${O}+c` },
       'toggle-host': { direct: `${O}+f` },
@@ -43,6 +44,7 @@ export function createDefaultCommandMappingState(): CommandMappingState {
     reservedKudoKeys: [],
     kudoPresetByReservedKey: {},
     kudoPresetBindings: {},
+    surfaceDesignBindings: {},
   };
 }
 

@@ -30,6 +30,7 @@ const child = spawn(electronBinary, ['.'], {
 console.log('[song-pages] Launching Electron dev shell from', projectRoot);
 console.log('[song-pages] Renderer should load http://localhost:5173 (title: "Song Pages (Dev)")');
 console.log('[song-pages] If UI looks stale, quit all Electron windows and re-run npm run dev');
+console.log('[song-pages] Main-process changes (electron/*.js) require a full Electron restart — Vite HMR does not reload them.');
 
 child.on('exit', (code) => {
   process.exit(code ?? 0);

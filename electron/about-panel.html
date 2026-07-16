@@ -30,7 +30,9 @@
         width: 96px;
         height: 96px;
         margin-bottom: 0.85rem;
-        border-radius: 50%;
+        /* Keep the icon's own corners; do not force a circular crop. */
+        border-radius: 18px;
+        object-fit: contain;
       }
 
       h1 {

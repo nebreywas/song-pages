@@ -8,6 +8,8 @@ import type { HostFallbackSlotId } from './constants';
 export const SYSTEM_FALLBACK_ASSETS = {
   cover: 'src/assets/fallbacks/cover-fallback.png',
   'video-cover': 'src/assets/fallbacks/videocover-fallback.mp4',
+  // Reuse the same bundled MP4 until a dedicated lyrics-video asset is added.
+  'lyrics-video': 'src/assets/fallbacks/videocover-fallback.mp4',
   'artist-image': 'src/assets/fallbacks/artistimage-fallback.png',
 } as const;
 
@@ -70,6 +72,7 @@ export const EMBED_PROVIDER_LYRICS_FALLBACK_TEXT = {
 export const FALLBACK_SLOT_LABELS: Record<HostFallbackSlotId, string> = {
   cover: 'Cover Fallback',
   'video-cover': 'Video cover fallback',
+  'lyrics-video': 'Lyrics video fallback',
   lyrics: 'Lyrics Fallback',
   'about-song': 'About song fallback',
   'artist-name': 'Artist name fallback',

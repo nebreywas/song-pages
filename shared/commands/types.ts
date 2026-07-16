@@ -84,6 +84,8 @@ export interface CommandMappingState {
   configuredCommandIds: string[];
   /** Kudo preset ids included in the host's Key Bindings setup. */
   configuredKudoPresetIds: string[];
+  /** VC surface design ids included in the host's Key Bindings setup. */
+  configuredSurfaceDesignIds: string[];
   commands: Record<string, CommandBindingSlot>;
   /** Keys marked "Reserve for Kudos" in Key Bindings (e.g. `gated:H`, `extended:F17`). */
   reservedKudoKeys: ReservedBindingKey[];
@@ -91,6 +93,8 @@ export interface CommandMappingState {
   kudoPresetByReservedKey: Record<ReservedBindingKey, string>;
   /** Per-preset command bindings when not using reserved-key indirection. */
   kudoPresetBindings: Record<string, CommandBindingSlot>;
+  /** Per-surface-design command bindings (switch-surface-*). */
+  surfaceDesignBindings: Record<string, CommandBindingSlot>;
 }
 
 export interface SafeHotkeyDefinition {
