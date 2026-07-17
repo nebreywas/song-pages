@@ -8,7 +8,7 @@
  * all rebinding attacks. Documented limitation; do not expand into a full network framework.
  */
 
-/** @typedef {'subscribe-catalog' | 'refresh-catalog' | 'fetch-song-manifest' | 'probe-song-availability' | 'youtube-oembed' | 'soundcloud-oembed' | 'soundcloud-shortlink' | 'flow-song-page' | 'flow-public-clip'} UrlPurpose */
+/** @typedef {'subscribe-catalog' | 'refresh-catalog' | 'fetch-song-manifest' | 'probe-song-availability' | 'youtube-oembed' | 'soundcloud-oembed' | 'soundcloud-shortlink' | 'flow-song-page' | 'flow-public-clip' | 'meme-media'} UrlPurpose */
 
 /** @typedef {'user-initiated' | 'catalog-context' | 'song-context' | 'none'} UrlProvenance */
 
@@ -174,6 +174,27 @@ function validateRemoteUrl(url, options) {
       }
       if (!/^\/producer-app-public\/clips\/[0-9a-f-]{36}\.m4a$/i.test(parsed.pathname)) {
         return { ok: false, code: 'URL_HOST', error: 'Google Flow clip path must be a public .m4a file.' };
+      }
+      return { ok: true, url: parsed.href, provenance };
+    }
+
+    case 'meme-media': {
+      // Host pastes a direct media URL into the VC controller Meme Field.
+      // Require explicit user provenance and block private/local targets to
+      // avoid turning the Meme Field into an SSRF probe against the host's LAN.
+      if (provenance !== 'user-initiated') {
+        return {
+          ok: false,
+          code: 'URL_PROVENANCE',
+          error: 'Meme links must be user-initiated.',
+        };
+      }
+      if (isPrivate) {
+        return {
+          ok: false,
+          code: 'URL_PROVENANCE',
+          error: 'Meme links must point to a public URL.',
+        };
       }
       return { ok: true, url: parsed.href, provenance };
     }

@@ -94,6 +94,12 @@ Migration from the legacy PoC `gridStyle` model runs through `migrateVcConfig()`
 
 Starting VC Mode closes the standalone visualizer projection window — only one projection surface is active at a time.
 
+Starting VC Mode also defaults the listening state to **repeat-playlist** (`repeatMode: 'all'`) so a
+listening party loops instead of stopping at the end of the queue. This fires only on the VC start
+(rising) edge of `vc.vcOpen` in `ListenerMode` (`vcStartedRepeatRef`); the host can turn repeat off
+afterward and it won't be forced back on. There is no `SET_REPEAT` command, so it cycles `CYCLE_REPEAT`
+to `'all'` (`off → all → one → off`).
+
 ---
 
 ## IPC channels
@@ -125,6 +131,75 @@ Song content kinds map to presentation rule sets via `SONG_CONTENT_SETTINGS_RULE
 - **Lyric tracking** — `simple-scroll` (default, compatibility) or `alare` (approximate line timeline). See [ALARE.md](./ALARE.md).
 - `lyricsEdgeFade` — top/bottom feather while scrolling (Simple Scroll; default on)
 - `lyricsRemoveBracketed` — strip `[Chorus]`-style annotations via `stripBracketedLyricsText` from `shared/lyricsText.ts` (Simple Scroll only; default off). ALARE strips brackets automatically.
+
+---
+
+## Meme Surface (host-pushed GIFs / memes)
+
+Lets a host drop a **direct media URL** into the VC controller and project it
+onto a designated region during a listening party.
+
+**No provider integration of any kind.** There is no site-specific awareness and
+no page/link scraping. The host pastes a URL that points straight at a media
+file; if it exists and is small enough, it is displayed. Accepted media:
+
+- **Images** (rendered in `<img>`): `.gif`, `.png`/`.apng`, `.webp`
+- **Videos** (rendered in `<video>`): `.mp4`, `.webm`, `.m4v`
+
+Before display, the **main process** HEAD-probes the URL to confirm it exists,
+is an `image/*` or `video/*` type, and is under **8 MB** (`MEME_MAX_BYTES`). The
+probe runs in main so it can reach hosts the renderer's CSP/CORS can't and give
+the controller clean up-front feedback ("not found" / "too large").
+
+### Pieces
+
+| Concern | Location |
+| --- | --- |
+| Pure parsing / settings sanitize (+ tests) | `shared/memes/` |
+| Types: `ResolvedMeme`, `MemeSettings`, `ActiveMeme`, `MEME_MAX_BYTES` | `shared/memes/types.ts` |
+| Main-process resolver (validate + HEAD existence/size/type probe) | `electron/memes/resolveMeme.js` |
+| URL policy purpose `meme-media` (public-only, user-initiated, SSRF guard) | `electron/net/urlPolicy.js` |
+| IPC: `vc:resolveMeme` (invoke), `vc:showMeme` / `vc:clearMeme` (send) | `electron/ipc.js`, `electron/preload.js` |
+| Content kind `meme-surface` + `config.memeSettings` + `VcStatePayload.activeMeme` | `shared/vcModeTypes.ts` |
+| Transient state owner (auto-clear timer, broadcast) | `src/vc-mode/useVcModeManager.ts` |
+| Projector render (`<img>` / `<video>`, click-to-clear, loop counting) | `src/vc-window/VcMemeSurfaceView.tsx` (dispatched from `VcCellContentView.tsx`) |
+| Controller Meme Field (URL input, Send, Clear, status) | `src/controller-window/ControllerWindowApp.tsx` |
+| Designer: assignable kind + settings panel | `RegionContentPopover.tsx`, `VcModeModal.tsx` |
+
+### Flow
+
+1. Host assigns **Meme Surface** to a float/area in the designer (persists in the
+   region's slot). The region renders empty until a meme arrives.
+2. Host pastes a direct media URL into the controller **Meme Field** →
+   `vc:resolveMeme` (main process validates + probes) returns a `ResolvedMeme` →
+   controller sends `vc:showMeme`.
+3. `useVcModeManager` owns the transient `activeMeme` (assigns a monotonic
+   `token`, snapshots `memeSettings`) and broadcasts it on `VcStatePayload`, so it
+   survives projector reload / `vc:request-sync`.
+4. The projector renders the meme onto the `meme-surface` region.
+
+### Clear behavior (ownership split)
+
+- **Per-region timer** — a `meme-surface` region can carry a `memeTimer`
+  (`VcCellAssignment.memeTimer`), set in its content settings, that overrides the
+  global default: `'hold'` = play until cleared, or a fixed number of seconds.
+  The main renderer merges it via `applyMemeTimer` when a meme is shown.
+- **Duration clear** and **play-indefinitely** are owned by the **main renderer**
+  (survives projector reloads).
+- **Roundtrip clear** is owned by the **projector** — only the `<video>` element
+  knows when a loop completes. When a minimum loop count is set (video only), the
+  projector drops native `loop`, replays manually, and clears once **both** the
+  loop count **and** the minimum duration are satisfied ("whichever is greater").
+- **GIF limitation:** GIFs expose no loop event, so `minRoundtrips` is ignored for
+  GIFs — they clear on the duration value alone. Prefer an MP4/WebM URL when you
+  want loop-count-based clearing.
+- **Click-to-clear** (`clickClears`) is handled in the projector view.
+
+### CSP
+
+Memes load as `http(s):` images/videos, already permitted by the VC window's
+`img-src` / `media-src`. No iframes are used, so no `frame-src` changes are
+needed.
 
 ---
 
@@ -166,6 +241,25 @@ When a region is assigned **visualizer**:
 - **Butterchurn** renders on the main window; canvas is JPEG-encoded and sent as `canvasFrame` on the frame payload (`butterchurnVcMirrorActive` path in `useVcModeManager`).
 
 This keeps Butterchurn's WebGL context on the main process renderer where the audio graph already exists.
+
+### Visualizer is preserved across surface switches
+
+Switching surfaces mid-show (VC controller picker) **does not change the running
+visualizer**, even though each surface design stores its own `visualizerId`.
+
+- On switch, `switchVcSurface` (`useVcModeManager`) captures the on-screen
+  visualizer (`reportedVisualizerId`, so it's rotation-aware) and pins it via
+  `surfaceVisualizerOverrideRef`.
+- The pin is applied **only to the outgoing `VcStatePayload`** (`config.visualizerId`
+  + `effectiveVisualizerId`). `activeConfig` keeps the new design's stored
+  `visualizerId`, so per-design persistence (`vcSurfaceDesignStore`) is never
+  corrupted.
+- The pin releases automatically when the configured visualizer changes
+  intentionally (e.g. the host picks a new one in the designer): a `useEffect`
+  compares `activeConfig.visualizerId` against the switch-in baseline.
+- The projector's `useVcVisualizerRotation` reseeds `rotatingId` from
+  `config.visualizerId` on any session-key change; pinning that field is what
+  keeps the reset landing on the same visualizer.
 
 ---
 

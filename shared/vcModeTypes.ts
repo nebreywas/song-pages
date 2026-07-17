@@ -2,6 +2,9 @@
 
 import type { PlaylistSongSourceId } from './listener/playlistSongSource';
 import type { KudoPreset } from './kudos';
+import type { ActiveMeme, MemeSettings } from './memes/types';
+import { sanitizeMemeSettings } from './memes/sanitizeMemeSettings';
+import { sanitizeMemeTimer, type MemeTimer } from './memes/memeTimer';
 import { clampCautionMinutes, DEFAULT_CAUTION_MINUTES } from './listener/playlistLengthSettings';
 import { VC_MAX_BASE_AREAS, VC_SAFE_TEMPLATE_ID } from './vcSurface/constants';
 import { sanitizeFloats, type VcFloatGeometry } from './vcSurface/floats';
@@ -46,7 +49,9 @@ export type VcCellContent =
   | 'host-video'
   | 'host-title-text'
   | 'host-area-text'
-  | 'host-graphics-group';
+  | 'host-graphics-group'
+  /** Designated target region for host-pushed memes/GIFs (see shared/memes). */
+  | 'meme-surface';
 
 export type { VcAssignmentOverrides } from './vcMode/assignmentSettings';
 import type { VcAssignmentOverrides } from './vcMode/assignmentSettings';
@@ -188,6 +193,12 @@ export type VcCellAssignment = {
   /** When true, live rendering uses grid defaults; savedRegionAppearance holds the prior values. */
   lockAppearanceToGrid?: boolean;
   savedRegionAppearance?: VcRegionAppearanceSnapshot;
+  /**
+   * Per-region meme playback timer (only meaningful when a slot is
+   * `meme-surface`). Overrides `config.memeSettings` duration:
+   * 'hold' = play until cleared; a number = seconds; undefined = use default.
+   */
+  memeTimer?: MemeTimer;
 };
 
 /** Base template geometry + floats. Content is stored separately. */
@@ -233,6 +244,8 @@ export type VcModeConfig = {
   gridDesign: VcGridDesignSettings;
   /** Between-song pacing for VC hosts (pause / countdown). */
   specialPlayStyle: VcSpecialPlayStyleSettings;
+  /** Playback/clear behavior for memes projected onto a `meme-surface` region. */
+  memeSettings?: MemeSettings;
   /** Host graphic shown when the host overlay hotkey (OCAW+F) is toggled. */
   hostGraphicPopupId: string | null;
   /** Hotkey upcoming queue overlay — placement and list length. */
@@ -351,6 +364,8 @@ export type VcStatePayload = {
   lyricsSourceReady?: boolean;
   /** App-wide Live Debug HUD — mirrored so the VC window can show realtime readouts. */
   liveDebugEnabled?: boolean;
+  /** Transient meme currently projected onto the `meme-surface` region (null = none). */
+  activeMeme?: ActiveMeme | null;
 };
 
 export const VC_SONG_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: string }> = [
@@ -387,6 +402,11 @@ export const VC_HOST_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: strin
   { value: 'host-graphics-group', label: 'Host graphics group' },
 ];
 
+/** Live/interactive content the host drives from the VC controller. */
+export const VC_INTERACTIVE_CONTENT_OPTIONS: Array<{ value: VcCellContent; label: string }> = [
+  { value: 'meme-surface', label: 'Meme Surface' },
+];
+
 export const VC_CONTENT_LABELS: Record<VcCellContent, string> = {
   '': '(blank)',
   visualizer: 'Visualizer',
@@ -417,6 +437,7 @@ export const VC_CONTENT_LABELS: Record<VcCellContent, string> = {
   'host-title-text': 'Host title text',
   'host-area-text': 'Host area text',
   'host-graphics-group': 'Host graphics group',
+  'meme-surface': 'Meme Surface',
 };
 
 const VC_CELL_CONTENT_SET = new Set<string>(Object.keys(VC_CONTENT_LABELS));
@@ -531,6 +552,17 @@ export function allContentAssignments(config: VcModeConfig): VcCellAssignment[] 
   return [...activeCells(config), ...floats];
 }
 
+/**
+ * Per-region meme timer for the first region assigned a `meme-surface`, if any.
+ * Drives the auto-clear override for the single active meme.
+ */
+export function findMemeTimer(config: VcModeConfig): MemeTimer | undefined {
+  const region = allContentAssignments(config).find(
+    (cell) => cell.slotA === 'meme-surface' || cell.slotB === 'meme-surface',
+  );
+  return region?.memeTimer;
+}
+
 export function configUsesVisualizer(config: VcModeConfig): boolean {
   return allContentAssignments(config).some(
     (cell) => cell.slotA === 'visualizer' || cell.slotB === 'visualizer',
@@ -578,6 +610,9 @@ function sanitizeCell(raw: unknown): VcCellAssignment {
   const borderThicknessPx = pickOptionalBorderThickness(cell.borderThicknessPx);
   const lockAppearanceToGrid = cell.lockAppearanceToGrid === true ? true : undefined;
   const savedRegionAppearance = sanitizeSavedRegionAppearance(cell.savedRegionAppearance, 'area');
+  // Per-region meme timer only applies when a slot actually hosts a meme surface.
+  const hasMemeSurface = slotA === 'meme-surface' || slotB === 'meme-surface';
+  const memeTimer = hasMemeSurface ? sanitizeMemeTimer(cell.memeTimer) : undefined;
   return {
     slotA,
     slotB,
@@ -593,6 +628,7 @@ function sanitizeCell(raw: unknown): VcCellAssignment {
     ...(borderThicknessPx !== undefined ? { borderThicknessPx } : {}),
     ...(lockAppearanceToGrid ? { lockAppearanceToGrid: true } : {}),
     ...(savedRegionAppearance ? { savedRegionAppearance } : {}),
+    ...(memeTimer !== undefined ? { memeTimer } : {}),
   };
 }
 
@@ -675,6 +711,7 @@ export function normalizeVcConfig(config: VcModeConfig): VcModeConfig {
     ),
     gridDesign,
     specialPlayStyle: sanitizeSpecialPlayStyleSettings(config.specialPlayStyle),
+    memeSettings: sanitizeMemeSettings(config.memeSettings),
     hostGraphicPopupId:
       typeof config.hostGraphicPopupId === 'string' && config.hostGraphicPopupId.trim()
         ? config.hostGraphicPopupId.trim()

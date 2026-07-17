@@ -5,7 +5,6 @@
 const { BrowserWindow, screen } = require('electron');
 const path = require('path');
 const logger = require('./logger');
-const { devServerUrl } = require('./devServer');
 const {
   installTrustedNavigationPolicy,
   resolveAllowedDocumentUrl,
@@ -18,10 +17,11 @@ let visualizerWindow = null;
 let mainWindowRef = null;
 
 function visualizerLoadUrl() {
-  if (!require('electron').app.isPackaged) {
-    return devServerUrl('/visualizer-window/visualizer.html');
-  }
-  return path.join(__dirname, '..', 'dist', 'visualizer-window', 'visualizer.html');
+  // Dev → Vite; packaged → loopback static server (http origin for YouTube).
+  return require('./appServer').appDocUrl(
+    '/visualizer-window/visualizer.html',
+    require('electron').app.isPackaged,
+  );
 }
 
 function sendToVisualizer(channel, payload) {
@@ -40,7 +40,7 @@ function sendVisualizerFrame(payload) {
 
 /**
  * @param {import('electron').BrowserWindow} mainWindow
- * @param {{ fullscreen?: boolean; displayId?: number | null }} [options]
+ * @param {{ fullscreen?: boolean; displayId?: number | null; width?: number; height?: number }} [options]
  */
 function openVisualizerWindow(mainWindow, options = {}) {
   mainWindowRef = mainWindow;
@@ -58,7 +58,20 @@ function openVisualizerWindow(mainWindow, options = {}) {
       ? screen.getAllDisplays().find((display) => display.id === options.displayId) ?? screen.getPrimaryDisplay()
       : screen.getPrimaryDisplay();
 
-  const { x, y, width, height } = targetDisplay.bounds;
+  // Compact mode: caller passes an explicit small size (e.g. the YouTube
+  // mini-player-compliance popup at 400×300). Center it on the display and relax
+  // the min-size floor so the request isn't clamped up to the full-display size.
+  const compact =
+    Number.isFinite(options.width) &&
+    Number.isFinite(options.height) &&
+    options.width > 0 &&
+    options.height > 0;
+
+  const display = targetDisplay.bounds;
+  const winWidth = compact ? Math.round(options.width) : display.width;
+  const winHeight = compact ? Math.round(options.height) : display.height;
+  const x = compact ? Math.round(display.x + (display.width - winWidth) / 2) : display.x;
+  const y = compact ? Math.round(display.y + (display.height - winHeight) / 2) : display.y;
 
   const isPackaged = require('electron').app.isPackaged;
   const loadTarget = visualizerLoadUrl();
@@ -66,10 +79,12 @@ function openVisualizerWindow(mainWindow, options = {}) {
   visualizerWindow = new BrowserWindow({
     x,
     y,
-    width,
-    height,
-    minWidth: 640,
-    minHeight: 360,
+    width: winWidth,
+    height: winHeight,
+    // Compact popups (YouTube mini-player) need a smaller floor than the normal
+    // full-display projector so a 400×300 request isn't clamped back up.
+    minWidth: compact ? 320 : 640,
+    minHeight: compact ? 240 : 360,
     title: 'Projector: Song Page',
     backgroundColor: '#04060c',
     show: false,
@@ -128,11 +143,8 @@ function openVisualizerWindow(mainWindow, options = {}) {
     }
   });
 
-  if (!isPackaged) {
-    visualizerWindow.loadURL(loadTarget);
-  } else {
-    visualizerWindow.loadFile(loadTarget);
-  }
+  // loadTarget is always a URL now (http in both dev and packaged).
+  visualizerWindow.loadURL(loadTarget);
 
   logger.info('Projector window opened');
   return { ok: true };

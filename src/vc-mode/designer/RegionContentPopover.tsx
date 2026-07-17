@@ -12,6 +12,8 @@ import type { VcGridDesignSettings } from '@shared/vcMode/gridDesign';
 import { resolveAreaBackgroundDisplayColor, resolveFloatAppearanceDraft } from '@shared/vcMode/gridDesign';
 import type { VcFloatGeometry } from '@shared/vcSurface/floats';
 
+import { MEME_TIMER_SECONDS_OPTIONS, type MemeTimer } from '@shared/memes/memeTimer';
+
 import { RegionBordersAndBackgrounds } from './RegionBordersAndBackgrounds';
 import {
   isHostContentKind,
@@ -19,6 +21,7 @@ import {
   isSongConfigurableContent,
   VC_CYCLE_OPTIONS,
   VC_HOST_CONTENT_OPTIONS,
+  VC_INTERACTIVE_CONTENT_OPTIONS,
   VC_SONG_CONTENT_OPTIONS,
   VC_TRANSITION_OPTIONS,
   type VcCellAssignment,
@@ -112,6 +115,13 @@ function ContentSelect({
           </option>
         ))}
       </optgroup>
+      <optgroup label="Interactive">
+        {VC_INTERACTIVE_CONTENT_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </optgroup>
     </select>
   );
 }
@@ -191,8 +201,45 @@ function ContentAssignmentFields({
           </select>
         </label>
       ) : null}
+
+      {cellHasMemeSurface(cell) ? (
+        <label className="vc-field">
+          <span>Meme timer</span>
+          <select
+            value={memeTimerToValue(cell.memeTimer)}
+            onChange={(e) => onUpdateCell({ memeTimer: memeTimerFromValue(e.target.value) })}
+          >
+            <option value="">Use default settings</option>
+            <option value="hold">Play until cleared</option>
+            {MEME_TIMER_SECONDS_OPTIONS.map((seconds) => (
+              <option key={seconds} value={seconds}>
+                {seconds} seconds
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
     </>
   );
+}
+
+function cellHasMemeSurface(cell: VcCellAssignment): boolean {
+  return cell.slotA === 'meme-surface' || cell.slotB === 'meme-surface';
+}
+
+/** Encode the per-region meme timer for the <select> value. */
+function memeTimerToValue(timer: MemeTimer | undefined): string {
+  if (timer === 'hold') return 'hold';
+  if (typeof timer === 'number') return String(timer);
+  return '';
+}
+
+/** Decode the <select> value back into a MemeTimer (undefined = use default). */
+function memeTimerFromValue(value: string): MemeTimer | undefined {
+  if (value === 'hold') return 'hold';
+  if (value === '') return undefined;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) ? seconds : undefined;
 }
 
 function cellNeedsCycle(cell: VcCellAssignment): boolean {

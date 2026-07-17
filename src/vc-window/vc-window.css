@@ -44,6 +44,19 @@
   isolation: isolate;
 }
 
+/*
+ * YouTube TOS experiment: while a YouTube embed is on screen, nothing may
+ * obstruct it. `.vc-surface` normally isolates its stacking context, which traps
+ * every region z-index BELOW the sibling kudos (z 30) and overlay (z 40) layers.
+ * Dropping isolation lets the YouTube-hosting region's inline z-index
+ * (YOUTUBE_PRIORITY_Z, see VcSurface.tsx) rise above those sibling layers so the
+ * video is never covered by a kudo or overlay. Scoped to YT playback only, so
+ * normal shows keep the isolated stacking model.
+ */
+.vc-surface.vc-surface--yt-priority {
+  isolation: auto;
+}
+
 .vc-surface-divider {
   position: absolute;
   z-index: 8;
@@ -482,6 +495,40 @@
   height: 100%;
   object-fit: contain;
   background: #000;
+}
+
+/* Meme Surface — host-pushed GIF/video fills the assigned region (contain). */
+.vc-meme-surface {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/*
+ * Stretch a meme to fill the region's full WIDTH and let height follow the
+ * media's natural aspect ratio (proportional). If the resulting height exceeds
+ * the region, the parent's `overflow: hidden` + centering crops top/bottom
+ * evenly. Overrides the cover/host 60% cap.
+ */
+.vc-meme-surface .vc-meme-media {
+  position: static;
+  inset: auto;
+  margin: 0;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: none;
+  object-fit: contain;
+}
+
+.vc-meme-error {
+  color: #ff8a8a;
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 0.5rem;
 }
 
 .vc-artist-bio {

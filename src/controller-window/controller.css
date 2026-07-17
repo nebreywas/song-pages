@@ -122,6 +122,58 @@
   color: #ff8a8a;
 }
 
+/* --- Meme Field --- */
+.controller-meme {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.controller-meme-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.controller-meme-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.controller-meme-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: stretch;
+}
+
+.controller-meme-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.controller-meme-send,
+.controller-meme-clear {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.controller-meme-hint,
+.controller-meme-active {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.controller-meme-active {
+  color: var(--text);
+}
+
 .controller-surface-field {
   display: flex;
   flex-direction: column;

@@ -3,6 +3,24 @@ export const LISTENER_PLAYER_SETTINGS_KEY = 'ui.listenerPlayer';
 export type SeekTimeDisplay = 'remaining' | 'duration';
 
 /**
+ * What to do when a YouTube video track plays while the main window is in
+ * mini-player (minified) mode. Mini-player hides the in-window embed, which
+ * violates YouTube's requirement that the player stay visible at size, so we
+ * must actively mitigate. See documentation/third-party-integrations.md.
+ *
+ *   'projector' → pop the embed into a small Projector window (default)
+ *   'expand'    → temporarily un-minify the player, restore mini on track end
+ *   'skip'      → skip YouTube tracks entirely while minified
+ */
+export type YoutubeMiniPlayerBehavior = 'projector' | 'expand' | 'skip';
+
+export const YOUTUBE_MINI_PLAYER_BEHAVIORS: readonly YoutubeMiniPlayerBehavior[] = [
+  'projector',
+  'expand',
+  'skip',
+];
+
+/**
  * Song page typography bump on top of each page’s own default.
  * 0 = no increase; 1–4 are the user-facing steps (actual % is abstracted).
  */
@@ -18,12 +36,15 @@ export type ListenerPlayerSettings = {
   showSunoPromptInformation: boolean;
   /** Extra song-page type scale (1–4); 0 keeps the page’s built-in size. */
   songPageFontIncreaseLevel: SongPageFontIncreaseLevel;
+  /** YouTube-TOS mitigation when a YouTube track plays in mini-player mode. */
+  youtubeMiniPlayerBehavior: YoutubeMiniPlayerBehavior;
 };
 
 export const DEFAULT_LISTENER_PLAYER_SETTINGS: ListenerPlayerSettings = {
   seekTimeDisplay: 'remaining',
   showSunoPromptInformation: false,
   songPageFontIncreaseLevel: 0,
+  youtubeMiniPlayerBehavior: 'projector',
 };
 
 /** Multipliers for levels 1–4 — keep UI labels as 1–4 only. */
@@ -58,6 +79,13 @@ export function songPageFontIncreaseStyle(
   return { zoom: scale };
 }
 
+/** Coerce persisted/unknown input into a valid YouTube mini-player behavior. */
+export function normalizeYoutubeMiniPlayerBehavior(raw: unknown): YoutubeMiniPlayerBehavior {
+  return YOUTUBE_MINI_PLAYER_BEHAVIORS.includes(raw as YoutubeMiniPlayerBehavior)
+    ? (raw as YoutubeMiniPlayerBehavior)
+    : 'projector';
+}
+
 /** Normalize persisted listener player UI preferences. */
 export function normalizeListenerPlayerSettings(raw: unknown): ListenerPlayerSettings {
   if (!raw || typeof raw !== 'object') {
@@ -68,6 +96,7 @@ export function normalizeListenerPlayerSettings(raw: unknown): ListenerPlayerSet
     seekTimeDisplay: value.seekTimeDisplay === 'duration' ? 'duration' : 'remaining',
     showSunoPromptInformation: value.showSunoPromptInformation === true,
     songPageFontIncreaseLevel: normalizeSongPageFontIncreaseLevel(value.songPageFontIncreaseLevel),
+    youtubeMiniPlayerBehavior: normalizeYoutubeMiniPlayerBehavior(value.youtubeMiniPlayerBehavior),
   };
 }
 

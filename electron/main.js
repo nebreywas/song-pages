@@ -13,6 +13,7 @@ const listenerSubscribe = require('./listener/subscribe');
 const { configureSongPageGuestSession } = require('./listener/guestSession');
 const { registerCacheScheme, registerCacheProtocol } = require('./listener/cache/protocol');
 const { devServerOrigin, devServerUrl } = require('./devServer');
+const { startAppServer, appDocUrl } = require('./appServer');
 const {
   installTrustedNavigationPolicy,
   resolveAllowedDocumentUrl,
@@ -92,8 +93,9 @@ async function loadDevServer(mainWindow) {
 
 function createMainWindow() {
   const isPackaged = app.isPackaged;
-  const productionIndexPath = path.join(__dirname, '..', 'dist', 'index.html');
-  const mainLoadTarget = isPackaged ? productionIndexPath : devServerUrl('/');
+  // Packaged: loopback static server URL (real http origin for YouTube embeds).
+  // Dev: Vite dev server (loaded via loadDevServer below).
+  const mainLoadTarget = isPackaged ? appDocUrl('/index.html', true) : devServerUrl('/');
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -130,9 +132,14 @@ function createMainWindow() {
       vcWindow: null,
       controllerWindow: null,
     });
+    // Register the main window for VC transport forwarding up front so the
+    // projector (visualizer window) can report events like `youtubeEnded` back
+    // to main even when VC mode was never opened (e.g. mini-player compliance).
+    require('./vcWindow').setMainWindowRef(mainWindow);
   });
 
   mainWindow.on('closed', () => {
+    require('./vcWindow').setMainWindowRef(null);
     mainWindow = null;
   });
 
@@ -141,8 +148,10 @@ function createMainWindow() {
   if (!isPackaged) {
     void loadDevServer(mainWindow);
   } else {
-    mainWindow.loadFile(productionIndexPath);
-    logger.info('Loading production build', { path: productionIndexPath });
+    // loadURL over the loopback static server; file:// fallback is baked into
+    // mainLoadTarget by appDocUrl if the server failed to start.
+    void mainWindow.loadURL(mainLoadTarget);
+    logger.info('Loading production build', { url: mainLoadTarget });
   }
 }
 
@@ -168,6 +177,20 @@ app.whenReady().then(async () => {
   void cacheManager.purgeStaleCacheEntriesOnLaunch();
   require('./commands/commandService').initCommandService();
   registerIpcHandlers();
+
+  // Packaged builds serve the renderer over http://127.0.0.1 so YouTube embeds
+  // get a valid web origin. Start it before any window loads; on failure we log
+  // and fall back to file:// (YouTube may error, but the app still opens).
+  if (app.isPackaged) {
+    try {
+      await startAppServer();
+    } catch (error) {
+      logger.error('Falling back to file:// — app static server unavailable', {
+        error: String(error),
+      });
+    }
+  }
+
   createMainWindow();
 
   // Refresh subscribed catalogs older than the auto-refresh window (30 days).

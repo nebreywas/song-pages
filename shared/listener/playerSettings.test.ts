@@ -5,6 +5,7 @@ import {
   DEFAULT_LISTENER_PLAYER_SETTINGS,
   normalizeListenerPlayerSettings,
   normalizeSongPageFontIncreaseLevel,
+  normalizeYoutubeMiniPlayerBehavior,
   songPageFontScaleFromLevel,
   toggleSeekTimeDisplay,
 } from './playerSettings';
@@ -15,11 +16,13 @@ test('normalizeListenerPlayerSettings defaults unknown values', () => {
     seekTimeDisplay: 'remaining',
     showSunoPromptInformation: false,
     songPageFontIncreaseLevel: 0,
+    youtubeMiniPlayerBehavior: 'projector',
   });
   assert.deepEqual(normalizeListenerPlayerSettings({ seekTimeDisplay: 'duration' }), {
     seekTimeDisplay: 'duration',
     showSunoPromptInformation: false,
     songPageFontIncreaseLevel: 0,
+    youtubeMiniPlayerBehavior: 'projector',
   });
 });
 
@@ -65,4 +68,25 @@ test('normalizeListenerPlayerSettings keeps font increase level', () => {
 test('toggleSeekTimeDisplay alternates modes', () => {
   assert.equal(toggleSeekTimeDisplay('remaining'), 'duration');
   assert.equal(toggleSeekTimeDisplay('duration'), 'remaining');
+});
+
+test('normalizeYoutubeMiniPlayerBehavior whitelists known behaviors, else projector', () => {
+  assert.equal(normalizeYoutubeMiniPlayerBehavior('projector'), 'projector');
+  assert.equal(normalizeYoutubeMiniPlayerBehavior('expand'), 'expand');
+  assert.equal(normalizeYoutubeMiniPlayerBehavior('skip'), 'skip');
+  assert.equal(normalizeYoutubeMiniPlayerBehavior('nonsense'), 'projector');
+  assert.equal(normalizeYoutubeMiniPlayerBehavior(undefined), 'projector');
+  assert.equal(normalizeYoutubeMiniPlayerBehavior(42), 'projector');
+});
+
+test('normalizeListenerPlayerSettings keeps a valid YouTube mini-player behavior', () => {
+  assert.equal(
+    normalizeListenerPlayerSettings({ youtubeMiniPlayerBehavior: 'skip' }).youtubeMiniPlayerBehavior,
+    'skip',
+  );
+  assert.equal(
+    normalizeListenerPlayerSettings({ youtubeMiniPlayerBehavior: 'bogus' as never })
+      .youtubeMiniPlayerBehavior,
+    'projector',
+  );
 });

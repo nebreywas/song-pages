@@ -135,6 +135,13 @@ import {
 } from '@shared/demo/sunoDemoFeature';
 import { isYoutubeSong } from '@shared/youtube/youtubeFeature';
 import {
+  decideMinifyEdgeAction,
+  decideMiniPlayerComplianceAction,
+  findNextNonYoutubeSong,
+  hasNonYoutubeSong as playlistHasNonYoutubeSong,
+  resolveEffectiveMiniBehavior,
+} from '@shared/listener/youtubeMiniCompliance';
+import {
   isSoundcloudSong,
   soundcloudPermalinkFromSong,
 } from '@shared/soundcloud/soundcloudFeature';
@@ -175,6 +182,12 @@ function isWidgetTransportSong(song: {
 
 const DEFAULT_CONTENT_HEIGHT = 360;
 const MIN_CONTENT_HEIGHT = 160;
+/**
+ * YouTube TOS: while a YouTube video is embedded in the player view, the song
+ * page panel must be at least this tall and cannot be dragged smaller. Enforces
+ * YouTube's minimum visible-player size so the embed is never squeezed down.
+ */
+const MIN_CONTENT_HEIGHT_YOUTUBE = 220;
 const MIN_PLAYLIST_HEIGHT = 160;
 /** Handle element height plus vertical margins — keeps playlist visible when dragging. */
 const RESIZE_HANDLE_SPACE = 24;
@@ -185,8 +198,19 @@ function maxContentHeight(column: HTMLElement | null): number {
   return Math.max(MIN_CONTENT_HEIGHT, available);
 }
 
-function clampContentHeight(column: HTMLElement | null, height: number): number {
-  return Math.min(maxContentHeight(column), Math.max(MIN_CONTENT_HEIGHT, height));
+/**
+ * Clamp the song-page panel height between `minHeight` and the room available
+ * above the playlist. `minHeight` is raised to `MIN_CONTENT_HEIGHT_YOUTUBE` while
+ * a YouTube embed is showing (see `minContentHeight`); it always wins, even if the
+ * window is too short to also keep the full playlist minimum visible.
+ */
+function clampContentHeight(
+  column: HTMLElement | null,
+  height: number,
+  minHeight: number = MIN_CONTENT_HEIGHT,
+): number {
+  const max = Math.max(minHeight, maxContentHeight(column));
+  return Math.min(max, Math.max(minHeight, height));
 }
 
 export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void }) {
@@ -347,6 +371,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const resumeAfterSpecialPauseRef = useRef<() => void>(() => {});
   /** Last row passed to playSong — visualizer must not depend on the selected playlist's song list. */
   const playingSongRowRef = useRef<SongRow | null>(null);
+  /**
+   * Raw playing state of whatever widget (YouTube/SoundCloud) is mounted in the
+   * main pane — true even for a browse preview that was never promoted to the
+   * now-playing track. YouTube-compliance uses this to detect a preview video
+   * that would keep playing (hidden) after minify.
+   */
+  const mainPaneWidgetPlayingRef = useRef(false);
 
   const selectedArtist = artists.find((artist) => artist.id === selectedArtistId) ?? null;
   const customPlaylistPickerRows = useMemo((): PlaylistPickerRow[] => {
@@ -914,7 +945,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     setContentHeight(clampContentHeight(column, DEFAULT_CONTENT_HEIGHT));
 
     const onColumnResize = () => {
-      setContentHeight((height) => clampContentHeight(column, height));
+      setContentHeight((height) => clampContentHeight(column, height, minContentHeightRef.current));
     };
 
     const observer = new ResizeObserver(onColumnResize);
@@ -997,6 +1028,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   const handleWidgetPlayingChange = useCallback(
     (playing: boolean) => {
+      // Record the raw main-pane embed state even for browse previews (a video
+      // the user started via the embed's own controls, before it was promoted
+      // to the now-playing track). YouTube-compliance needs to know a hidden
+      // video would keep playing on minify — see the minify effect below.
+      mainPaneWidgetPlayingRef.current = playing;
       if (!isMainPanePlayingWidget()) return;
       setIsPlaying(playing);
     },
@@ -1196,6 +1232,22 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     wasVcOpenRef.current = vc.vcOpen;
   }, [vc.vcOpen]);
 
+  // Starting VC mode defaults the listening state to repeat-playlist ('all') so a
+  // listening party loops instead of stopping at the end. Fires only on the
+  // start (rising) edge — the host can turn it off afterward and we won't force
+  // it back on. There's no SET_REPEAT command, so cycle to 'all' (off→all→one→off).
+  const vcStartedRepeatRef = useRef(false);
+  useEffect(() => {
+    if (vc.vcOpen && !vcStartedRepeatRef.current) {
+      let guard = 0;
+      while (playbackSession.getSnapshot().repeatMode !== 'all' && guard < 3) {
+        playbackSession.dispatch({ type: 'CYCLE_REPEAT', source: 'system' });
+        guard += 1;
+      }
+    }
+    vcStartedRepeatRef.current = vc.vcOpen;
+  }, [vc.vcOpen, playbackSession]);
+
   const vcYoutubeCaptureActive = useMemo(
     () =>
       vc.vcOpen &&
@@ -1212,6 +1264,22 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   );
 
   const youtubeRemoteCaptureActive = vcYoutubeCaptureActive || projectorYoutubeCaptureActive;
+
+  // YouTube TOS: when the YouTube embed is actually mounted in THIS window's song
+  // page (not captured off to VC/Projector), the panel must hold ≥220px and resist
+  // being dragged smaller. Metadata-only capture pages have no embed to protect.
+  const youtubeEmbedInMain =
+    mainContentView === 'song' && showingYoutubePage && !youtubeRemoteCaptureActive;
+  const minContentHeight = youtubeEmbedInMain ? MIN_CONTENT_HEIGHT_YOUTUBE : MIN_CONTENT_HEIGHT;
+  // Read the live minimum inside effects with stale closures (ResizeObserver).
+  const minContentHeightRef = useRef(minContentHeight);
+  minContentHeightRef.current = minContentHeight;
+
+  // Enforce the YouTube minimum the moment the embed appears (bump up if the
+  // panel was smaller); relaxes back to the normal minimum when it goes away.
+  useEffect(() => {
+    setContentHeight((height) => clampContentHeight(mainColumnRef.current, height, minContentHeight));
+  }, [minContentHeight]);
 
   const vcSoundcloudCaptureActive = useMemo(
     () =>
@@ -3452,9 +3520,161 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     [playbackSession],
   );
 
+  // --- YouTube mini-player compliance -------------------------------------
+  // YouTube's TOS requires the video stay visible while it plays. Mini-player
+  // (minified) mode hides the in-window embed, so when a YouTube track plays
+  // there we mitigate per the user's chosen behavior (Settings → Player):
+  //   'projector' → pop the embed into a small Projector window (default)
+  //   'expand'    → temporarily un-minify, re-minify when the track ends
+  //   'skip'      → skip YouTube tracks while minified
+  // If VC is already showing the embed (vcYoutubeCaptureActive) the video is
+  // visible elsewhere, so there's no violation and we leave everything alone.
+  // Lifecycle of the compliance projector WE open (never a projector the user
+  // opened themselves): 'idle' → 'opening' (open in flight) → 'open'. The
+  // 'opening' step avoids a false "user closed it" read during the open
+  // handshake (windowOpen flips true a render after we call openWindow).
+  const projectorComplianceRef = useRef<'idle' | 'opening' | 'open'>('idle');
+  const autoExpandedRef = useRef(false);
+  const playingIsYoutube =
+    playingSong != null && isYoutubeSong(playingSong) && !vcYoutubeCaptureActive;
+  // Is there anywhere for 'skip' to land? If the whole playlist is YouTube,
+  // skipping just cycles hidden videos (or stops), so we fall back to the
+  // projector popup instead — see effectiveYoutubeMiniBehavior below.
+  const hasNonYoutubeSong = useMemo(() => playlistHasNonYoutubeSong(sortedSongs), [sortedSongs]);
+  const effectiveYoutubeMiniBehavior = resolveEffectiveMiniBehavior(
+    playerSettings.youtubeMiniPlayerBehavior,
+    hasNonYoutubeSong,
+  );
+
+  // A manual mini-player toggle is the user's own intent — drop the "expand"
+  // bookkeeping so we don't immediately fight them by re-expanding/re-minifying.
+  const handleToggleChromeMinified = useCallback(() => {
+    autoExpandedRef.current = false;
+    setChromeMinified((on) => !on);
+  }, []);
+
+  // YouTube TOS: minifying hides the main-window embed (display:none), which
+  // Chromium can suspend so the "playing" signal drops and the projector
+  // compliance never engages. When minify is taken over a playing YouTube track,
+  // restart it at its current position: playSong sets isPlaying=true
+  // programmatically (independent of the suspended embed), which re-fires the
+  // projector-open effect below and hands the video off to the compliance window.
+  const prevMinifiedForYoutubeRef = useRef(chromeMinified);
+  useEffect(() => {
+    const wasMinified = prevMinifiedForYoutubeRef.current;
+    prevMinifiedForYoutubeRef.current = chromeMinified;
+    // Only act on the rising edge (un-minified → minified).
+    if (!chromeMinified || wasMinified) return;
+
+    // Pure decision (see youtubeMiniCompliance): restart the now-playing YouTube
+    // track so the projector handoff fires, or promote a playing browse-preview
+    // that was never made the now-playing track. Side effects run here.
+    const edgeAction = decideMinifyEdgeAction({
+      behavior: effectiveYoutubeMiniBehavior,
+      playingIsYoutube,
+      hasPlayingSong: playingSong != null,
+      mainPaneWidgetPlaying: mainPaneWidgetPlayingRef.current,
+      mainContentIsSong: mainContentView === 'song',
+      showingYoutubePage,
+      youtubeRemoteCaptureActive,
+      hasActiveSongPage: activeSongPage != null,
+      activeSongPageIsPlayingTrack: activeSongPage != null && playingSongId === activeSongPage.id,
+    });
+
+    if (edgeAction === 'restart-current' && playingSong) {
+      // playSong re-asserts isPlaying=true even if Chromium suspended the hidden
+      // embed, which re-fires the projector-open effect below.
+      const resumeAt = getPlaybackPositionSeconds();
+      void playSongRef.current(playingSong, { startAt: resumeAt > 0 ? resumeAt : 0 });
+    } else if (edgeAction === 'promote-preview' && activeSongPage) {
+      // Promote at the preview's current position; setting playingSongId flips
+      // playingIsYoutube true so the behavior effect below engages.
+      const previewTime = youtubePlayerRef.current?.getCurrentTime();
+      const resumeAt = Number.isFinite(previewTime) && (previewTime as number) > 0 ? (previewTime as number) : 0;
+      void playSongRef.current(activeSongPage, { startAt: resumeAt, userInitiated: true });
+    }
+  }, [
+    chromeMinified,
+    effectiveYoutubeMiniBehavior,
+    playingIsYoutube,
+    playingSong,
+    getPlaybackPositionSeconds,
+    mainContentView,
+    showingYoutubePage,
+    youtubeRemoteCaptureActive,
+    activeSongPage,
+    playingSongId,
+  ]);
+
+  useEffect(() => {
+    // Pure decision (see youtubeMiniCompliance) — the steady-state mini-player
+    // behavior (skip / expand / projector) plus the next projector-lifecycle and
+    // auto-expanded bookkeeping. Side effects (Next, minify, projector window)
+    // and ref writes happen here; the branching itself is unit-tested.
+    const decision = decideMiniPlayerComplianceAction({
+      behavior: effectiveYoutubeMiniBehavior,
+      chromeMinified,
+      playingIsYoutube,
+      isPlaying,
+      projectorState: projectorComplianceRef.current,
+      projectorWindowOpen: visualizer.windowOpen,
+      autoExpanded: autoExpandedRef.current,
+    });
+
+    projectorComplianceRef.current = decision.projectorState;
+    autoExpandedRef.current = decision.autoExpanded;
+
+    switch (decision.action.type) {
+      case 'skip-to-next':
+      case 'skip-projector-closed':
+        playerBarTransport.onNext();
+        break;
+      case 'expand-player':
+        setChromeMinified(false);
+        break;
+      case 'restore-mini-player':
+        setChromeMinified(true);
+        break;
+      case 'open-projector':
+        void visualizer.openWindow({ mode: 'video', width: 400, height: 300 });
+        break;
+      case 'close-projector':
+        void visualizer.closeWindow();
+        break;
+      case 'none':
+        break;
+    }
+  }, [
+    chromeMinified,
+    playingIsYoutube,
+    isPlaying,
+    effectiveYoutubeMiniBehavior,
+    playingSongId,
+    visualizer.windowOpen,
+    visualizer.openWindow,
+    visualizer.closeWindow,
+    playerBarTransport,
+  ]);
+
+  // YouTube TOS: opening the VC designer overlay covers the main-window YouTube
+  // embed, which obstructs the playing video. Jump straight to the next
+  // non-YouTube entry in the current playlist so nothing plays hidden behind the
+  // overlay (and the party keeps going); if the whole playlist is YouTube, pause
+  // instead. Playing the song directly is reliable even when NEXT would no-op
+  // (YouTube track last, repeat off).
+  useEffect(() => {
+    if (!vc.modalOpen || !playingIsYoutube) return;
+    const nextNonYoutube = findNextNonYoutubeSong(sortedSongs, playingSongId);
+    if (nextNonYoutube) {
+      void playSongRef.current(nextNonYoutube, { userInitiated: true });
+    } else if (isPlaying) {
+      playerBarTransport.onTogglePlayPause();
+    }
+  }, [vc.modalOpen, playingIsYoutube, isPlaying, playingSongId, sortedSongs, playerBarTransport]);
+
   const handleContentResize = (deltaY: number) => {
     const column = mainColumnRef.current;
-    setContentHeight((height) => clampContentHeight(column, height + deltaY));
+    setContentHeight((height) => clampContentHeight(column, height + deltaY, minContentHeight));
   };
 
   const canLikeSong = useCallback(
@@ -3765,7 +3985,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             seekTimeDisplay={playerSettings.seekTimeDisplay}
             onToggleSeekTimeDisplay={toggleSeekLabel}
             chromeMinified={chromeMinified}
-            onToggleChromeMinified={() => setChromeMinified((on) => !on)}
+            onToggleChromeMinified={handleToggleChromeMinified}
             onDeck={onDeckInfo}
             onClearOnDeck={dismissOnDeck}
             onRevealOnDeck={onDeckInfo ? handleRevealOnDeck : undefined}
@@ -3791,7 +4011,10 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         {error ? <p className="error listener-feedback">{error}</p> : null}
 
         <div className="listener-main" ref={mainColumnRef}>
-          <section className="song-page-panel panel" style={{ height: contentHeight, flex: 'none' }}>
+          <section
+            className="song-page-panel panel"
+            style={{ height: contentHeight, minHeight: minContentHeight, flex: 'none' }}
+          >
             <h2 className="sr-only">Listener content</h2>
             {/* YouTube embed covers the panel corner — omit there. Flow/Suno/SC/guest pages can like. */}
             {mainContentView === 'song' &&

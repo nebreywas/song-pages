@@ -37,6 +37,7 @@
 |----------|----------|
 | [guest-rendering-security.md](./guest-rendering-security.md) | Song page webviews, navigation, CSP |
 | [security-model-and-completed-actions.md](./security-model-and-completed-actions.md) | Trust boundaries, shell vs guest, checklist |
+| [packaged-app-serving.md](./packaged-app-serving.md) | Packaged renderer served over `http://localhost` (YouTube origin fix), window load targets, navigation policy |
 
 ### Publishing & manifests
 
@@ -92,6 +93,7 @@ Implemented features may still reference archived specs from code (`@see documen
 | `electron/database.js`, `electron/listener/*` | persistence-philosophy.md, settings-and-persistence.md |
 | `electron/listener/userPlaylists.js` | persistence-philosophy.md (snapshots) |
 | `shared/providers/*`, `electron/listener/youtube/`, `flow/`, `sunoDemo/` | third-party-integrations.md |
+| `electron/appServer.js`, window load targets, `trustedWindowNavigation.js` | packaged-app-serving.md |
 | `src/playback/*`, `shared/playback/*` | playback-session-architecture.md |
 | `src/audio/*` | audio-pipeline.md, audio-systems-baseline.md |
 | `src/vc-mode/*`, `src/vc-window/*` | vc-mode-architecture.md |

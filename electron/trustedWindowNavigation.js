@@ -21,10 +21,12 @@ const { devServerOrigin } = require('./devServer');
  */
 function resolveAllowedDocumentUrl(loadTarget, isPackaged) {
   const target = String(loadTarget);
-  if (!isPackaged) {
-    const parsed = new URL(target);
-    return parsed.href;
+  // Any explicit URL (dev server, or the packaged loopback static server, or an
+  // already-formed file:// URL) is used as-is.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) {
+    return new URL(target).href;
   }
+  // Legacy fallback: a bare filesystem path → file URL.
   const absolute = path.isAbsolute(target) ? target : path.resolve(target);
   return pathToFileURL(absolute).href;
 }
@@ -86,6 +88,20 @@ function logNavigationDenial(role, eventType, destination, reason) {
 function installTrustedNavigationPolicy(win, options) {
   const { role, allowedDocumentUrl, isPackaged } = options;
   const contents = win.webContents;
+
+  // Persist renderer warnings/errors to the main-process log file. Packaged
+  // builds have no DevTools open by default, so this is the only way to see
+  // renderer-side failures (e.g. YouTube "[youtube] player error") after the
+  // fact. Chromium levels: 0 verbose, 1 info, 2 warning, 3 error — we keep 2+.
+  contents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level < 2) return;
+    const payload = { role, source: sanitizeUrlForLog(sourceId), line };
+    if (level >= 3) {
+      logger.error(`[renderer] ${message}`, payload);
+    } else {
+      logger.warn(`[renderer] ${message}`, payload);
+    }
+  });
 
   contents.on('will-navigate', (event, url) => {
     if (isAllowedTrustedNavigation(url, allowedDocumentUrl, isPackaged)) {

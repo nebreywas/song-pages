@@ -8,7 +8,6 @@ const { pathToFileURL } = require('url');
 const logger = require('./logger');
 const commandService = require('./commands/commandService');
 const controllerWindow = require('./controllerWindow');
-const { devServerUrl } = require('./devServer');
 const {
   installTrustedNavigationPolicy,
   resolveAllowedDocumentUrl,
@@ -140,10 +139,11 @@ function applyProjectionWindow(bounds) {
 }
 
 function vcLoadTarget() {
-  if (!require('electron').app.isPackaged) {
-    return devServerUrl('/vc-window/vc.html');
-  }
-  return path.join(__dirname, '..', 'dist', 'vc-window', 'vc.html');
+  // Dev → Vite; packaged → loopback static server (http origin for YouTube).
+  return require('./appServer').appDocUrl(
+    '/vc-window/vc.html',
+    require('electron').app.isPackaged,
+  );
 }
 
 function sendToVc(channel, payload) {
@@ -326,11 +326,9 @@ function openVcWindow(mainWindow, options = {}) {
     }
   });
 
-  if (!isPackaged) {
-    vcWindow.loadURL(loadTarget);
-  } else {
-    vcWindow.loadFile(loadTarget);
-  }
+  // loadTarget is always a URL now (http in both dev and packaged; file:// only
+  // as a fallback), so loadURL handles every case.
+  vcWindow.loadURL(loadTarget);
 
   logger.info('VC Mode window opened');
   return { ok: true };
@@ -367,6 +365,23 @@ function getMainWindowRef() {
   return mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null;
 }
 
+/**
+ * Register the main listener window at app startup.
+ *
+ * Why: the projector (visualizer window) reports playback events — most
+ * importantly `youtubeEnded` — back to the main window over the VC transport
+ * channel (`forwardVcTransport`). That channel targets `mainWindowRef`, which
+ * was previously only assigned inside `openVcWindow`. In the mini-player
+ * YouTube-compliance flow the projector opens WITHOUT VC mode ever running, so
+ * `mainWindowRef` stayed null and the projector's `youtubeEnded` was silently
+ * dropped — the video stalled on its last frame and never advanced. Setting the
+ * ref up front makes the projector→main transport reliable regardless of
+ * whether VC mode has been opened.
+ */
+function setMainWindowRef(mainWindow) {
+  mainWindowRef = mainWindow ?? null;
+}
+
 module.exports = {
   openVcWindow,
   closeVcWindow,
@@ -375,6 +390,7 @@ module.exports = {
   isVcFullScreen,
   getVcWindow,
   getMainWindowRef,
+  setMainWindowRef,
   syncCommandWindowRefs,
   sendVcState,
   sendVcFrame,

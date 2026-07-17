@@ -5,7 +5,6 @@ const { BrowserWindow } = require('electron');
 const path = require('path');
 const logger = require('./logger');
 const commandService = require('./commands/commandService');
-const { devServerUrl } = require('./devServer');
 const {
   installTrustedNavigationPolicy,
   resolveAllowedDocumentUrl,
@@ -26,10 +25,11 @@ function applyControllerAlwaysOnTop() {
 }
 
 function controllerLoadTarget() {
-  if (!require('electron').app.isPackaged) {
-    return devServerUrl('/controller-window/controller.html');
-  }
-  return path.join(__dirname, '..', 'dist', 'controller-window', 'controller.html');
+  // Dev → Vite; packaged → loopback static server (consistent origin).
+  return require('./appServer').appDocUrl(
+    '/controller-window/controller.html',
+    require('electron').app.isPackaged,
+  );
 }
 
 function syncWindowRefs() {
@@ -93,11 +93,8 @@ function openControllerWindow(mainWindow) {
     commandService.broadcastGateState();
   });
 
-  if (!isPackaged) {
-    controllerWindow.loadURL(loadTarget);
-  } else {
-    controllerWindow.loadFile(loadTarget);
-  }
+  // loadTarget is always a URL now (http in both dev and packaged).
+  controllerWindow.loadURL(loadTarget);
 
   syncWindowRefs();
   logger.info('VC Controller window opened');

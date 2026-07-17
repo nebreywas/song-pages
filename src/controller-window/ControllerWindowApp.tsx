@@ -43,6 +43,9 @@ export function ControllerWindowApp() {
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submissionBusy, setSubmissionBusy] = useState(false);
+  const [memeInput, setMemeInput] = useState('');
+  const [memeBusy, setMemeBusy] = useState(false);
+  const [memeError, setMemeError] = useState<string | null>(null);
   const submissionInputRef = useRef<HTMLInputElement>(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
 
@@ -211,6 +214,50 @@ export function ControllerWindowApp() {
     getApp()?.vc?.togglePlayLockReleaseOnNext?.();
   };
 
+  const activeMeme = vcState?.activeMeme ?? null;
+
+  // Does the active surface actually have somewhere to show a meme?
+  const hasMemeSurface = useMemo(() => {
+    const cfg = vcState?.config;
+    if (!cfg) return false;
+    const regions = [...(cfg.cells ?? []), ...Object.values(cfg.floatContent ?? {})];
+    return regions.some(
+      (region) => region?.slotA === 'meme-surface' || region?.slotB === 'meme-surface',
+    );
+  }, [vcState?.config]);
+
+  const clearMeme = () => {
+    getApp()?.vc?.clearMeme?.();
+    setMemeError(null);
+  };
+
+  const sendMeme = async () => {
+    const raw = memeInput.trim();
+    if (!raw || memeBusy) return;
+    // Typing CLEAR in the field is a quick way to wipe the current meme.
+    if (raw.toUpperCase() === 'CLEAR') {
+      clearMeme();
+      setMemeInput('');
+      return;
+    }
+    const app = getApp();
+    if (!app?.vc?.resolveMeme || !app.vc.showMeme) {
+      setMemeError('Memes are unavailable in this build. Restart the app.');
+      return;
+    }
+    setMemeBusy(true);
+    setMemeError(null);
+    const result = await app.vc.resolveMeme(raw);
+    setMemeBusy(false);
+    if (!result.ok) {
+      setMemeError(result.error);
+      return;
+    }
+    app.vc.showMeme(result.media);
+    setMemeInput('');
+    showInvokeFeedback(`Meme projected (${result.media.mediaType})`);
+  };
+
   const submissionPlaylistId = vcState?.config.defaultSubmissionPlaylistId ?? null;
 
   const handleSubmissionPaste = async (event: React.ClipboardEvent<HTMLInputElement>) => {
@@ -326,6 +373,56 @@ export function ControllerWindowApp() {
           {submissionError ? (
             <p className="controller-submission-error" role="alert">
               {submissionError}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {vcState ? (
+        <section className="controller-meme">
+          <div className="controller-meme-field">
+            <span className="controller-meme-label">Meme Field</span>
+            <div className="controller-meme-row">
+              <input
+                type="text"
+                className="controller-meme-input"
+                placeholder="Paste a .gif / .png / .webp / .mp4 URL… (or type CLEAR)"
+                value={memeInput}
+                disabled={memeBusy}
+                onChange={(event) => setMemeInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void sendMeme();
+                }}
+              />
+              <button
+                type="button"
+                className="btn controller-meme-send"
+                onClick={() => void sendMeme()}
+                disabled={memeBusy || !memeInput.trim()}
+              >
+                {memeBusy ? '…' : 'Send'}
+              </button>
+              <button
+                type="button"
+                className="btn controller-meme-clear"
+                onClick={clearMeme}
+                disabled={!activeMeme}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          {!hasMemeSurface ? (
+            <p className="controller-meme-hint">
+              Assign a “Meme Surface” region in the VC designer to project memes.
+            </p>
+          ) : null}
+          {activeMeme ? (
+            <p className="controller-meme-active">Showing {activeMeme.media.mediaType}</p>
+          ) : null}
+          {memeError ? (
+            <p className="controller-submission-error" role="alert">
+              {memeError}
             </p>
           ) : null}
         </section>

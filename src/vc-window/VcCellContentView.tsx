@@ -13,6 +13,7 @@ import { getVisualizer } from '../visualizers/registry';
 import { isVcYoutubeSong } from '@shared/youtube/youtubeFeature';
 import { isVcSoundcloudSong } from '@shared/soundcloud/soundcloudFeature';
 import { VisualizerPluginHost } from '../visualizers/VisualizerPluginHost';
+import { VcMemeSurfaceView } from './VcMemeSurfaceView';
 import { VcResolvedContentView } from './VcResolvedContentView';
 import { VcSoundcloudPlayer } from './VcSoundcloudPlayer';
 import { VcVisualizerNameBar } from './VcVisualizerNameBar';
@@ -67,6 +68,12 @@ export function VcCellContentView({
       state.config.gridDesign,
     ],
   );
+
+  // Meme Surface is a live/transient region: its media comes from the host via
+  // state.activeMeme (not the resolved config content), so short-circuit here.
+  if (content === 'meme-surface') {
+    return <VcMemeSurfaceView key={state.activeMeme?.token ?? 'empty'} meme={state.activeMeme ?? null} />;
+  }
 
   if (resolved.kind === 'empty') {
     return <div className="vc-cell-empty" />;

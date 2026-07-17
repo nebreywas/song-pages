@@ -7,7 +7,10 @@ import type { PlaybackSession } from '../playback/types';
 import { usePlaybackSnapshot } from '../playback/hooks/usePlaybackSnapshot';
 import { buildCommandRuntimeContextFromSnapshot } from '../playback/projections/buildCommandRuntimeContextFromSnapshot';
 import { buildVcStateFromSnapshot } from '../playback/projections/buildVcStateFromSnapshot';
-import { configUsesVisualizer, normalizeVcConfig } from '@shared/vcModeTypes';
+import { configUsesVisualizer, findMemeTimer, normalizeVcConfig } from '@shared/vcModeTypes';
+import type { ActiveMeme } from '@shared/memes/types';
+import { sanitizeMemeSettings } from '@shared/memes/sanitizeMemeSettings';
+import { applyMemeTimer } from '@shared/memes/memeTimer';
 import { isYoutubeSong, youtubeVideoIdFromSong } from '@shared/youtube/youtubeFeature';
 import { isSoundcloudSong, soundcloudPermalinkFromSong } from '@shared/soundcloud/soundcloudFeature';
 import { resolveSunoDemoManifestUrl } from '@shared/demo/sunoDemoFeature';
@@ -178,6 +181,15 @@ export function useVcModeManager({
   const activeConfigSourceRef = useRef<'default' | 'settings' | 'start'>('default');
 
   const [reportedVisualizerId, setReportedVisualizerId] = useState<string | null>(null);
+  const reportedVisualizerIdRef = useRef<string | null>(null);
+  reportedVisualizerIdRef.current = reportedVisualizerId;
+  // Pins the live visualizer across surface switches so switching designs does
+  // not change the running visualizer. Applied only to the outgoing state
+  // payload — never to activeConfig, so each design's stored visualizerId is
+  // preserved. Baseline = the switched-in design's own visualizerId, used to
+  // detect (and honor) an intentional visualizer change afterwards.
+  const surfaceVisualizerOverrideRef = useRef<string | null>(null);
+  const surfaceVisualizerBaselineRef = useRef<string | null>(null);
   const prevVcOpenRef = useRef(false);
   const kudos = useKudoPresets();
 
@@ -232,6 +244,8 @@ export function useVcModeManager({
 
     if (!vcOpen) {
       setReportedVisualizerId(null);
+      surfaceVisualizerOverrideRef.current = null;
+      surfaceVisualizerBaselineRef.current = null;
       return;
     }
 
@@ -239,6 +253,17 @@ export function useVcModeManager({
       setReportedVisualizerId(normalizeExperienceId(activeConfig.visualizerId));
     }
   }, [vcOpen, activeConfig.visualizerId]);
+
+  // Release the surface visualizer pin once the configured visualizer changes
+  // intentionally (e.g. the host picks a new one in the designer) so that choice
+  // takes effect instead of being masked by the pin.
+  useEffect(() => {
+    if (surfaceVisualizerOverrideRef.current == null) return;
+    if (normalizeExperienceId(activeConfig.visualizerId) !== surfaceVisualizerBaselineRef.current) {
+      surfaceVisualizerOverrideRef.current = null;
+      surfaceVisualizerBaselineRef.current = null;
+    }
+  }, [activeConfig.visualizerId]);
 
   const vcVisualizerId = useMemo(
     () => reportedVisualizerId ?? normalizeExperienceId(activeConfig.visualizerId),
@@ -360,8 +385,22 @@ export function useVcModeManager({
     };
   }, [artists, designerSong?.artist_id, designerSong?.id]);
 
+  // Transient meme projected onto a `meme-surface` region. Kept in a ref (not
+  // React state) so updates don't churn the memoized state-payload builder;
+  // the projector receives it via the regular VcStatePayload broadcast.
+  const activeMemeRef = useRef<ActiveMeme | null>(null);
+  const memeTokenRef = useRef(0);
+  const memeClearTimerRef = useRef<number | null>(null);
+
   const buildStatePayload = useCallback((): VcStatePayload => {
-    const config = normalizeVcConfig(activeConfig);
+    const baseConfig = normalizeVcConfig(activeConfig);
+    // Keep the running visualizer pinned across surface switches (override is
+    // set in switchVcSurface). Only the payload is affected; activeConfig — and
+    // thus persistence — retains each design's own visualizerId.
+    const surfaceVisualizerOverride = surfaceVisualizerOverrideRef.current;
+    const config = surfaceVisualizerOverride
+      ? { ...baseConfig, visualizerId: surfaceVisualizerOverride }
+      : baseConfig;
     const displaySong = playingSong ?? previewSong ?? null;
     const loadedManifestUrl = loadedManifestUrlRef.current;
     const activeManifest = activeManifestForSong(displaySong, songManifest, loadedManifestUrl);
@@ -394,14 +433,17 @@ export function useVcModeManager({
       artistName: vcArtistDisplayName(displaySong, artistProfile, activeManifest?.artistName),
       artistBio: artistProfile?.artist_bio ?? null,
       artistPhotoUrl: resolveAssetUrl(artistProfile?.site_url, artistProfile?.artist_photo_url ?? null),
-      effectiveVisualizerId: vcVisualizerId,
       kudoPresets: kudos.presets,
       specialPlayPause: projected.specialPlayPause,
       surfaceDesigns: getVcSurfaceDesignPickerState(),
       lyricsSourceReady: lyricsSourceReadyForSong(displaySong, loadedManifestUrl),
       playLockEnabled: projected.playLockEnabled,
       playLockReleaseOnNextSong: projected.playLockReleaseOnNextSong,
+      effectiveVisualizerId: surfaceVisualizerOverride ?? vcVisualizerId,
       liveDebugEnabled: liveDebugEnabled === true,
+      // Transient — read from a ref so a new meme doesn't invalidate this
+      // memoized builder (and thus reset the state-push interval).
+      activeMeme: activeMemeRef.current,
     };
   }, [
     activeConfig,
@@ -610,6 +652,12 @@ export function useVcModeManager({
     flushPendingVcPersistRef.current();
     await awaitVcPersistIdle();
 
+    // Preserve the running visualizer across the switch. Capture what's on
+    // screen now (rotation-aware via reportedVisualizerId) and pin it so the
+    // new design's own visualizerId doesn't yank the visuals mid-show.
+    const keepVisualizerId =
+      reportedVisualizerIdRef.current ?? normalizeExperienceId(activeConfigRef.current.visualizerId);
+
     const nextConfig = await switchActiveVcSurfaceDesign(designId, activeConfigRef.current);
     if (!nextConfig) return;
 
@@ -617,7 +665,13 @@ export function useVcModeManager({
     vcSessionDesignIdRef.current = designId;
     activeConfigRef.current = normalized;
     setActiveConfig(normalized);
-    setReportedVisualizerId(normalizeExperienceId(normalized.visualizerId));
+
+    // Pin only the outgoing payload's visualizer — activeConfig keeps the new
+    // design's stored visualizerId so persistence isn't corrupted. Baseline is
+    // that stored id, so a later intentional change releases the pin.
+    surfaceVisualizerOverrideRef.current = keepVisualizerId;
+    surfaceVisualizerBaselineRef.current = normalizeExperienceId(normalized.visualizerId);
+    setReportedVisualizerId(keepVisualizerId);
 
     if (normalized.projectionWindow) {
       await app.vc.open({ projectionWindow: normalized.projectionWindow });
@@ -625,8 +679,8 @@ export function useVcModeManager({
 
     app.vc.sendState({
       ...buildStatePayloadRef.current(),
-      config: normalized,
-      effectiveVisualizerId: normalizeExperienceId(normalized.visualizerId),
+      config: { ...normalized, visualizerId: keepVisualizerId },
+      effectiveVisualizerId: keepVisualizerId,
       surfaceDesigns: getVcSurfaceDesignPickerState(),
     });
   }, [vcOpen]);
@@ -644,6 +698,66 @@ export function useVcModeManager({
       offSwitchSurface();
     };
   }, [switchVcSurface, vcOpen]);
+
+  // Meme Surface — controller pushes a resolved meme; we own the transient
+  // activeMeme state, broadcast it, and auto-clear it per the host's settings.
+  useEffect(() => {
+    const app = getApp();
+    if (!vcOpen || !app?.vc?.onShowMeme || !app.vc.onClearMeme) return;
+
+    const cancelClearTimer = () => {
+      if (memeClearTimerRef.current != null) {
+        window.clearTimeout(memeClearTimerRef.current);
+        memeClearTimerRef.current = null;
+      }
+    };
+
+    const pushMemeState = () => {
+      getApp()?.vc?.sendState(buildStatePayloadRef.current());
+    };
+
+    const clearMeme = () => {
+      cancelClearTimer();
+      if (activeMemeRef.current === null) return;
+      activeMemeRef.current = null;
+      pushMemeState();
+    };
+
+    const offShow = app.vc.onShowMeme((media) => {
+      cancelClearTimer();
+      console.info('[meme] show received', { url: media?.url, mediaType: media?.mediaType });
+      // Per-region timer (set on the meme-surface content settings) overrides the
+      // global default duration / play-indefinitely behavior.
+      const settings = applyMemeTimer(
+        sanitizeMemeSettings(activeConfigRef.current.memeSettings),
+        findMemeTimer(activeConfigRef.current),
+      );
+      const token = (memeTokenRef.current += 1);
+      activeMemeRef.current = { media, token, startedAt: Date.now(), settings };
+      pushMemeState();
+
+      // Duration-based clear lives here (main renderer) so it survives a
+      // projector reload/request-sync. Roundtrip-based clear (video only) is
+      // driven by the projector, which calls clearMeme() when its loop count
+      // AND the minimum duration are both satisfied ("whichever is greater").
+      const roundtripDriven = settings.minRoundtrips > 0 && media.mediaType === 'video';
+      if (!settings.playIndefinitely && !roundtripDriven) {
+        memeClearTimerRef.current = window.setTimeout(() => {
+          memeClearTimerRef.current = null;
+          activeMemeRef.current = null;
+          pushMemeState();
+        }, settings.durationSeconds * 1000);
+      }
+    });
+
+    const offClear = app.vc.onClearMeme(() => clearMeme());
+
+    return () => {
+      offShow();
+      offClear();
+      cancelClearTimer();
+    };
+  }, [vcOpen]);
 
   // Play Lock toggles are wired in usePlaybackTransportAdapters (Phase 4).
 

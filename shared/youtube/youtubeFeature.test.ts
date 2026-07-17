@@ -20,7 +20,10 @@ test('parseYoutubeVideoId accepts bare ids and watch URLs', () => {
 
 test('parseYoutubeVideoId rejects invalid input', () => {
   assert.equal(parseYoutubeVideoId(''), null);
-  assert.equal(parseYoutubeVideoId('not-a-video'), null);
+  // Bare 11-char [\w-] strings are valid video-id shapes (opaque YouTube ids),
+  // so use genuinely invalid input: wrong length and disallowed characters.
+  assert.equal(parseYoutubeVideoId('nope'), null);
+  assert.equal(parseYoutubeVideoId('not a video!'), null);
 });
 
 test('canonicalizeYoutubeInput strips playlist, radio, and timestamp params', () => {

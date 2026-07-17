@@ -6,6 +6,7 @@ import {
 } from '@shared/listener/playlistLengthSettings';
 import {
   normalizeSongPageFontIncreaseLevel,
+  normalizeYoutubeMiniPlayerBehavior,
   type ListenerPlayerSettings,
 } from '@shared/listener/playerSettings';
 import type { LiveDebugSettings } from '@shared/liveDebug/settings';
@@ -151,6 +152,29 @@ export function SettingsModal({
               <p className="settings-hint">
                 Steps 1–4 enlarge text on song pages above each page’s own default. Pages built with
                 relative units respond best; artist pages are responsible for their own layout.
+              </p>
+
+              <label className="settings-select-field">
+                <span>YouTube video in mini-player</span>
+                <select
+                  value={playerSettings.youtubeMiniPlayerBehavior}
+                  onChange={(event) =>
+                    onPlayerSettingsChange({
+                      ...playerSettings,
+                      youtubeMiniPlayerBehavior: normalizeYoutubeMiniPlayerBehavior(
+                        event.target.value,
+                      ),
+                    })
+                  }
+                >
+                  <option value="projector">Show in a small projector window</option>
+                  <option value="expand">Expand the player, then restore</option>
+                  <option value="skip">Skip YouTube songs</option>
+                </select>
+              </label>
+              <p className="settings-hint">
+                YouTube requires its video to stay visible while playing. Mini-player mode hides the
+                video, so pick how to keep things compliant when a YouTube track plays there.
               </p>
             </section>
 

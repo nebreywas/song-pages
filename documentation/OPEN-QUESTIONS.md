@@ -87,6 +87,18 @@ Canonical audio rules: [audio-pipeline.md](./audio-pipeline.md).
 
 ---
 
+## Code health & tooling (batch pass — deferred)
+
+Noted 2026-07-17 during a general review. None are runtime-breaking today (Vite/esbuild transpile without full type-checking); batch them rather than chasing piecemeal.
+
+| Item | Notes | Trigger to revisit |
+|------|-------|-------------------|
+| `tsc --noEmit` reports ~50 type errors | Concentrated in `src/vc-mode/**`, `src/vc-window/**`, `src/visualizers/**` (butterchurn missing `.d.ts`, `BaseAudioContext` vs `AudioContext`, `RegionTarget.id`, readonly-tuple assignments). None touch playback/listener. | When VC/visualizer areas feel feature-complete; drive count to 0 |
+| No `typecheck` / `lint` npm scripts | Add `"typecheck": "tsc --noEmit"` (and consider ESLint) so type errors become a usable gate | Same pass as above, or when CI is set up |
+| `meydaLab narrative` unit test failing | Heuristic threshold assertion in the dev-only Meyda Lab (`src/audio/meydaLab/narrative.test.ts`); not shipping-critical | Meyda Lab tuning work |
+
+---
+
 ## Content editor (upcoming)
 
 No persistence schema committed yet. When editor work starts:

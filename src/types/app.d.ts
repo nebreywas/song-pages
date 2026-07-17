@@ -625,7 +625,12 @@ declare global {
         }>;
       };
       visualizer: {
-        open: (options?: { fullscreen?: boolean; displayId?: number | null }) => Promise<{ ok: boolean; error?: string }>;
+        open: (options?: {
+          fullscreen?: boolean;
+          displayId?: number | null;
+          width?: number;
+          height?: number;
+        }) => Promise<{ ok: boolean; error?: string }>;
         close: () => Promise<{ ok: boolean; error?: string }>;
         setTitle: (title: string) => Promise<{ ok: boolean; error?: string }>;
         setFullScreen: (fullscreen: boolean) => Promise<{ ok: boolean; error?: string }>;
@@ -701,9 +706,21 @@ declare global {
         togglePlayLockReleaseOnNext: () => void;
         setPlayLockReleaseOnNext: (enabled: boolean) => void;
         notifySubmissionPlaylistUpdated: (playlistId: number) => void;
+        resolveMeme: (
+          rawInput: string,
+        ) => Promise<
+          | { ok: true; media: import('@shared/memes/types').ResolvedMeme }
+          | { ok: false; error: string }
+        >;
+        showMeme: (media: import('@shared/memes/types').ResolvedMeme) => void;
+        clearMeme: () => void;
         onTogglePlayLock: (callback: () => void) => () => void;
         onTogglePlayLockReleaseOnNext: (callback: () => void) => () => void;
         onSetPlayLockReleaseOnNext: (callback: (enabled: boolean) => void) => () => void;
+        onShowMeme: (
+          callback: (media: import('@shared/memes/types').ResolvedMeme) => void,
+        ) => () => void;
+        onClearMeme: (callback: () => void) => () => void;
       };
       hostContent: {
         pickAndImportMedia: (payload: {

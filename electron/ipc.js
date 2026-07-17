@@ -1120,6 +1120,35 @@ function registerIpcHandlers() {
     mainWindow.webContents.send('listener:submission-playlist-updated', playlistId);
   });
 
+  // --- Meme Surface (VC controller → main renderer → projector) ---
+
+  // Resolve a pasted link to a direct media URL (no provider API). Runs in the
+  // main process so it can fetch share pages the renderer's CSP/CORS can't.
+  ipcMain.handle('vc:resolveMeme', async (_event, rawInput) => {
+    const { resolveMemeInput } = require('./memes/resolveMeme');
+    try {
+      return await resolveMemeInput(typeof rawInput === 'string' ? rawInput : '');
+    } catch (error) {
+      logger.warn('Meme resolve failed', { error: String(error) });
+      return { ok: false, error: 'Could not resolve that meme link.' };
+    }
+  });
+
+  // Project an already-resolved meme. The main renderer owns the transient
+  // activeMeme state (timers, clear) and re-broadcasts it on VcStatePayload.
+  ipcMain.on('vc:showMeme', (_event, media) => {
+    if (!media || typeof media !== 'object' || typeof media.url !== 'string') return;
+    const mainWindow = vcWindow.getMainWindowRef();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('vc:show-meme', media);
+  });
+
+  ipcMain.on('vc:clearMeme', () => {
+    const mainWindow = vcWindow.getMainWindowRef();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('vc:clear-meme');
+  });
+
   // --- Command input system ---
 
   const commandService = require('./commands/commandService');

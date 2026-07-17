@@ -21,9 +21,11 @@ import {
   resolveLyricsFadeBackground,
 } from '@shared/vcMode/gridDesign';
 import type { HostContentCatalog } from '@shared/hostContent';
+import { isVcYoutubeSong } from '@shared/youtube/youtubeFeature';
 import {
   emptyCell,
   normalizeVcConfig,
+  type VcCellAssignment,
   type VcModeConfig,
   type VcStatePayload,
 } from '@shared/vcModeTypes';
@@ -57,6 +59,20 @@ function formatRegionSize(width: number, height: number): string {
 
 /** Wide grab strip for layout mode — grid lines are often 0–1px and ungrabbable fullscreen. */
 const LAYOUT_DIVIDER_HIT_PX = 16;
+
+/**
+ * YouTube TOS experiment: nothing may obstruct a playing YouTube video. While a
+ * YouTube embed is on screen we lift the region hosting it above the sibling
+ * kudos (z 30) and overlay (z 40) layers. This value only takes effect once the
+ * surface drops its `isolation: isolate` (see `.vc-surface--yt-priority`), which
+ * otherwise traps every region z-index below those sibling layers.
+ */
+const YOUTUBE_PRIORITY_Z = 60;
+
+/** A region hosts the YouTube embed when it carries a visualizer slot (the slot the YT embed borrows). */
+function cellHasVisualizerSlot(cell: VcCellAssignment): boolean {
+  return cell.slotA === 'visualizer' || cell.slotB === 'visualizer';
+}
 
 function layoutDividerStyle(isVertical: boolean): React.CSSProperties {
   const visual = 5;
@@ -130,6 +146,16 @@ export function VcSurface({
   const fullscreenGraphic = hasActiveFullscreenGraphic(config.gridDesign);
   const surfaceBackground = fullscreenGraphic ? 'transparent' : config.gridDesign.backgroundColor;
 
+  // YouTube TOS experiment: when the current song is a YouTube embed, the region
+  // showing it must sit above everything (kudos, overlays, other floats). Only
+  // in live mode — layout mode has its own chrome/stacking.
+  const currentSong = state.currentSong;
+  const youtubePriority =
+    !layoutMode &&
+    !!currentSong &&
+    isVcYoutubeSong(currentSong) &&
+    !!currentSong.youtubeVideoId;
+
   const regionSelected = (target: VcLayoutSelection): boolean => {
     if (!selection || !target) return false;
     if (selection.kind === 'area' && target.kind === 'area') {
@@ -154,7 +180,7 @@ export function VcSurface({
         ref={surfaceRef}
         className={`vc-surface${layoutClass}${gridLinesHiddenClass}${
           fullscreenGraphic ? ' vc-has-fullscreen-graphic' : ''
-        }`}
+        }${youtubePriority ? ' vc-surface--yt-priority' : ''}`}
         style={
           {
             background: surfaceBackground,
@@ -182,6 +208,9 @@ export function VcSurface({
               style={{
                 ...rectStyle(area, regionEdgeBleedPx),
                 background: areaBackground,
+                ...(youtubePriority && cellHasVisualizerSlot(cell)
+                  ? { zIndex: YOUTUBE_PRIORITY_Z }
+                  : {}),
                 '--vc-lyrics-fade-bg': resolveLyricsFadeBackground(
                   areaBackground,
                   config.gridDesign.backgroundColor,
@@ -237,7 +266,12 @@ export function VcSurface({
               className={`vc-surface-region vc-surface-float${layoutMode ? ' vc-layout-region vc-layout-float' : ''}${selected ? ' is-layout-selected' : ''}${isDragging ? ' is-layout-dragging' : ''}`}
               style={{
                 ...rectStyle(float, regionEdgeBleedPx),
-                zIndex: layoutMode ? 40 + float.zIndex : 10 + float.zIndex,
+                zIndex:
+                  youtubePriority && cellHasVisualizerSlot(cell)
+                    ? YOUTUBE_PRIORITY_Z
+                    : layoutMode
+                      ? 40 + float.zIndex
+                      : 10 + float.zIndex,
                 ...(layoutMode || !isRegionBorderVisible(float, config.gridDesign)
                   ? {}
                   : floatOutlineCssForFloat(float, config.gridDesign)),

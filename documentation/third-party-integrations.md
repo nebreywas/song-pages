@@ -227,6 +227,71 @@ Add a new purpose per provider; do not widen existing purposes to “make it wor
 
 **Rejected:** Playlists as browsing sessions, private/unlisted behavior beyond what oEmbed/embed allows, any non-canonical URL we cannot reduce to one video id.
 
+> **Origin requirement:** The IFrame Player API needs a real `http(s)` page origin with a
+> **hostname** (not an IP). Packaged builds serve the renderer over `http://localhost` instead of
+> `file://` — a `file://` origin triggers "Error 153", and an IP origin like `127.0.0.1` triggers
+> YouTube's "Video unavailable" embed error. See [packaged-app-serving.md](./packaged-app-serving.md).
+
+#### Compliance guardrails (keep us within YouTube's terms)
+
+We embed via YouTube's own **official IFrame Player API** and keep the player **visible**, so ads and
+Premium behave exactly as on youtube.com. This is the sanctioned embedding path. To stay compliant,
+the following are **hard "never" rules** for any future YouTube work — they also happen to be
+counter to the product experience, so there is no tension here:
+
+- **Never** add an audio-only / hidden-player mode for YouTube tracks (no obscuring, shrinking to
+  zero, or offscreening the player to extract audio).
+- **Never** tap YouTube audio into the Web Audio / analyser / visualizer graph. (YouTube FX/visualizer
+  is intentionally N/A — see the Playback row above.)
+- **Never** download, cache, or re-host YouTube streams. Playback is live through the iframe only;
+  `songpages-cache:` is for our own manifest/artwork assets, never YouTube media.
+- **Never** block, skip, or strip ads programmatically.
+
+**Keep the player unobstructed (VC mode):** in the VC projector, while a YouTube embed is on screen
+the region hosting it is lifted above all other layers (kudos, overlays, other floats) so nothing
+covers the video. This is implemented in `src/vc-window/VcSurface.tsx` (`youtubePriority` +
+`YOUTUBE_PRIORITY_Z`) by dropping `.vc-surface`'s `isolation: isolate` via the
+`.vc-surface--yt-priority` class (`src/vc-window/vc-window.css`), which otherwise traps region
+z-indexes below the sibling kudos/overlay layers. Trigger: `state.currentSong` is a YouTube song with
+a `youtubeVideoId` (live mode only). Consequence: kudos/overlays raised during a YouTube song render
+behind the video region rather than over it.
+
+**Keep the player visible in mini-player mode (main listener):** minified ("mini-player") mode hides
+the in-window song page — and with it the YouTube embed — which would leave the video playing but
+invisible. So when a YouTube track plays while minified we mitigate per a user setting
+(`playerSettings.youtubeMiniPlayerBehavior`, Settings → Player; default `'projector'`):
+`'projector'` pops the embed into a small (400×300) Projector window, `'expand'` temporarily leaves
+mini-player for the track then restores it, and `'skip'` skips YouTube tracks while minified. The logic
+is a single effect in `src/listener/ListenerMode.tsx` keyed on `[chromeMinified, playingIsYoutube, …]`;
+the compact Projector size is threaded through `visualizer.openWindow({ mode: 'video', width, height })`
+→ `electron/visualizerWindow.js` (which relaxes its min-size floor for the compact path). No mitigation
+runs when VC is already showing the embed (`vcYoutubeCaptureActive`) since the video is visible there.
+Opening is re-checked on **every play attempt** (the effect depends on `isPlaying`): whenever a YouTube
+video is actually playing in mini-player and no projector is up, the compliance window (re)opens — so
+replaying a song or playing one after a skip pops the window again. Because minify hides the embed with
+`display:none` (which Chromium can suspend, dropping `isPlaying`), taking the minify action over a
+playing YouTube track **restarts the track at its current position** (`prevMinifiedForYoutubeRef` →
+`playSongRef`); `playSong` sets `isPlaying=true` programmatically, which re-fires the open effect and
+hands the video to the projector even if the hidden embed was suspended. If the user **closes** the
+compliance Projector window while it's still needed (mini-player + YouTube playing), the effect skips to
+the next song rather than leaving a hidden video — tracked via `projectorComplianceRef`
+(`idle` → `opening` → `open`), so closing our window means "skip it," and to keep the window closed the
+user simply doesn't play the YouTube song. Pausing keeps the window open (the track is still YouTube).
+`'skip'` downgrades to `'projector'` when the whole playlist is YouTube (`hasNonYoutubeSong` is false).
+
+**Don't cover the player with the VC designer (main listener):** opening the VC designer overlay
+(`vc.modalOpen`) covers the main-window YouTube embed, obstructing the playing video. An effect in
+`src/listener/ListenerMode.tsx` watches `vc.modalOpen` and, when a YouTube track is playing, jumps
+straight to the next non-YouTube entry in the current playlist (`findNextNonYoutubeSong` +
+`playSongRef`) — or pauses if the whole playlist is YouTube — so nothing keeps playing behind the
+overlay. Jumping directly (rather than dispatching `NEXT`) is reliable even when the YouTube track is
+last with repeat off, where `NEXT` would no-op and leave the video playing.
+
+Also expected of any app using the embed (paperwork, not code): use is subject to the **YouTube API
+Services Terms of Service** and **Developer Policies**, and our own Terms/Privacy should link to
+YouTube's ToS and Google's Privacy Policy. `oEmbed` metadata use is fine at this scale — do not build
+a bulk-harvesting pipeline on it.
+
 Detail: [youtube-provider-investigation.md](./youtube-provider-investigation.md)
 
 ---

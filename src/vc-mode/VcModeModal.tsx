@@ -32,6 +32,7 @@ import {
   type VcTemplateId,
 } from '@shared/vcModeTypes';
 import { DEFAULT_VC_PLAYBACK_EFFECTS_MIRROR } from '@shared/vcMode/playbackEffectsMirror';
+import { DEFAULT_MEME_SETTINGS, type MemeSettings } from '@shared/memes/types';
 import {
   VC_SPECIAL_PLAY_STYLE_OPTIONS,
   type VcSpecialPlayStyle,
@@ -464,6 +465,15 @@ export function VcModeModal({
     setConfig((prev) => normalizeVcConfig({ ...prev, gridDesign }));
   };
 
+  const updateMemeSettings = (patch: Partial<MemeSettings>) => {
+    setConfig((prev) =>
+      normalizeVcConfig({
+        ...prev,
+        memeSettings: { ...(prev.memeSettings ?? DEFAULT_MEME_SETTINGS), ...patch },
+      }),
+    );
+  };
+
   const handleStart = async () => {
     const normalized = normalizeVcConfig(config);
     const validationError = validateConfigForStart(normalized);
@@ -786,6 +796,100 @@ export function VcModeModal({
                     <HelpTooltip ariaLabel="About auto-skipping long songs in VC">
                       Applied when VC Mode starts and when new tracks are added during a session. Skipped
                       songs stay in the playlist but are excluded from playback until you restore them.
+                    </HelpTooltip>
+                  </div>
+
+                  <div className="vc-settings-checkbox-row">
+                    <label className="vc-field vc-field-inline vc-settings-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={(config.memeSettings ?? DEFAULT_MEME_SETTINGS).clickClears}
+                        onChange={(e) => updateMemeSettings({ clickClears: e.target.checked })}
+                      />
+                      <span>Clicking clears the meme</span>
+                    </label>
+                    <HelpTooltip ariaLabel="About clicking to clear a meme">
+                      When enabled, clicking a projected meme on the Meme Surface removes it immediately.
+                    </HelpTooltip>
+                  </div>
+
+                  <div className="vc-settings-checkbox-row">
+                    <label className="vc-field vc-field-inline vc-settings-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={(config.memeSettings ?? DEFAULT_MEME_SETTINGS).playIndefinitely}
+                        onChange={(e) => updateMemeSettings({ playIndefinitely: e.target.checked })}
+                      />
+                      <span>Play memes indefinitely (until the next meme or CLEAR)</span>
+                    </label>
+                    <HelpTooltip ariaLabel="About playing memes indefinitely">
+                      When enabled, a projected meme loops forever until the host sends another meme or
+                      clears the Meme Field. Overrides the timed / roundtrip auto-clear below.
+                    </HelpTooltip>
+                  </div>
+
+                  <div className="vc-settings-checkbox-row vc-settings-checkbox-row-indent">
+                    <label className="vc-field vc-field-inline vc-settings-checkbox-label">
+                      <span>
+                        Auto-clear after{' '}
+                        <input
+                          type="number"
+                          className="vc-settings-minutes-input"
+                          min={1}
+                          max={600}
+                          step={1}
+                          value={(config.memeSettings ?? DEFAULT_MEME_SETTINGS).durationSeconds}
+                          disabled={(config.memeSettings ?? DEFAULT_MEME_SETTINGS).playIndefinitely}
+                          onChange={(e) =>
+                            updateMemeSettings({
+                              durationSeconds: Number.parseInt(e.target.value, 10),
+                            })
+                          }
+                        />{' '}
+                        seconds{' '}
+                        <span className="vc-field-inline-note">
+                          or{' '}
+                          <input
+                            type="number"
+                            className="vc-settings-minutes-input"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={(config.memeSettings ?? DEFAULT_MEME_SETTINGS).minRoundtrips}
+                            disabled={(config.memeSettings ?? DEFAULT_MEME_SETTINGS).playIndefinitely}
+                            onChange={(e) =>
+                              updateMemeSettings({
+                                minRoundtrips: Number.parseInt(e.target.value, 10),
+                              })
+                            }
+                          />{' '}
+                          loops (video), whichever is greater
+                        </span>
+                      </span>
+                    </label>
+                    <HelpTooltip ariaLabel="About meme auto-clear timing">
+                      The meme stays until BOTH the seconds elapse AND the minimum loop count completes
+                      (whichever is greater). Loop counting works only for video memes (MP4/WebM) — GIFs
+                      have no loop event, so they clear on the seconds value alone.
+                    </HelpTooltip>
+                  </div>
+
+                  <div className="vc-settings-checkbox-row vc-settings-checkbox-row-indent">
+                    <label className="vc-field vc-field-inline vc-settings-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={(config.memeSettings ?? DEFAULT_MEME_SETTINGS).clearAfterCycle}
+                        disabled={
+                          (config.memeSettings ?? DEFAULT_MEME_SETTINGS).playIndefinitely ||
+                          (config.memeSettings ?? DEFAULT_MEME_SETTINGS).minRoundtrips === 0
+                        }
+                        onChange={(e) => updateMemeSettings({ clearAfterCycle: e.target.checked })}
+                      />
+                      <span>Clear only after a completed loop</span>
+                    </label>
+                    <HelpTooltip ariaLabel="About clearing a meme after a completed loop">
+                      When using a minimum loop count, wait for the current loop to finish before clearing
+                      so the animation is not cut off partway.
                     </HelpTooltip>
                   </div>
 

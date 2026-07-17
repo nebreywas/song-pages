@@ -1,8 +1,11 @@
 /**
  * Application menu — Listener, Artist, Developer, Pretty Lyrics Lab, About modes.
  */
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, Menu, shell, clipboard, dialog } = require('electron');
+const path = require('path');
 const { showAboutPanel } = require('./aboutPanel');
+const logger = require('./logger');
+const { appServerOrigin } = require('./appServer');
 
 /** @type {import('electron').BrowserWindow | null} */
 let mainWindowRef = null;
@@ -26,6 +29,83 @@ function showVcControllerWindow() {
   if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
   const { openControllerWindow } = require('./controllerWindow');
   openControllerWindow(mainWindowRef);
+}
+
+/** Absolute path to the rolling log directory. */
+function logsDir() {
+  return path.join(app.getPath('userData'), 'logs');
+}
+
+/**
+ * Human-readable environment snapshot for support/debugging. Includes the
+ * packaged app server origin so we can confirm the http(s) origin YouTube sees.
+ */
+function gatherDebugInfo() {
+  const lines = [
+    `App: ${app.name} ${app.getVersion()}`,
+    `Packaged: ${app.isPackaged}`,
+    `App server origin: ${appServerOrigin() ?? '(file:// — server not running)'}`,
+    `Platform: ${process.platform} ${process.arch}`,
+    `Electron: ${process.versions.electron}`,
+    `Chrome: ${process.versions.chrome}`,
+    `Node: ${process.versions.node}`,
+    `userData: ${app.getPath('userData')}`,
+    `Logs: ${logsDir()}`,
+  ];
+  return lines.join('\n');
+}
+
+/** Copy the debug snapshot to the clipboard and confirm via a small dialog. */
+function copyDebugInfo() {
+  const info = gatherDebugInfo();
+  clipboard.writeText(info);
+  logger.info('Debug info copied to clipboard');
+  void dialog.showMessageBox({
+    type: 'info',
+    title: 'Debug Info Copied',
+    message: 'Environment details copied to the clipboard.',
+    detail: info,
+    buttons: ['OK'],
+  });
+}
+
+/** Bundle recent logs into one file and reveal it in the OS file manager. */
+function exportLogsFromMenu() {
+  const result = logger.exportLogs();
+  if (result.ok) {
+    shell.showItemInFolder(result.path);
+  } else {
+    void dialog.showMessageBox({
+      type: 'error',
+      title: 'Export Logs Failed',
+      message: result.error ?? 'Unknown error',
+      buttons: ['OK'],
+    });
+  }
+}
+
+/**
+ * Diagnostics submenu — available in ALL builds (packaged included) so a
+ * shipped app can still open DevTools, reach its logs, and report its
+ * environment. Dev builds get the richer Debug menu too (reload, audio panel).
+ */
+function diagnosticsSubmenu(isDev) {
+  const isMac = process.platform === 'darwin';
+  return {
+    label: 'Diagnostics',
+    submenu: [
+      {
+        label: 'Toggle Developer Tools',
+        // Avoid clashing with the dev-only Debug menu's identical accelerator.
+        accelerator: isDev ? undefined : isMac ? 'Alt+Command+I' : 'Ctrl+Shift+I',
+        click: (_item, focusedWindow) => focusedWindow?.webContents.toggleDevTools(),
+      },
+      { type: 'separator' },
+      { label: 'Open Logs Folder', click: () => shell.openPath(logsDir()) },
+      { label: 'Export Logs…', click: () => exportLogsFromMenu() },
+      { label: 'Copy Debug Info', click: () => copyDebugInfo() },
+    ],
+  };
 }
 
 function buildAppMenu(isDev) {
@@ -133,14 +213,13 @@ function buildAppMenu(isDev) {
         },
         {
           label: 'Open SQLite Folder',
-          click: () => {
-            const path = require('path');
-            shell.openPath(path.join(app.getPath('userData'), 'database'));
-          },
+          click: () => shell.openPath(path.join(app.getPath('userData'), 'database')),
         },
       ],
     });
   }
+
+  template.push(diagnosticsSubmenu(isDev));
 
   template.push({
     label: 'Edit',

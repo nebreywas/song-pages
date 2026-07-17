@@ -222,6 +222,12 @@ contextBridge.exposeInMainWorld('app', {
     setPlayLockReleaseOnNext: (enabled) => ipcRenderer.send('vc:setPlayLockReleaseOnNext', enabled === true),
     notifySubmissionPlaylistUpdated: (playlistId) =>
       ipcRenderer.send('vc:notifySubmissionPlaylistUpdated', playlistId),
+    /** Resolve a pasted meme link to direct media (main-process fetch, no API). */
+    resolveMeme: (rawInput) => ipcRenderer.invoke('vc:resolveMeme', rawInput),
+    /** Project an already-resolved meme onto the meme-surface region. */
+    showMeme: (media) => ipcRenderer.send('vc:showMeme', media),
+    /** Clear any projected meme immediately. */
+    clearMeme: () => ipcRenderer.send('vc:clearMeme'),
     onState: (callback) => {
       const handler = (_event, payload) => callback(payload);
       ipcRenderer.on('vc:state', handler);
@@ -316,6 +322,16 @@ contextBridge.exposeInMainWorld('app', {
       const handler = (_event, enabled) => callback(enabled === true);
       ipcRenderer.on('vc:set-play-lock-release-on-next', handler);
       return () => ipcRenderer.removeListener('vc:set-play-lock-release-on-next', handler);
+    },
+    onShowMeme: (callback) => {
+      const handler = (_event, media) => callback(media);
+      ipcRenderer.on('vc:show-meme', handler);
+      return () => ipcRenderer.removeListener('vc:show-meme', handler);
+    },
+    onClearMeme: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('vc:clear-meme', handler);
+      return () => ipcRenderer.removeListener('vc:clear-meme', handler);
     },
   },
 

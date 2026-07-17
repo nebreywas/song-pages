@@ -43,6 +43,37 @@ function youtubeVolumePercent(volume01: number): number {
 }
 
 /**
+ * Map a YouTube IFrame API error code to a user-facing message, and log the raw
+ * code + origin so packaged-build failures are diagnosable.
+ * @see https://developers.google.com/youtube/iframe_api_reference#onError
+ * - 2   invalid parameter (bad video id)
+ * - 5   HTML5 player error
+ * - 100 video removed / private / not found
+ * - 101 / 150 owner disallowed embedding (identical cause; two codes)
+ */
+function describeYoutubeError(code: number | undefined, videoId: string): string {
+  // Logged so a packaged test can report the exact code + the page origin YT saw.
+  console.error('[youtube] player error', {
+    code,
+    videoId,
+    origin: window.location.origin,
+  });
+  switch (code) {
+    case 2:
+      return 'YouTube rejected this video id (invalid parameter).';
+    case 5:
+      return 'YouTube HTML5 player error for this video.';
+    case 100:
+      return 'This video is unavailable (removed, private, or not found).';
+    case 101:
+    case 150:
+      return 'The uploader has disabled embedding for this video.';
+    default:
+      return `YouTube playback failed for this video (code ${code ?? 'unknown'}).`;
+  }
+}
+
+/**
  * Embedded YouTube player for custom-playlist experiment tracks.
  * Video stays visible so ads and YT Premium behavior work as on youtube.com.
  *
@@ -205,9 +236,9 @@ export const YoutubePlayer = forwardRef<YoutubePlayerHandle, YoutubePlayerProps>
               onEndedRef.current?.();
             }
           },
-          onError: () => {
+          onError: (event) => {
             if (generation !== generationRef.current) return;
-            onErrorRef.current?.('YouTube playback failed for this video.');
+            onErrorRef.current?.(describeYoutubeError(event?.data, videoId));
           },
         },
       });

@@ -12,3 +12,7 @@ electron/compiler-dist/
 .env.*
 !.env.release.example
 static-tests-prototypes/
+# Local compliance analysis / TODO lists (YouTube, Suno, etc.). Reference-only —
+# never committed and never bundled (electron-builder.yml files: allowlist already
+# excludes documentation/). Keep app-logic compliance in code + tracked docs.
+documentation/compliance/

@@ -254,7 +254,15 @@ export function useVisualizerManager({
   }, [playingSong, windowOpen]);
 
   const openWindow = useCallback(
-    async (options: { mode?: ProjectionMode; fullscreen?: boolean } = {}) => {
+    async (
+      options: {
+        mode?: ProjectionMode;
+        fullscreen?: boolean;
+        /** Open at an explicit small size (YouTube mini-player-compliance popup). */
+        width?: number;
+        height?: number;
+      } = {},
+    ) => {
       const app = getApp();
       if (!app?.visualizer) return;
 
@@ -276,7 +284,11 @@ export function useVisualizerManager({
 
       setProjectionMode(mode);
       setWindowOpen(true);
-      await app.visualizer.open({ fullscreen: options.fullscreen ?? false });
+      await app.visualizer.open({
+        fullscreen: options.fullscreen ?? false,
+        width: options.width,
+        height: options.height,
+      });
       void app.visualizer.setTitle?.(
         projectorTitleForKind(projectorKindFromProjectionMode(mode)),
       );
