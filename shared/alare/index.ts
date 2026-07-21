@@ -20,6 +20,7 @@ export {
   alareLinesPerSecond,
   applyAlareSpeedNudge,
   clampAlareSpeedNudge,
+  formatAlareSpeedNudgePercent,
 } from './speedNudge';
 export { parseAlareLyrics } from './parseLyrics';
 export { resolveTrackDuration } from './resolveTrackDuration';

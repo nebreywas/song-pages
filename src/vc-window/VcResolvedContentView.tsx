@@ -15,6 +15,7 @@ import { VcTitleLineText } from './VcTitleLineText';
 import { VcTransportBar } from './VcTransportBar';
 import { VcUpcomingCoversView } from './VcUpcomingCoversView';
 import { VcAlareLyricsView } from './VcAlareLyricsView';
+import { VcHostDirectScrollLyricsView } from './VcHostDirectScrollLyricsView';
 import { VcMarqueeLyricsView } from './VcMarqueeLyricsView';
 import { lyricsScrollClassName } from './lyricsScrollClassName';
 import { VcSongUrlContentView, VcSourceContentView } from './VcSourceContentViews';
@@ -191,7 +192,7 @@ function ResolvedLyricsView({
   markdownSource?: boolean;
   textAlign?: VcTextAlign;
   lyricsEdgeFade?: boolean;
-  lyricTracking?: 'simple-scroll' | 'alare';
+  lyricTracking?: 'simple-scroll' | 'alare' | 'host-direct-scroll';
   lyricPresentationEffect?: LyricEffectId;
   lyricTypographyMode?: VcLyricTypographyMode;
   prettySoftBreakLongLines?: boolean;
@@ -226,6 +227,19 @@ function ResolvedLyricsView({
   const textStyle =
     fontStyle && fontSize && color ? hostTextStyle(fontStyle, fontSize, color, textAlign) : textAlign ? { textAlign } : undefined;
   const scrollClass = lyricsScrollClassName(lyricsEdgeFade);
+
+  // Host Direct Scroll: no playback-driven transform — the host scrolls manually.
+  if (lyricTracking === 'host-direct-scroll') {
+    return (
+      <VcHostDirectScrollLyricsView
+        text={text}
+        markdownSource={markdownSource}
+        textStyle={textStyle}
+        edgeFade={lyricsEdgeFade !== false}
+        songId={songId}
+      />
+    );
+  }
 
   if (markdownSource) {
     const html = renderMarkdownPreview(text);

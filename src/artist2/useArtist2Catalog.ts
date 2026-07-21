@@ -16,9 +16,10 @@ import type {
   Artist2EditorSelection,
   Artist2LibraryFilter,
 } from '@shared/artist2';
+import { ARTIST2_LIBRARY_FILTER_ALL } from '@shared/artist2';
 
 import { getApp } from '../lib/bridge';
-import { patchSongNameInSummaries } from './catalogSidebarUtils';
+import { filterCatalogObjects, patchSongNameInSummaries } from './catalogSidebarUtils';
 
 type Artist2ApiResult<T> = { ok: boolean; data?: T; error?: string };
 
@@ -81,7 +82,9 @@ export function useArtist2Catalog() {
   const [albumTrackSummaries, setAlbumTrackSummaries] = useState<Artist2AlbumTrackSummaries>({});
   const [selection, setSelection] = useState<Artist2EditorSelection>({ type: 'artist' });
   const [albumDetail, setAlbumDetail] = useState<Artist2AlbumDetail | null>(null);
-  const [filter, setFilter] = useState<Artist2LibraryFilter>('all');
+  const [filter, setFilter] = useState<Artist2LibraryFilter>(() => ({
+    ...ARTIST2_LIBRARY_FILTER_ALL,
+  }));
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,9 +99,11 @@ export function useArtist2Catalog() {
     return list;
   }, []);
 
+  // Always load the full catalog — kind filter + search narrow the sidebar
+  // client-side so search runs within the active filter, not instead of it.
   const refreshObjects = useCallback(async (artistId: string) => {
     const list = await unwrap(
-      artist2()?.listObjects(artistId, { search: search.trim() || undefined }),
+      artist2()?.listObjects(artistId),
       [] as Artist2CatalogObject[],
     );
     setObjects(list);
@@ -118,7 +123,7 @@ export function useArtist2Catalog() {
     setAlbumTrackSummaries(summaries);
 
     return list;
-  }, [search]);
+  }, []);
 
   /** Refresh sidebar-only indexes (nested album tracks, counts) without reloading the object list. */
   const refreshSidebarIndexes = useCallback(async (artistId: string) => {
@@ -241,13 +246,10 @@ export function useArtist2Catalog() {
   }, [objects, selection]);
 
   const filteredObjects = useMemo(() => {
-    return objects.filter((row) => {
-      if (filter === 'songs') return row.kind === 'song';
-      if (filter === 'containers') return row.kind === 'album' || row.kind === 'playlist';
-      if (filter === 'content') return row.kind === 'content';
-      return true;
-    });
-  }, [objects, filter]);
+    // Sidebar owns the visible list; this mirror stays for callers that still
+    // read `objects` and expect the active kind filter + search to be applied.
+    return filterCatalogObjects(objects, filter, search);
+  }, [objects, filter, search]);
 
   const trackCounts = useMemo(() => {
     const counts = new Map<string, number>(Object.entries(membershipCounts));
@@ -607,6 +609,45 @@ export function useArtist2Catalog() {
     [applyObjectToSidebar],
   );
 
+  const linkRelatedAlbums = useCallback(
+    async (payload: {
+      fromAlbumId: string;
+      toAlbumId: string;
+      relation?: import('@shared/artist2').Artist2AlbumRelationKind;
+      note?: string;
+    }) => {
+      const linkFn = requireArtist2Method('linkRelatedAlbums');
+      const result = await unwrap(
+        linkFn(payload),
+        null as {
+          from: Artist2CatalogObject;
+          to: Artist2CatalogObject;
+        } | null,
+      );
+      if (result?.from) applyObjectToSidebar(result.from);
+      if (result?.to) applyObjectToSidebar(result.to);
+      return result;
+    },
+    [applyObjectToSidebar],
+  );
+
+  const unlinkRelatedAlbums = useCallback(
+    async (fromAlbumId: string, toAlbumId: string) => {
+      const unlinkFn = requireArtist2Method('unlinkRelatedAlbums');
+      const result = await unwrap(
+        unlinkFn({ fromAlbumId, toAlbumId }),
+        null as {
+          from: Artist2CatalogObject;
+          to: Artist2CatalogObject | null;
+        } | null,
+      );
+      if (result?.from) applyObjectToSidebar(result.from);
+      if (result?.to) applyObjectToSidebar(result.to);
+      return result;
+    },
+    [applyObjectToSidebar],
+  );
+
   const repairBrokenReference = useCallback(
     async (reportId: string, refIndex: number) => {
       const repairFn = requireArtist2Method('repairBrokenReference');
@@ -677,6 +718,8 @@ export function useArtist2Catalog() {
     promoteArtwork,
     linkRelatedSongs,
     unlinkRelatedSongs,
+    linkRelatedAlbums,
+    unlinkRelatedAlbums,
     repairBrokenReference,
     refreshObjects,
   };

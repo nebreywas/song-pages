@@ -7,6 +7,8 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type {
   Artist2AlbumDetail,
   Artist2AlbumPayload,
+  Artist2AlbumRelation,
+  Artist2AlbumRelationKind,
   Artist2AiPromptEntry,
   Artist2ArtworkEntry,
   Artist2ArtworkRole,
@@ -28,11 +30,13 @@ import type {
 import {
   AI_NEGATIVE_PROMPT_SOFT_MAX,
   AI_PROMPT_SOFT_MAX,
+  albumCreationDate,
   albumIncompleteHints,
+  albumRelationLabel,
   clearCreationProcess,
+  ARTIST2_ALBUM_RELATION_KINDS,
   ARTIST2_SONG_RELATION_KINDS,
   ARTIST2_VIDEO_KIND_LABELS,
-  ARTIST2_VIDEO_KINDS,
   ARTWORK_COMMENTARY_SOFT_MAX,
   ARTWORK_DESCRIPTION_SOFT_MAX,
   ARTWORK_ROLE_LABELS,
@@ -50,9 +54,12 @@ import {
   isStructurallyValidUrl,
   legacyArtworkFromEntries,
   legacyRecordingFromList,
+  MUSICAL_ENSEMBLE_LABELS,
+  MUSICAL_ENSEMBLES,
   newAiModelId,
   newAiPromptId,
   newSongRecordingId,
+  normalizeAlbumRelations,
   normalizeCreationProcessState,
   normalizeSongArtwork,
   normalizeSongLinks,
@@ -61,6 +68,10 @@ import {
   normalizeSongVideos,
   PERFORMED_CONTEXT_LABELS,
   PERFORMED_CONTEXTS,
+  playlistAbout,
+  playlistProducerCredit,
+  PRIMARY_VOCAL_PRESENTATION_LABELS,
+  PRIMARY_VOCAL_PRESENTATIONS,
   providersByCapability,
   resolveArtworkEntryPath,
   resolvePrimaryArtworkPath,
@@ -72,15 +83,36 @@ import {
   slugifySongName,
   songCreationDate,
   songIncompleteHints,
+  songPrimaryLanguage,
   songRelationLabel,
   SONG_PAGES_STATE_LABELS,
   todayMmDdYyyy,
   updateCreationProcess,
+  ADAPTATION_TYPE_LABELS,
+  ADAPTATION_TYPES,
+  ADAPTED_PARTY_ROLE_LABELS,
+  ADAPTED_PARTY_ROLES,
+  ORIGINAL_COPYRIGHT_STATUS_LABELS,
+  ORIGINAL_COPYRIGHT_STATUSES,
+  patchAdaptedWork,
+  songAdaptedWork,
+  SOURCE_MATERIAL_HELP,
+  SOURCE_MATERIAL_KINDS,
+  SOURCE_MATERIAL_LABELS,
+  toggleAdaptedWorkListValue,
+  type Artist2AdaptedWork,
 } from '@shared/artist2';
 
 import { ArtworkRefView } from './ArtworkRefView';
+import { ArtworkFileMeta } from './ArtworkFileMeta';
 import { ArtworkThumbnail, resolveArtworkFilePath } from './ArtworkThumbnail';
+import { CollapsibleSection } from './CollapsibleSection';
 import { useDebouncedCallback } from './useDebouncedCallback';
+import { useAlbumSectionCollapse } from './useAlbumSectionCollapse';
+import { usePlaylistSectionCollapse } from './usePlaylistSectionCollapse';
+import { useSongSectionCollapse } from './useSongSectionCollapse';
+import { SongCardsDesignerModal } from '../song-cards/SongCardsDesignerModal';
+import { SongChipsDesignerModal } from '../song-chips/SongChipsDesignerModal';
 import { getApp } from '../lib/bridge';
 import appIcon from '../assets/images/app-icon.png';
 
@@ -392,20 +424,32 @@ function LinkTable({
 /** Soft guidance only — do not hard-block save. */
 const CAPTION_SOFT_MAX = 120;
 const ABOUT_SOFT_MAX = 1000;
+// Public credit / copyright lines are single-line catch-alls; caps are soft and
+// only surface a gentle counter warning (the value is never truncated).
+const COPYRIGHT_SOFT_MAX = 250;
+const CREDIT_SOFT_MAX = 300;
+/** Artist-chosen lyric excerpt for cards / publisher — hard-capped in the editor. */
+const LYRIC_QUOTE_HARD_MAX = 500;
 
 function parseGenreToken(raw: string): string {
   return raw.replace(/,/g, '').trim();
 }
 
-/** Additional genres: commit to pills on comma / Enter / blur. */
-function GenreTagsInput({
+/**
+ * Freeform tag pills — commit on comma / Enter / Tab / blur, remove with × or
+ * Backspace. Used for genres, languages, and Themes / Keywords; `noun` labels
+ * the "Add …" placeholder and aria-label.
+ */
+function TagsInput({
   genres,
   onChange,
   placeholder,
+  noun = 'genre',
 }: {
   genres: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;
+  noun?: string;
 }) {
   // Local pills so tags appear immediately while parent patch may debounce.
   const [tags, setTags] = useState(genres);
@@ -449,8 +493,8 @@ function GenreTagsInput({
       <input
         className="a2-tag-input-field"
         value={draft}
-        placeholder={tags.length === 0 ? placeholder : 'Add genre…'}
-        aria-label="Additional genre tag"
+        placeholder={tags.length === 0 ? placeholder : `Add ${noun}…`}
+        aria-label={`Additional ${noun} tag`}
         onChange={(event) => {
           const value = event.target.value;
           if (value.includes(',')) {
@@ -483,6 +527,8 @@ type SharedEditorProps = {
   object: Artist2CatalogObject;
   contentById: Map<string, Artist2CatalogObject>;
   songById?: Map<string, Artist2CatalogObject>;
+  /** Active artist display name — Song Cards preview + credits. */
+  artistName?: string;
   onChangeName: (name: string) => void;
   onPatchPayload: (payload: Record<string, unknown>) => void;
   onDelete: () => void;
@@ -518,14 +564,28 @@ function IncompleteBadges({ hints }: { hints: Array<{ label: string }> }) {
   );
 }
 
+type SectionCollapseControl = {
+  collapsed: boolean;
+  onToggle: () => void;
+};
+
 function SongLinksSection({
   payload,
   onPatchPayload,
+  collapsed,
+  onToggle,
+  entityNoun = 'song',
+  /** Defaults to the full Song/Album set; Playlists omit streaming + distribution. */
+  allowedKinds = ['song_pages', 'streaming', 'web', 'social', 'distribution'],
 }: {
-  payload: Artist2SongPayload;
+  payload: { linkEntries?: Artist2SongLink[]; links?: Artist2SongPayload['links'] };
   onPatchPayload: (payload: Record<string, unknown>) => void;
-}) {
+  /** Used in empty-state copy — Album / Playlist reuse this section. */
+  entityNoun?: 'song' | 'album' | 'playlist';
+  allowedKinds?: Artist2SongLinkKind[];
+} & SectionCollapseControl) {
   const entries = normalizeSongLinks(payload);
+  const kindAllowed = (kind: Artist2SongLinkKind) => allowedKinds.includes(kind);
 
   const commit = (next: Artist2SongLink[]) => {
     // Cutover: persist structured rows only — catalog clears deprecated flat links.
@@ -544,6 +604,7 @@ function SongLinksSection({
     kind: Exclude<Artist2SongLinkKind, 'song_pages'>,
     providerId?: string,
   ) => {
+    if (!kindAllowed(kind)) return;
     const maxOrder = entries.reduce((m, e) => Math.max(m, e.sortOrder), 0);
     commit([
       ...entries,
@@ -555,10 +616,17 @@ function SongLinksSection({
     ]);
   };
 
-  const songPages = entries.find((e) => e.kind === 'song_pages');
-  const streamingLinks = entries.filter((e) => e.kind === 'streaming');
-  const webLinks = entries.filter((e) => e.kind === 'web');
-  const socialLinks = entries.filter((e) => e.kind === 'social');
+  const songPages = kindAllowed('song_pages')
+    ? entries.find((e) => e.kind === 'song_pages')
+    : undefined;
+  const streamingLinks = kindAllowed('streaming')
+    ? entries.filter((e) => e.kind === 'streaming')
+    : [];
+  const webLinks = kindAllowed('web') ? entries.filter((e) => e.kind === 'web') : [];
+  const socialLinks = kindAllowed('social') ? entries.filter((e) => e.kind === 'social') : [];
+  const distributionLinks = kindAllowed('distribution')
+    ? entries.filter((e) => e.kind === 'distribution')
+    : [];
 
   // A streaming provider may only appear once — used to disable duplicate picks.
   const streamingProviderInUse = (providerId: string, exceptRowId: string): boolean =>
@@ -566,16 +634,20 @@ function SongLinksSection({
       (e) => e.kind === 'streaming' && e.id !== exceptRowId && e.providerId === providerId,
     );
 
-  const distributionLinks = entries.filter((e) => e.kind === 'distribution');
   const streamingProviders = providersByCapability('streaming');
   const socialProviders = providersByCapability('social');
   const distributionProviders = providersByCapability('distribution');
   const songPagesState = songPages?.songPagesState ?? 'not_published';
+  const sectionTitle = kindAllowed('streaming') || kindAllowed('distribution')
+    ? 'Links, Distribution, and Social Media'
+    : 'Links and Social Media';
 
   return (
-    <section className="a2-section">
-      <h3>Links, Distribution, and Social Media</h3>
-
+    <CollapsibleSection
+      title={sectionTitle}
+      collapsed={collapsed}
+      onToggle={onToggle}
+    >
       {songPages ? (
         <div className="a2-song-pages-card">
           <img className="a2-song-pages-icon" src={appIcon} alt="Song Pages" />
@@ -600,71 +672,77 @@ function SongLinksSection({
         </div>
       ) : null}
 
-      <div className="a2-links-group">
-        <h4 className="a2-streaming-heading">Streaming Services</h4>
-        {streamingLinks.length === 0 ? (
-          <p className="a2-empty-note">
-            You have not listed any streaming service URLs for this song yet.
-          </p>
-        ) : (
-          <LinkTable
-            firstColLabel="Provider"
-            rows={streamingLinks}
-            deleteLabel="Remove streaming service"
-            onUpdate={updateEntry}
-            onRemove={removeEntry}
-            renderFirstCell={(row) => (
-              <select
-                value={row.providerId ?? ''}
-                aria-label="Streaming provider"
-                onChange={(event) => {
-                  const providerId = event.target.value || null;
-                  // Block picking a provider another streaming row already uses.
-                  if (providerId && streamingProviderInUse(providerId, row.id)) return;
-                  updateEntry(row.id, { providerId });
-                }}
-              >
-                <option value="">Select…</option>
-                {streamingProviders.map((provider) => {
-                  const taken = streamingProviderInUse(provider.id, row.id);
-                  return (
-                    <option key={provider.id} value={provider.id} disabled={taken}>
-                      {provider.name}
-                      {taken ? ' (added)' : ''}
-                    </option>
-                  );
-                })}
-              </select>
-            )}
-          />
-        )}
-      </div>
+      {kindAllowed('streaming') ? (
+        <div className="a2-links-group">
+          <h4 className="a2-streaming-heading">Streaming Services</h4>
+          {streamingLinks.length === 0 ? (
+            <p className="a2-empty-note">
+              You have not listed any streaming service URLs for this {entityNoun} yet.
+            </p>
+          ) : (
+            <LinkTable
+              firstColLabel="Provider"
+              rows={streamingLinks}
+              deleteLabel="Remove streaming service"
+              onUpdate={updateEntry}
+              onRemove={removeEntry}
+              renderFirstCell={(row) => (
+                <select
+                  value={row.providerId ?? ''}
+                  aria-label="Streaming provider"
+                  onChange={(event) => {
+                    const providerId = event.target.value || null;
+                    // Block picking a provider another streaming row already uses.
+                    if (providerId && streamingProviderInUse(providerId, row.id)) return;
+                    updateEntry(row.id, { providerId });
+                  }}
+                >
+                  <option value="">Select…</option>
+                  {streamingProviders.map((provider) => {
+                    const taken = streamingProviderInUse(provider.id, row.id);
+                    return (
+                      <option key={provider.id} value={provider.id} disabled={taken}>
+                        {provider.name}
+                        {taken ? ' (added)' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
+            />
+          )}
+        </div>
+      ) : null}
 
-      <div className="a2-links-group">
-        <h4 className="a2-streaming-heading">Web Links</h4>
-        {webLinks.length === 0 ? (
-          <p className="a2-empty-note">You have not added any web links for this song yet.</p>
-        ) : (
-          <LinkTable
-            firstColLabel="Name"
-            rows={webLinks}
-            deleteLabel="Delete web link"
-            onUpdate={updateEntry}
-            onRemove={removeEntry}
-            renderFirstCell={(row) => (
-              <input
-                className="a2-link-name-input"
-                value={row.label ?? ''}
-                placeholder="Web Link"
-                aria-label="Link name"
-                onChange={(event) => updateEntry(row.id, { label: event.target.value })}
-              />
-            )}
-          />
-        )}
-      </div>
+      {kindAllowed('web') ? (
+        <div className="a2-links-group">
+          <h4 className="a2-streaming-heading">Web Links</h4>
+          {webLinks.length === 0 ? (
+            <p className="a2-empty-note">
+              You have not added any web links for this {entityNoun} yet.
+            </p>
+          ) : (
+            <LinkTable
+              firstColLabel="Name"
+              rows={webLinks}
+              deleteLabel="Delete web link"
+              onUpdate={updateEntry}
+              onRemove={removeEntry}
+              renderFirstCell={(row) => (
+                <input
+                  className="a2-link-name-input"
+                  value={row.label ?? ''}
+                  placeholder="Web Link"
+                  aria-label="Link name"
+                  onChange={(event) => updateEntry(row.id, { label: event.target.value })}
+                />
+              )}
+            />
+          )}
+        </div>
+      ) : null}
 
-      {socialLinks.length > 0 ? (
+      {kindAllowed('social') && socialLinks.length > 0 ? (
         <div className="a2-links-group">
           <h4 className="a2-streaming-heading">Social Posts</h4>
           <LinkTable
@@ -693,7 +771,7 @@ function SongLinksSection({
         </div>
       ) : null}
 
-      {distributionLinks.length > 0 ? (
+      {kindAllowed('distribution') && distributionLinks.length > 0 ? (
         <div className="a2-links-group">
           <h4 className="a2-streaming-heading">Distribution</h4>
           <LinkTable
@@ -723,30 +801,40 @@ function SongLinksSection({
       ) : null}
 
       <div className="a2-link-add-menu">
-        <button type="button" className="a2-secondary" onClick={() => addRow('streaming')}>
-          Add Streaming Service
-        </button>
-        <button type="button" className="a2-secondary" onClick={() => addRow('web')}>
-          Add Web Link
-        </button>
-        <button type="button" className="a2-secondary" onClick={() => addRow('social')}>
-          Add Social Post
-        </button>
-        <button type="button" className="a2-secondary" onClick={() => addRow('distribution')}>
-          Add Distribution Provider
-        </button>
+        {kindAllowed('streaming') ? (
+          <button type="button" className="a2-secondary" onClick={() => addRow('streaming')}>
+            Add Streaming Service
+          </button>
+        ) : null}
+        {kindAllowed('web') ? (
+          <button type="button" className="a2-secondary" onClick={() => addRow('web')}>
+            Add Web Link
+          </button>
+        ) : null}
+        {kindAllowed('social') ? (
+          <button type="button" className="a2-secondary" onClick={() => addRow('social')}>
+            Add Social Post
+          </button>
+        ) : null}
+        {kindAllowed('distribution') ? (
+          <button type="button" className="a2-secondary" onClick={() => addRow('distribution')}>
+            Add Distribution Provider
+          </button>
+        ) : null}
       </div>
-    </section>
+    </CollapsibleSection>
   );
 }
 
 function CreationProcessSection({
   payload,
   onPatchPayload,
+  collapsed,
+  onToggle,
 }: {
   payload: Artist2SongPayload;
   onPatchPayload: (payload: Record<string, unknown>) => void;
-}) {
+} & SectionCollapseControl) {
   const { processes, aiPrompts } = normalizeCreationProcessState(payload);
   // Primary prompt is always shown first; the rest keep their existing order.
   const sortedPrompts = [...aiPrompts].sort(
@@ -891,26 +979,6 @@ function CreationProcessSection({
 
     return (
       <div key={cell.id} className="a2-process-panel">
-        {isVocals ? (
-          <label className="a2-field a2-field-checkbox a2-same-as-music">
-            <span>Same as music</span>
-            <input
-              type="checkbox"
-              checked={sameAsMusic}
-              disabled={!canMirrorMusic && !sameAsMusic}
-              title={
-                canMirrorMusic
-                  ? 'Copy Music / Mix AI models and commentary'
-                  : 'Enable AI Generation · Music / Mix first'
-              }
-              onChange={(event) => {
-                if (event.target.checked && !canMirrorMusic) return;
-                commitProcesses(setAiVocalsSameAsMusic(processes, event.target.checked));
-              }}
-            />
-          </label>
-        ) : null}
-
         {sameAsMusic ? (
           <div className="a2-same-as-music-summary">
             <p className="a2-muted">
@@ -1090,8 +1158,7 @@ function CreationProcessSection({
   );
 
   return (
-    <section className="a2-section">
-      <h3>Creation Process</h3>
+    <CollapsibleSection title="Creation Process" collapsed={collapsed} onToggle={onToggle}>
       <p className="a2-help a2-process-help">Detail the underlying processes that helped create this song.</p>
 
       {/* Tabbed process areas — one tab per process type (matrix order), each with
@@ -1132,14 +1199,47 @@ function CreationProcessSection({
                 </button>
               ))}
             </div>
-            <ConfirmActionButton
-              label="Clear"
-              className="a2-process-clear"
-              confirmMessage={`Clear all ${CREATION_PROCESS_TYPE_LABELS[effectiveType]} · ${CREATION_PROCESS_TARGET_LABELS[effectiveTarget]} information?`}
-              onConfirm={() =>
-                commitProcesses(clearCreationProcess(processes, effectiveTarget, effectiveType))
-              }
-            />
+            <div className="a2-process-head-actions">
+              {/* AI Vocals only: mirror toggle lives beside Clear on one line. */}
+              {effectiveType === 'ai_generation' && effectiveTarget === 'vocals'
+                ? (() => {
+                    const musicAi = findCreationProcess(processes, 'music_mix', 'ai_generation');
+                    const canMirrorMusic = Boolean(musicAi);
+                    const sameAsMusic = Boolean(activeCell.sameAsMusic);
+                    return (
+                      <label
+                        className="a2-same-as-music-inline"
+                        title={
+                          canMirrorMusic
+                            ? 'Copy Music / Mix AI models and commentary'
+                            : 'Enable AI Generation · Music / Mix first'
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={sameAsMusic}
+                          disabled={!canMirrorMusic && !sameAsMusic}
+                          onChange={(event) => {
+                            if (event.target.checked && !canMirrorMusic) return;
+                            commitProcesses(
+                              setAiVocalsSameAsMusic(processes, event.target.checked),
+                            );
+                          }}
+                        />
+                        <span>Same as music</span>
+                      </label>
+                    );
+                  })()
+                : null}
+              <ConfirmActionButton
+                label="Clear"
+                className="a2-process-clear"
+                confirmMessage={`Clear all ${CREATION_PROCESS_TYPE_LABELS[effectiveType]} · ${CREATION_PROCESS_TARGET_LABELS[effectiveTarget]} information?`}
+                onConfirm={() =>
+                  commitProcesses(clearCreationProcess(processes, effectiveTarget, effectiveType))
+                }
+              />
+            </div>
           </div>
           {renderPanelBody(activeCell)}
         </div>
@@ -1263,21 +1363,27 @@ function CreationProcessSection({
           </button>
         </div>
       ) : null}
-    </section>
+    </CollapsibleSection>
   );
 }
 
 function VideoAndAnimationSection({
   payload,
+  collapsed,
+  onToggle,
 }: {
   payload: Artist2SongPayload;
-}) {
+} & SectionCollapseControl) {
   // Stub only — do not wire pickers / promote yet; keep payload shape reserved.
   const entries = normalizeSongVideos(payload.videoEntries);
 
   return (
-    <section className="a2-section a2-section--stub">
-      <h3>Video and Animation</h3>
+    <CollapsibleSection
+      title="Video and Animation"
+      className="a2-section--stub"
+      collapsed={collapsed}
+      onToggle={onToggle}
+    >
         <p className="a2-help">
           Reserved for music videos, lyric videos, visualizers, live clips, animated covers, and
           related media attached to this Song. You can already create reusable{' '}
@@ -1300,12 +1406,8 @@ function VideoAndAnimationSection({
         <button type="button" disabled title="Video attach / Content-ref UX comes later">
           Add video… (coming soon)
         </button>
-        <p className="a2-muted">
-          Planned kinds:{' '}
-          {ARTIST2_VIDEO_KINDS.map((kind) => ARTIST2_VIDEO_KIND_LABELS[kind]).join(' · ')}
-        </p>
       </div>
-    </section>
+    </CollapsibleSection>
   );
 }
 
@@ -1315,6 +1417,8 @@ function RelatedSongsSection({
   onRelateSong,
   onUnrelateSong,
   onOpenSong,
+  collapsed,
+  onToggle,
 }: {
   object: Artist2CatalogObject;
   songById?: Map<string, Artist2CatalogObject>;
@@ -1324,13 +1428,12 @@ function RelatedSongsSection({
   ) => Promise<void>;
   onUnrelateSong?: (toSongId: string) => Promise<void>;
   onOpenSong?: (songId: string) => void;
-}) {
+} & SectionCollapseControl) {
   const payload = object.payload as Artist2SongPayload;
   const relations = normalizeSongRelations(payload.relatedSongs);
 
   return (
-    <section className="a2-section">
-      <h3>Related Songs</h3>
+    <CollapsibleSection title="Related Songs" collapsed={collapsed} onToggle={onToggle}>
       <p className="a2-help">
         Link another Song as a sister / remix / adaptation — it stays its own Song. With this Song
         selected, use → on another Song in the catalog (adds as Sister; change the type below).
@@ -1358,6 +1461,9 @@ function RelatedSongsSection({
                     <strong>{target?.name ?? 'Missing Song'}</strong>
                   )}
                   {missing ? <span className="a2-muted"> (not in active catalog)</span> : null}
+                </div>
+                {/* Relation type + Unlink group flush right; dropdown sits just left of Unlink. */}
+                <div className="a2-related-actions">
                   <select
                     className="a2-related-type"
                     value={rel.relation}
@@ -1377,32 +1483,123 @@ function RelatedSongsSection({
                       </option>
                     ))}
                   </select>
+                  {onUnrelateSong ? (
+                    <button
+                      type="button"
+                      className="a2-secondary"
+                      onClick={() => void onUnrelateSong(rel.songId)}
+                    >
+                      Unlink
+                    </button>
+                  ) : null}
                 </div>
-                {onUnrelateSong ? (
-                  <button
-                    type="button"
-                    className="a2-secondary"
-                    onClick={() => void onUnrelateSong(rel.songId)}
-                  >
-                    Unlink
-                  </button>
-                ) : null}
               </li>
             );
           })}
         </ul>
       )}
-    </section>
+    </CollapsibleSection>
+  );
+}
+
+function RelatedAlbumsSection({
+  object,
+  albumById,
+  onRelateAlbum,
+  onUnrelateAlbum,
+  onOpenAlbum,
+  collapsed,
+  onToggle,
+}: {
+  object: Artist2CatalogObject;
+  albumById?: Map<string, Artist2CatalogObject>;
+  onRelateAlbum?: (
+    toAlbumId: string,
+    relation: Artist2AlbumRelationKind,
+  ) => Promise<void>;
+  onUnrelateAlbum?: (toAlbumId: string) => Promise<void>;
+  onOpenAlbum?: (albumId: string) => void;
+} & SectionCollapseControl) {
+  const payload = object.payload as Artist2AlbumPayload;
+  const relations = normalizeAlbumRelations(payload.relatedAlbums);
+
+  return (
+    <CollapsibleSection title="Related Albums" collapsed={collapsed} onToggle={onToggle}>
+      <p className="a2-help">
+        Link another Album as a sister / deluxe / reissue — it stays its own Album. With this Album
+        selected, use → on another Album in the catalog (adds as Sister; change the type below).
+      </p>
+      {relations.length === 0 ? (
+        <p className="a2-muted">No related Albums yet.</p>
+      ) : (
+        <ul className="a2-related-list">
+          {relations.map((rel: Artist2AlbumRelation) => {
+            const target = albumById?.get(rel.albumId);
+            const missing = !target;
+            return (
+              <li key={rel.albumId} className="a2-related-row">
+                <div className="a2-related-main">
+                  {onOpenAlbum && target ? (
+                    <button
+                      type="button"
+                      className="a2-linkish"
+                      onClick={() => onOpenAlbum(rel.albumId)}
+                    >
+                      {target.name}
+                    </button>
+                  ) : (
+                    <strong>{target?.name ?? 'Missing Album'}</strong>
+                  )}
+                  {missing ? <span className="a2-muted"> (not in active catalog)</span> : null}
+                </div>
+                <div className="a2-related-actions">
+                  <select
+                    className="a2-related-type"
+                    value={rel.relation}
+                    disabled={!onRelateAlbum || missing}
+                    aria-label={`Relation type for ${target?.name ?? rel.albumId}`}
+                    onChange={(event) => {
+                      if (!onRelateAlbum) return;
+                      void onRelateAlbum(
+                        rel.albumId,
+                        event.target.value as Artist2AlbumRelationKind,
+                      );
+                    }}
+                  >
+                    {ARTIST2_ALBUM_RELATION_KINDS.map((kind) => (
+                      <option key={kind} value={kind}>
+                        {albumRelationLabel(kind)}
+                      </option>
+                    ))}
+                  </select>
+                  {onUnrelateAlbum ? (
+                    <button
+                      type="button"
+                      className="a2-secondary"
+                      onClick={() => void onUnrelateAlbum(rel.albumId)}
+                    >
+                      Unlink
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </CollapsibleSection>
   );
 }
 
 function RecordingsSection({
   payload,
   onPatchPayload,
+  collapsed,
+  onToggle,
 }: {
   payload: Artist2SongPayload;
   onPatchPayload: (payload: Record<string, unknown>) => void;
-}) {
+} & SectionCollapseControl) {
   const recordings = normalizeSongRecordings(payload);
 
   const commit = (next: Artist2SongRecording[]) => {
@@ -1414,8 +1611,7 @@ function RecordingsSection({
   };
 
   return (
-    <section className="a2-section">
-      <h3>Recordings</h3>
+    <CollapsibleSection title="Recordings" collapsed={collapsed} onToggle={onToggle}>
       <div className="a2-recordings">
         {recordings.length === 0 ? (
           <p className="a2-muted">No recordings yet.</p>
@@ -1439,12 +1635,14 @@ function RecordingsSection({
                   </td>
                   <td className="a2-recording-publish-col">
                     {/* Publish is an independent, per-recording flag — any number
-                        of recordings may be published at once. */}
+                        of recordings may be published at once. The button shows the
+                        action it performs: green "Publish" when unpublished, red
+                        "Unpublish" when published. */}
                     <button
                       type="button"
-                      className={`a2-vis-toggle ${rec.published ? 'is-public' : 'is-private'}`}
+                      className={`a2-vis-toggle ${rec.published ? 'a2-publish-toggle--unpublish' : 'a2-publish-toggle--publish'}`}
                       aria-pressed={Boolean(rec.published)}
-                      title={rec.published ? 'Published' : 'Not published'}
+                      title={rec.published ? 'Published — click to unpublish' : 'Not published — click to publish'}
                       onClick={() =>
                         commit(
                           recordings.map((r) =>
@@ -1453,7 +1651,7 @@ function RecordingsSection({
                         )
                       }
                     >
-                      {rec.published ? 'Published' : 'Publish'}
+                      {rec.published ? 'Unpublish' : 'Publish'}
                     </button>
                   </td>
                   <td className="a2-recording-primary-col">
@@ -1530,7 +1728,7 @@ function RecordingsSection({
           Add recording…
         </button>
       </div>
-    </section>
+    </CollapsibleSection>
   );
 }
 
@@ -1542,20 +1740,25 @@ function SongArtworkSection({
   onPromoteArtwork,
   onOpenContent,
   onRenameCover,
+  collapsed,
+  onToggle,
 }: {
   objectName: string;
-  payload: Artist2SongPayload;
+  /** Song and Album share the multi-image artworkEntries model. */
+  payload: {
+    artworkEntries?: Artist2ArtworkEntry[];
+    artwork?: Artist2SongPayload['artwork'];
+  };
   contentById: Map<string, Artist2CatalogObject>;
   onPatchPayload: (payload: Record<string, unknown>) => void;
   onPromoteArtwork: (name: string) => void;
   onOpenContent?: (contentId: string) => void;
   onRenameCover?: () => Promise<void>;
-}) {
+} & SectionCollapseControl) {
   const entries = normalizeSongArtwork(payload);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [promoteName, setPromoteName] = useState(`${objectName} Artwork`);
   const [renameBusy, setRenameBusy] = useState(false);
-  const [expandedCommentaryId, setExpandedCommentaryId] = useState<string | null>(null);
 
   const commit = (next: Artist2ArtworkEntry[]) => {
     const ensured = ensureSinglePrimaryArtwork(next);
@@ -1567,6 +1770,12 @@ function SongArtworkSection({
 
   const updateEntry = (id: string, patch: Partial<Artist2ArtworkEntry>) => {
     commit(entries.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  };
+
+  const pickImageForEntry = async (entryId: string) => {
+    const path = await getApp()?.artist?.pickImage?.();
+    if (!path) return;
+    updateEntry(entryId, { source: { mode: 'inline', path } });
   };
 
   const addInlineImage = async () => {
@@ -1582,13 +1791,7 @@ function SongArtworkSection({
   };
 
   return (
-    <section className="a2-section">
-      <h3>Artwork</h3>
-      <p className="a2-help">
-        Multiple images are allowed. Exactly one may be the Primary Cover — it mirrors next to the
-        Song title and is used for compile.
-      </p>
-
+    <CollapsibleSection title="Artwork" collapsed={collapsed} onToggle={onToggle}>
       {entries.length === 0 ? (
         <p className="a2-muted">No artwork yet.</p>
       ) : (
@@ -1602,17 +1805,45 @@ function SongArtworkSection({
             const commentaryLen = (entry.commentary ?? '').length;
             const isPrimary = entry.role === 'primary_cover';
             const canRename = Boolean(thumbPath && onRenameCover && isPrimary);
+            const inlinePath =
+              entry.source.mode === 'inline' ? entry.source.path : null;
+            const fileLabel = basename(inlinePath);
+            const hasImage = Boolean(thumbPath);
 
             return (
               <li key={entry.id} className="a2-artwork-entry">
                 <div className="a2-artwork-layout">
-                  <ArtworkThumbnail
-                    filePath={thumbPath}
-                    alt={entry.description || `${objectName} artwork`}
-                  />
+                  <div className="a2-artwork-thumb-col">
+                    <button
+                      type="button"
+                      className="a2-artwork-thumb-hit"
+                      title={hasImage ? 'Change image' : 'Add image'}
+                      aria-label={hasImage ? 'Change image' : 'Add image'}
+                      onClick={() => void pickImageForEntry(entry.id)}
+                    >
+                      <ArtworkThumbnail
+                        filePath={thumbPath}
+                        alt={entry.name || entry.description || `${objectName} artwork`}
+                      />
+                    </button>
+                    <span className="a2-artwork-thumb-hint">
+                      {hasImage ? 'Press to change image' : 'Press to add image'}
+                    </span>
+                  </div>
+
                   <div className="a2-artwork-controls">
-                    <div className="a2-field-row">
-                      <label className="a2-field a2-field-compact">
+                    <div className="a2-field-row a2-artwork-name-type-row">
+                      <label className="a2-field a2-field--artwork-name">
+                        <span>Name</span>
+                        <input
+                          value={entry.name ?? ''}
+                          placeholder="Optional label"
+                          onChange={(event) =>
+                            updateEntry(entry.id, { name: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label className="a2-field a2-field--artwork-type">
                         <span>Artwork type</span>
                         <select
                           value={entry.role}
@@ -1639,21 +1870,10 @@ function SongArtworkSection({
                           )}
                         </select>
                       </label>
-                      {!isPrimary ? (
-                        <button
-                          type="button"
-                          className="a2-ghost"
-                          onClick={() => commit(setPrimaryArtwork(entries, entry.id))}
-                        >
-                          Make Primary Cover
-                        </button>
-                      ) : (
-                        <span className="a2-vis-public">Primary</span>
-                      )}
                     </div>
 
-                    <label className="a2-field">
-                      <span>Description</span>
+                    <label className="a2-field a2-field--full">
+                      <span>Caption/Description</span>
                       <input
                         value={entry.description ?? ''}
                         placeholder="Back cover, session photo…"
@@ -1662,11 +1882,30 @@ function SongArtworkSection({
                         }
                       />
                       <span
-                        className={
-                          descLen > ARTWORK_DESCRIPTION_SOFT_MAX ? 'a2-char-warn' : 'a2-muted'
-                        }
+                        className={`a2-field-meta${
+                          descLen > ARTWORK_DESCRIPTION_SOFT_MAX ? ' a2-char-warn' : ''
+                        }`}
                       >
                         {descLen}/{ARTWORK_DESCRIPTION_SOFT_MAX}
+                      </span>
+                    </label>
+
+                    <label className="a2-field a2-field--full">
+                      <span>Commentary</span>
+                      <textarea
+                        rows={3}
+                        value={entry.commentary ?? ''}
+                        placeholder="Optional longer notes about this image"
+                        onChange={(event) =>
+                          updateEntry(entry.id, { commentary: event.target.value })
+                        }
+                      />
+                      <span
+                        className={`a2-field-meta${
+                          commentaryLen > ARTWORK_COMMENTARY_SOFT_MAX ? ' a2-char-warn' : ''
+                        }`}
+                      >
+                        {commentaryLen}/{ARTWORK_COMMENTARY_SOFT_MAX}
                       </span>
                     </label>
 
@@ -1677,9 +1916,7 @@ function SongArtworkSection({
                           updateEntry(entry.id, { source: { mode: 'inline', path: null } })
                         }
                         onChooseInline={async () => {
-                          const path = await getApp()?.artist?.pickImage?.();
-                          if (!path) return;
-                          updateEntry(entry.id, { source: { mode: 'inline', path } });
+                          await pickImageForEntry(entry.id);
                         }}
                         onOpenContent={
                           onOpenContent && contentRef && resolvedContent
@@ -1701,37 +1938,31 @@ function SongArtworkSection({
                         renameBusy={renameBusy}
                       />
                     ) : (
-                      <div className="a2-file-row">
-                        <code>{basename(entry.source.mode === 'inline' ? entry.source.path : null)}</code>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const path = await getApp()?.artist?.pickImage?.();
-                            if (!path) return;
-                            updateEntry(entry.id, { source: { mode: 'inline', path } });
-                          }}
-                        >
-                          Choose image…
-                        </button>
+                      <div className="a2-artwork-file-block">
+                        <div className="a2-file-row a2-file-row--artwork">
+                          <code className="a2-filename-truncate" title={inlinePath || undefined}>
+                            {fileLabel}
+                          </code>
+                          {canRename ? (
+                            <button
+                              type="button"
+                              className="a2-secondary a2-rename-flush"
+                              disabled={renameBusy}
+                              title="Rename Tool: rewrite the filename using this Song’s name"
+                              onClick={() => {
+                                setRenameBusy(true);
+                                void onRenameCover!()
+                                  .catch(() => undefined)
+                                  .finally(() => setRenameBusy(false));
+                              }}
+                            >
+                              {renameBusy ? 'Renaming…' : 'Rename Tool'}
+                            </button>
+                          ) : null}
+                        </div>
+                        <ArtworkFileMeta filePath={inlinePath} />
                       </div>
                     )}
-
-                    {canRename && entry.source.mode === 'inline' ? (
-                      <button
-                        type="button"
-                        className="a2-secondary"
-                        disabled={renameBusy}
-                        title="Rename Tool: rewrite the filename using this Song’s name"
-                        onClick={() => {
-                          setRenameBusy(true);
-                          void onRenameCover!()
-                            .catch(() => undefined)
-                            .finally(() => setRenameBusy(false));
-                        }}
-                      >
-                        {renameBusy ? 'Renaming…' : 'Rename Tool'}
-                      </button>
-                    ) : null}
 
                     {isPrimary && entry.source.mode === 'inline' && entry.source.path ? (
                       promoteOpen ? (
@@ -1767,49 +1998,15 @@ function SongArtworkSection({
                         </button>
                       )
                     ) : null}
-
-                    <button
-                      type="button"
-                      className="a2-ghost"
-                      onClick={() =>
-                        setExpandedCommentaryId(
-                          expandedCommentaryId === entry.id ? null : entry.id,
-                        )
-                      }
-                    >
-                      {expandedCommentaryId === entry.id ? 'Hide commentary' : 'Commentary…'}
-                    </button>
-                    {expandedCommentaryId === entry.id ? (
-                      <label className="a2-field">
-                        <span>Commentary</span>
-                        <textarea
-                          rows={3}
-                          value={entry.commentary ?? ''}
-                          onChange={(event) =>
-                            updateEntry(entry.id, { commentary: event.target.value })
-                          }
-                        />
-                        <span
-                          className={
-                            commentaryLen > ARTWORK_COMMENTARY_SOFT_MAX
-                              ? 'a2-char-warn'
-                              : 'a2-muted'
-                          }
-                        >
-                          {commentaryLen}/{ARTWORK_COMMENTARY_SOFT_MAX}
-                        </span>
-                      </label>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      className="a2-secondary"
-                      onClick={() => commit(entries.filter((row) => row.id !== entry.id))}
-                    >
-                      Remove
-                    </button>
                   </div>
                 </div>
+
+                <DeleteIconButton
+                  className="a2-artwork-remove"
+                  label="Remove artwork"
+                  confirmMessage="Remove this image from the Song?"
+                  onConfirm={() => commit(entries.filter((row) => row.id !== entry.id))}
+                />
               </li>
             );
           })}
@@ -1819,7 +2016,7 @@ function SongArtworkSection({
       <button type="button" onClick={() => void addInlineImage()}>
         Add image…
       </button>
-    </section>
+    </CollapsibleSection>
   );
 }
 
@@ -1885,18 +2082,23 @@ function ArtworkSection({
             />
           ) : (
             <>
-              <div className="a2-file-row">
-                <code>{basename(inlinePath)}</code>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const path = await getApp()?.artist?.pickImage?.();
-                    if (!path) return;
-                    onPatchPayload({ artwork: { mode: 'inline', path } });
-                  }}
-                >
-                  Choose image…
-                </button>
+              <div className="a2-artwork-file-block">
+                <div className="a2-file-row">
+                  <code className="a2-filename-truncate" title={inlinePath || undefined}>
+                    {basename(inlinePath)}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const path = await getApp()?.artist?.pickImage?.();
+                      if (!path) return;
+                      onPatchPayload({ artwork: { mode: 'inline', path } });
+                    }}
+                  >
+                    Choose image…
+                  </button>
+                </div>
+                <ArtworkFileMeta filePath={inlinePath} />
               </div>
               {canRename ? (
                 <button
@@ -1957,10 +2159,329 @@ function ArtworkSection({
   );
 }
 
+/**
+ * Adapted Work & Provenance — expands when the author marks the song as adapted.
+ * Cataloging only (not legal advice). Spec: Additional-fields-adaptive-works.md.
+ */
+function AdaptedWorkSection({
+  payload,
+  onPatchPayload,
+  collapsed,
+  onToggle,
+  fieldKey,
+}: {
+  payload: Artist2SongPayload;
+  onPatchPayload: (patch: Partial<Artist2SongPayload>) => void;
+  collapsed: boolean;
+  onToggle: () => void;
+  fieldKey: (part: string) => string;
+}) {
+  const adapted = songAdaptedWork(payload);
+  const adaptedRef = useRef(adapted);
+  adaptedRef.current = adapted;
+
+  const debouncedAdapted = useDebouncedCallback((patch: Partial<Artist2AdaptedWork>) => {
+    onPatchPayload({ adaptedWork: patchAdaptedWork(adaptedRef.current, patch) });
+  }, 400);
+
+  const commitAdapted = (patch: Partial<Artist2AdaptedWork>) => {
+    const next = patchAdaptedWork(adaptedRef.current, patch);
+    adaptedRef.current = next;
+    onPatchPayload({ adaptedWork: next });
+  };
+
+  const pickProvenanceFile = async () => {
+    const path = await getApp()?.openFile?.({
+      filters: [
+        { name: 'Documents & images', extensions: ['pdf', 'png', 'jpg', 'jpeg', 'txt', 'md', 'webp'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    if (!path) return;
+    commitAdapted({ provenanceFilePath: path });
+  };
+
+  return (
+    <CollapsibleSection
+      title="Adapted Work & Provenance"
+      collapsed={collapsed}
+      onToggle={onToggle}
+    >
+      <label className="a2-chip-check a2-adapted-enable">
+        <input
+          type="checkbox"
+          checked={Boolean(adapted.enabled)}
+          onChange={(event) => commitAdapted({ enabled: event.target.checked })}
+        />
+        This song is adapted from a pre-existing work
+      </label>
+
+      {adapted.enabled ? (
+        <div className="a2-adapted-body">
+          <p className="a2-adapted-note">
+            Catalog provenance only — not a copyright determination. You remain responsible for
+            confirming public-domain or license status.
+          </p>
+
+          <h4 className="a2-adapted-subhead">Adaptation</h4>
+
+          <label className="a2-field">
+            <span>Name of original work</span>
+            <input
+              defaultValue={adapted.originalWorkName ?? ''}
+              key={fieldKey('adapted-original-name')}
+              placeholder="Freeform title of the earlier work"
+              onChange={(event) => debouncedAdapted({ originalWorkName: event.target.value })}
+            />
+          </label>
+
+          <fieldset className="a2-chip-fieldset">
+            <legend>Adaptation type</legend>
+            <div className="a2-adapted-radio-grid">
+              {ADAPTATION_TYPES.map((value) => (
+                <label key={value} className="a2-chip-check">
+                  <input
+                    type="radio"
+                    name={fieldKey('adaptation-type')}
+                    checked={adapted.adaptationType === value}
+                    onChange={() => commitAdapted({ adaptationType: value })}
+                  />
+                  {ADAPTATION_TYPE_LABELS[value]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="a2-field">
+            <span>Adapted by</span>
+            <div className="a2-segmented" role="group" aria-label="Adapted by">
+              {ADAPTED_PARTY_ROLES.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  className={adapted.adaptedBy === role ? 'is-active' : undefined}
+                  onClick={() =>
+                    commitAdapted({
+                      adaptedBy: role,
+                      adapterName: role === 'me' ? '' : adapted.adapterName,
+                    })
+                  }
+                >
+                  {ADAPTED_PARTY_ROLE_LABELS[role]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {adapted.adaptedBy === 'someone_else' ? (
+            <label className="a2-field">
+              <span>Adapter name</span>
+              <input
+                defaultValue={adapted.adapterName ?? ''}
+                key={fieldKey('adapted-adapter-name')}
+                placeholder="Who created this adaptation"
+                onChange={(event) => debouncedAdapted({ adapterName: event.target.value })}
+              />
+            </label>
+          ) : null}
+
+          <div className="a2-field">
+            <span>Original creator</span>
+            <div className="a2-segmented" role="group" aria-label="Original creator">
+              {ADAPTED_PARTY_ROLES.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  className={adapted.originalCreator === role ? 'is-active' : undefined}
+                  onClick={() => commitAdapted({ originalCreator: role })}
+                >
+                  {ADAPTED_PARTY_ROLE_LABELS[role]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <fieldset className="a2-chip-fieldset">
+            <legend>
+              Source material used
+              <HelpPopover label="Source material help">
+                <strong>Existing Music</strong> — composition, independent of a recording.
+                <br />
+                <strong>Existing Performance</strong> — a recording or performance used or sampled.
+                <br />
+                <strong>Existing Lyrics</strong> — written lyrical content.
+              </HelpPopover>
+            </legend>
+            <div className="a2-adapted-check-row">
+              {SOURCE_MATERIAL_KINDS.map((kind) => {
+                const checked = Boolean(adapted.sourceMaterial?.includes(kind));
+                return (
+                  <label key={kind} className="a2-chip-check" title={SOURCE_MATERIAL_HELP[kind]}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) =>
+                        commitAdapted({
+                          sourceMaterial: toggleAdaptedWorkListValue(
+                            adapted.sourceMaterial,
+                            kind,
+                            event.target.checked,
+                          ),
+                        })
+                      }
+                    />
+                    {SOURCE_MATERIAL_LABELS[kind]}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <label className="a2-field a2-field--date">
+            <span>Original publication date</span>
+            <input
+              className="a2-field-date"
+              defaultValue={adapted.originalPublicationDate ?? ''}
+              key={fieldKey('adapted-orig-pub')}
+              placeholder="Year or full date"
+              onChange={(event) =>
+                debouncedAdapted({ originalPublicationDate: event.target.value })
+              }
+            />
+          </label>
+
+          <fieldset className="a2-chip-fieldset">
+            <legend>Original copyright status</legend>
+            <div className="a2-adapted-check-row">
+              {ORIGINAL_COPYRIGHT_STATUSES.map((status) => {
+                const checked = Boolean(adapted.originalCopyrightStatus?.includes(status));
+                return (
+                  <label key={status} className="a2-chip-check">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) =>
+                        commitAdapted({
+                          originalCopyrightStatus: toggleAdaptedWorkListValue(
+                            adapted.originalCopyrightStatus,
+                            status,
+                            event.target.checked,
+                          ),
+                        })
+                      }
+                    />
+                    {ORIGINAL_COPYRIGHT_STATUS_LABELS[status]}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <h4 className="a2-adapted-subhead">Provenance</h4>
+
+          <label className="a2-field">
+            <span>Original performer(s)</span>
+            <input
+              defaultValue={adapted.originalPerformers ?? ''}
+              key={fieldKey('adapted-orig-performers')}
+              onChange={(event) => debouncedAdapted({ originalPerformers: event.target.value })}
+            />
+          </label>
+          <label className="a2-field">
+            <span>Original music</span>
+            <input
+              defaultValue={adapted.originalMusic ?? ''}
+              key={fieldKey('adapted-orig-music')}
+              placeholder="Composer(s) or musical creator(s)"
+              onChange={(event) => debouncedAdapted({ originalMusic: event.target.value })}
+            />
+          </label>
+          <label className="a2-field">
+            <span>Original words</span>
+            <input
+              defaultValue={adapted.originalWords ?? ''}
+              key={fieldKey('adapted-orig-words')}
+              placeholder="Lyricist(s) or author(s)"
+              onChange={(event) => debouncedAdapted({ originalWords: event.target.value })}
+            />
+          </label>
+          <label className="a2-field">
+            <span>Original copyright holder</span>
+            <input
+              defaultValue={adapted.originalCopyrightHolder ?? ''}
+              key={fieldKey('adapted-orig-holder')}
+              onChange={(event) =>
+                debouncedAdapted({ originalCopyrightHolder: event.target.value })
+              }
+            />
+          </label>
+          <label className="a2-field a2-field--full">
+            <span>Primary provenance link</span>
+            <input
+              defaultValue={adapted.primaryProvenanceLink ?? ''}
+              key={fieldKey('adapted-provenance-url')}
+              placeholder="https://…"
+              onChange={(event) =>
+                debouncedAdapted({ primaryProvenanceLink: event.target.value })
+              }
+            />
+          </label>
+
+          <div className="a2-field">
+            <span>Provenance file</span>
+            <div className="a2-file-row">
+              <code>{basename(adapted.provenanceFilePath) || '—'}</code>
+              <button type="button" className="a2-secondary" onClick={() => void pickProvenanceFile()}>
+                Choose…
+              </button>
+              {adapted.provenanceFilePath ? (
+                <button
+                  type="button"
+                  className="a2-secondary"
+                  onClick={() => commitAdapted({ provenanceFilePath: null })}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+            <span className="a2-field-meta">
+              Research scans, Archive.org downloads, registrations — stored as a file pointer for now.
+            </span>
+          </div>
+
+          <label className="a2-field a2-field--full">
+            <span>Notes</span>
+            <textarea
+              rows={3}
+              defaultValue={adapted.provenanceNotes ?? ''}
+              key={fieldKey('adapted-provenance-notes')}
+              placeholder="Catch-all notes about the original work"
+              onChange={(event) => debouncedAdapted({ provenanceNotes: event.target.value })}
+            />
+          </label>
+
+          <h4 className="a2-adapted-subhead">Changes made</h4>
+          <label className="a2-field a2-field--full">
+            <span className="a2-sr-only">Changes made</span>
+            <textarea
+              rows={4}
+              defaultValue={adapted.changesMade ?? ''}
+              key={fieldKey('adapted-changes')}
+              placeholder="e.g. modernized lyrics, country arrangement, translated to Spanish, parody rewrite…"
+              onChange={(event) => debouncedAdapted({ changesMade: event.target.value })}
+            />
+          </label>
+        </div>
+      ) : null}
+    </CollapsibleSection>
+  );
+}
+
 export function SongEditor({
   object,
   contentById,
   songById,
+  artistName = 'Artist',
   onChangeName,
   onPatchPayload,
   onDelete,
@@ -1979,6 +2500,8 @@ export function SongEditor({
   const [sunoBusy, setSunoBusy] = useState(false);
   const [sunoMessage, setSunoMessage] = useState<string | null>(null);
   const [sunoImportOpen, setSunoImportOpen] = useState(false);
+  const [songCardsOpen, setSongCardsOpen] = useState(false);
+  const [songChipsOpen, setSongChipsOpen] = useState(false);
   // Slug stays derived until the author opts into “Edit URL slug”.
   const [editingSlug, setEditingSlug] = useState(false);
   const [slugDraft, setSlugDraft] = useState('');
@@ -1986,11 +2509,18 @@ export function SongEditor({
   const [aboutDraft, setAboutDraft] = useState(payload.about ?? '');
   const [lyricsMode, setLyricsMode] = useState<'write' | 'preview'>('write');
   const [lyricsDraft, setLyricsDraft] = useState(payload.lyrics ?? '');
+  const [lyricQuoteLen, setLyricQuoteLen] = useState((payload.lyricQuote ?? '').length);
   const [captionLen, setCaptionLen] = useState((payload.caption ?? '').length);
   const [aboutLen, setAboutLen] = useState((payload.about ?? '').length);
+  // Soft character counters for the public credit / copyright lines.
+  const [copyrightLen, setCopyrightLen] = useState((payload.copyrightNotice ?? '').length);
+  const [musicCreditLen, setMusicCreditLen] = useState((payload.musicCredit ?? '').length);
+  const [lyricsCreditLen, setLyricsCreditLen] = useState((payload.lyricsCredit ?? '').length);
   const fieldKey = (part: string) => `${part}-${object.id}`;
   const headerArtPath = resolvePrimaryArtworkPath(payload, contentById);
   const effectiveSlug = resolveSongSlug({ name: object.name, slug: payload.slug });
+  // Per-song section open/closed flags (SQLite settings — not on the Song payload).
+  const { isCollapsed, toggle } = useSongSectionCollapse(object.id);
 
   return (
     <div className="a2-editor">
@@ -1998,6 +2528,20 @@ export function SongEditor({
       <header className="a2-editor-topbar">
         <h2 className="a2-editor-heading">Edit Song</h2>
         <div className="a2-editor-header-actions a2-editor-header-actions--inline">
+          <button
+            type="button"
+            className="a2-secondary"
+            onClick={() => setSongCardsOpen(true)}
+          >
+            Song Cards…
+          </button>
+          <button
+            type="button"
+            className="a2-secondary"
+            onClick={() => setSongChipsOpen(true)}
+          >
+            Song Chips…
+          </button>
           {onImportSuno ? (
             <button
               type="button"
@@ -2157,7 +2701,40 @@ export function SongEditor({
                 {aboutLen > ABOUT_SOFT_MAX ? ' — consider shortening for cards / mobile' : ''}
               </span>
             </div>
+            {/* Themes live with the public-facing copy (moved from Musical Details). */}
+            <label className="a2-field">
+              <span className="a2-song-field-label">Themes / Keywords</span>
+              <TagsInput
+                key={fieldKey('song-themes')}
+                genres={payload.themes ?? []}
+                noun="keyword"
+                placeholder="e.g. memory, nightlife, Texas — Enter or comma"
+                onChange={(themes) => debouncedPayload({ themes })}
+              />
+            </label>
           </section>
+
+      {songCardsOpen ? (
+        <SongCardsDesignerModal
+          open={songCardsOpen}
+          onClose={() => setSongCardsOpen(false)}
+          songTitle={object.name}
+          artistName={artistName}
+          payload={payload}
+          coverPath={headerArtPath}
+        />
+      ) : null}
+
+      {songChipsOpen ? (
+        <SongChipsDesignerModal
+          open={songChipsOpen}
+          onClose={() => setSongChipsOpen(false)}
+          songTitle={object.name}
+          artistName={artistName}
+          payload={payload}
+          coverPath={headerArtPath}
+        />
+      ) : null}
 
       {sunoImportOpen && onImportSuno ? (
         <div
@@ -2250,8 +2827,11 @@ export function SongEditor({
 
       <IncompleteBadges hints={songIncompleteHints(object)} />
 
-      <section className="a2-section">
-        <h3>Overview</h3>
+      <CollapsibleSection
+        title="Musical Details"
+        collapsed={isCollapsed('musicalDetails')}
+        onToggle={() => toggle('musicalDetails')}
+      >
         <label className="a2-field a2-field--date">
           <span className="a2-label-with-help">
             Creation date
@@ -2285,56 +2865,179 @@ export function SongEditor({
         </label>
         <label className="a2-field">
           <span>Additional genres</span>
-          <GenreTagsInput
+          <TagsInput
             key={fieldKey('song-addl-genres')}
             genres={payload.additionalGenres ?? []}
             placeholder="Type a genre, then Enter or comma"
             onChange={(additionalGenres) => debouncedPayload({ additionalGenres })}
           />
         </label>
-        <label className="a2-field a2-field--bpm">
-          <span>BPM</span>
-          <input
-            className="a2-field-bpm"
-            inputMode="numeric"
-            defaultValue={payload.bpm ?? ''}
-            key={fieldKey('song-bpm')}
-            placeholder="0–1999"
-            onChange={(event) => {
-              const bpm = sanitizeBpmInput(event.target.value);
-              event.target.value = bpm === null ? '' : String(bpm);
-              debouncedPayload({ bpm });
-            }}
+        {/* Primary language + additional languages + explicit lyrics on one row. */}
+        <div className="a2-field-row a2-field-row--languages">
+          <label className="a2-field a2-field--language">
+            <span>Primary language</span>
+            <input
+              defaultValue={songPrimaryLanguage(payload)}
+              key={fieldKey('song-primary-language')}
+              placeholder="Primary language of the lyrics"
+              autoComplete="off"
+              onChange={(event) =>
+                debouncedPayload({
+                  primaryLanguage: event.target.value,
+                  language: undefined,
+                })
+              }
+            />
+          </label>
+          <label className="a2-field a2-field--languages-extra">
+            <span>Additional languages</span>
+            <TagsInput
+              key={fieldKey('song-addl-languages')}
+              genres={payload.additionalLanguages ?? []}
+              noun="language"
+              placeholder="Type a language, then Enter or comma"
+              onChange={(additionalLanguages) => debouncedPayload({ additionalLanguages })}
+            />
+          </label>
+          {/*
+            Author-declared only — we never detect explicit content. Suno import
+            may seed this; the artist can clear or set it here.
+            Empty label span keeps the pill on the same baseline as the language inputs.
+          */}
+          <div className="a2-field a2-field--explicit">
+            <span className="a2-explicit-pill-spacer" aria-hidden="true">
+              &nbsp;
+            </span>
+            {/* Checkbox outside; purple “explicit” badge is the label, not a chip around the input. */}
+            <label
+              className={`a2-explicit-toggle${payload.explicit ? ' is-checked' : ''}`}
+              title="Mark this song as having explicit lyrics"
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(payload.explicit)}
+                key={fieldKey('song-explicit')}
+                onChange={(event) => onPatchPayload({ explicit: event.target.checked })}
+              />
+              <span className="a2-explicit-pill">explicit</span>
+            </label>
+          </div>
+        </div>
+        <label className="a2-field a2-field--half">
+          <span>Primary vocal presentation</span>
+          <select
+            defaultValue={payload.primaryVocalPresentation ?? ''}
+            key={fieldKey('song-vocal-presentation')}
+            onChange={(event) =>
+              onPatchPayload({
+                primaryVocalPresentation: event.target.value || '',
+              })
+            }
+          >
+            <option value="">—</option>
+            {PRIMARY_VOCAL_PRESENTATIONS.map((value) => (
+              <option key={value} value={value}>
+                {PRIMARY_VOCAL_PRESENTATION_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="a2-field a2-field--full">
+          <span>Additional vocals</span>
+          <textarea
+            rows={3}
+            defaultValue={payload.additionalVocals ?? ''}
+            key={fieldKey('song-addl-vocals')}
+            placeholder="Backing, guest, or other vocal notes"
+            onChange={(event) => debouncedPayload({ additionalVocals: event.target.value })}
           />
         </label>
-      </section>
+        {/* Musical ensemble with BPM to its right on one row. */}
+        <div className="a2-field-row a2-field-row--ensemble">
+          <label className="a2-field a2-field--half">
+            <span>Musical ensemble</span>
+            <select
+              defaultValue={payload.musicalEnsemble ?? ''}
+              key={fieldKey('song-musical-ensemble')}
+              onChange={(event) =>
+                onPatchPayload({
+                  musicalEnsemble: event.target.value || '',
+                })
+              }
+            >
+              <option value="">—</option>
+              {MUSICAL_ENSEMBLES.map((value) => (
+                <option key={value} value={value}>
+                  {MUSICAL_ENSEMBLE_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="a2-field a2-field--bpm">
+            <span>BPM</span>
+            <input
+              className="a2-field-bpm"
+              inputMode="numeric"
+              defaultValue={payload.bpm ?? ''}
+              key={fieldKey('song-bpm')}
+              placeholder="0–1999"
+              onChange={(event) => {
+                const bpm = sanitizeBpmInput(event.target.value);
+                event.target.value = bpm === null ? '' : String(bpm);
+                debouncedPayload({ bpm });
+              }}
+            />
+          </label>
+        </div>
+      </CollapsibleSection>
 
-      <SongLinksSection payload={payload} onPatchPayload={onPatchPayload} />
+      <AdaptedWorkSection
+        payload={payload}
+        onPatchPayload={onPatchPayload}
+        collapsed={isCollapsed('adaptedWork')}
+        onToggle={() => toggle('adaptedWork')}
+        fieldKey={fieldKey}
+      />
 
-      <CreationProcessSection payload={payload} onPatchPayload={onPatchPayload} />
+      <SongLinksSection
+        payload={payload}
+        onPatchPayload={onPatchPayload}
+        collapsed={isCollapsed('links')}
+        onToggle={() => toggle('links')}
+      />
 
-      <section className="a2-section">
-        <div className="a2-field a2-field--lyrics">
-          {/* Heading row mirrors About: title left, Write/Preview toggle right. */}
-          <div className="a2-field-heading-row">
-            <h3 className="a2-lyrics-heading">Lyrics</h3>
-            <div className="a2-segmented" role="group" aria-label="Lyrics editor mode">
-              <button
-                type="button"
-                className={lyricsMode === 'write' ? 'is-active' : undefined}
-                onClick={() => setLyricsMode('write')}
-              >
-                Write
-              </button>
-              <button
-                type="button"
-                className={lyricsMode === 'preview' ? 'is-active' : undefined}
-                onClick={() => setLyricsMode('preview')}
-              >
-                Preview
-              </button>
-            </div>
+      <CreationProcessSection
+        payload={payload}
+        onPatchPayload={onPatchPayload}
+        collapsed={isCollapsed('creationProcess')}
+        onToggle={() => toggle('creationProcess')}
+      />
+
+      <CollapsibleSection
+        title="Lyrics"
+        titleClassName="a2-lyrics-heading"
+        collapsed={isCollapsed('lyrics')}
+        onToggle={() => toggle('lyrics')}
+        headerTrailing={
+          <div className="a2-segmented" role="group" aria-label="Lyrics editor mode">
+            <button
+              type="button"
+              className={lyricsMode === 'write' ? 'is-active' : undefined}
+              onClick={() => setLyricsMode('write')}
+            >
+              Write
+            </button>
+            <button
+              type="button"
+              className={lyricsMode === 'preview' ? 'is-active' : undefined}
+              onClick={() => setLyricsMode('preview')}
+            >
+              Preview
+            </button>
           </div>
+        }
+      >
+        <div className="a2-field a2-field--lyrics">
           {lyricsMode === 'write' ? (
             <textarea
               rows={8}
@@ -2351,9 +3054,37 @@ export function SongEditor({
             </pre>
           )}
         </div>
-      </section>
+        {/*
+          Artist-chosen excerpt for Song Cards / publisher lyric-quote UI.
+          We don’t auto-detect chorus — leave it to the author (hard max 500).
+        */}
+        <label className="a2-field a2-field--lyric-quote">
+          <span>Lyric quote</span>
+          <textarea
+            rows={3}
+            defaultValue={payload.lyricQuote ?? ''}
+            key={fieldKey('song-lyric-quote')}
+            maxLength={LYRIC_QUOTE_HARD_MAX}
+            placeholder="A short excerpt for cards and quotes — chorus, hook, or favorite line"
+            onChange={(event) => {
+              const next = event.target.value.slice(0, LYRIC_QUOTE_HARD_MAX);
+              if (next !== event.target.value) event.target.value = next;
+              setLyricQuoteLen(next.length);
+              debouncedPayload({ lyricQuote: next });
+            }}
+          />
+          <span className="a2-field-meta">
+            {lyricQuoteLen}/{LYRIC_QUOTE_HARD_MAX}
+          </span>
+        </label>
+      </CollapsibleSection>
 
-      <RecordingsSection payload={payload} onPatchPayload={onPatchPayload} />
+      <RecordingsSection
+        payload={payload}
+        onPatchPayload={onPatchPayload}
+        collapsed={isCollapsed('recordings')}
+        onToggle={() => toggle('recordings')}
+      />
 
       <RelatedSongsSection
         object={object}
@@ -2361,9 +3092,15 @@ export function SongEditor({
         onRelateSong={onRelateSong}
         onUnrelateSong={onUnrelateSong}
         onOpenSong={onOpenSong}
+        collapsed={isCollapsed('relatedSongs')}
+        onToggle={() => toggle('relatedSongs')}
       />
 
-      <VideoAndAnimationSection payload={payload} />
+      <VideoAndAnimationSection
+        payload={payload}
+        collapsed={isCollapsed('videoAndAnimation')}
+        onToggle={() => toggle('videoAndAnimation')}
+      />
 
       <SongArtworkSection
         objectName={object.name}
@@ -2373,7 +3110,70 @@ export function SongEditor({
         onPromoteArtwork={onPromoteArtwork}
         onOpenContent={onOpenContent}
         onRenameCover={onRenameCover}
+        collapsed={isCollapsed('artwork')}
+        onToggle={() => toggle('artwork')}
       />
+
+      {/*
+        Credits & Rights — public-facing catch-all lines kept together at the
+        bottom of the editor. Single-line, non-required, soft-capped (never
+        truncated). Later these can expand into structured rights/credits.
+      */}
+      <CollapsibleSection
+        title="Credits & Rights"
+        className="a2-section--credits"
+        collapsed={isCollapsed('creditsRights')}
+        onToggle={() => toggle('creditsRights')}
+      >
+        <label className="a2-field">
+          <span>Music credit</span>
+          <input
+            defaultValue={payload.musicCredit ?? ''}
+            key={fieldKey('song-music-credit')}
+            maxLength={600}
+            placeholder="e.g. Music by Ben Sawyer"
+            onChange={(event) => {
+              setMusicCreditLen(event.target.value.length);
+              debouncedPayload({ musicCredit: event.target.value });
+            }}
+          />
+          <span className={`a2-field-meta${musicCreditLen > CREDIT_SOFT_MAX ? ' a2-char-warn' : ''}`}>
+            {musicCreditLen}/{CREDIT_SOFT_MAX}
+          </span>
+        </label>
+        <label className="a2-field">
+          <span>Lyrics credit</span>
+          <input
+            defaultValue={payload.lyricsCredit ?? ''}
+            key={fieldKey('song-lyrics-credit')}
+            maxLength={600}
+            placeholder="e.g. Lyrics by Ben Sawyer"
+            onChange={(event) => {
+              setLyricsCreditLen(event.target.value.length);
+              debouncedPayload({ lyricsCredit: event.target.value });
+            }}
+          />
+          <span className={`a2-field-meta${lyricsCreditLen > CREDIT_SOFT_MAX ? ' a2-char-warn' : ''}`}>
+            {lyricsCreditLen}/{CREDIT_SOFT_MAX}
+          </span>
+        </label>
+        <label className="a2-field">
+          <span>Copyright</span>
+          <input
+            defaultValue={payload.copyrightNotice ?? ''}
+            key={fieldKey('song-copyright')}
+            maxLength={500}
+            placeholder="e.g. © 2026 Sawyer House. All rights reserved."
+            onChange={(event) => {
+              setCopyrightLen(event.target.value.length);
+              debouncedPayload({ copyrightNotice: event.target.value });
+            }}
+          />
+          <span className={`a2-field-meta${copyrightLen > COPYRIGHT_SOFT_MAX ? ' a2-char-warn' : ''}`}>
+            {copyrightLen}/{COPYRIGHT_SOFT_MAX}
+          </span>
+        </label>
+      </CollapsibleSection>
 
       <section className="a2-section">
         <div className="a2-field a2-field--notes">
@@ -2398,6 +3198,8 @@ type ContainerEditorProps = {
   object: Artist2CatalogObject;
   detail: Artist2AlbumDetail | null;
   contentById: Map<string, Artist2CatalogObject>;
+  /** Catalog albums for Related Albums (Album editor only). */
+  albumById?: Map<string, Artist2CatalogObject>;
   onChangeName: (name: string) => void;
   onPatchPayload: (payload: Record<string, unknown>) => void;
   onDelete: () => void;
@@ -2406,6 +3208,12 @@ type ContainerEditorProps = {
   onPromoteArtwork: (name: string) => void;
   onOpenContent?: (contentId: string) => void;
   onRenameCover?: () => Promise<void>;
+  onRelateAlbum?: (
+    toAlbumId: string,
+    relation: Artist2AlbumRelationKind,
+  ) => Promise<void>;
+  onUnrelateAlbum?: (toAlbumId: string) => Promise<void>;
+  onOpenAlbum?: (albumId: string) => void;
 };
 
 function ContainerTrackList({
@@ -2468,6 +3276,7 @@ export function AlbumEditor({
   object,
   detail,
   contentById,
+  albumById,
   onChangeName,
   onPatchPayload,
   onDelete,
@@ -2476,52 +3285,170 @@ export function AlbumEditor({
   onPromoteArtwork,
   onOpenContent,
   onRenameCover,
+  onRelateAlbum,
+  onUnrelateAlbum,
+  onOpenAlbum,
 }: ContainerEditorProps) {
   const payload = object.payload as Artist2AlbumPayload;
   const tracks = detail?.tracks ?? [];
   const memberships = detail?.memberships ?? [];
   const debouncedName = useDebouncedCallback(onChangeName, 400);
   const debouncedPayload = useDebouncedCallback(onPatchPayload, 400);
+  const [aboutMode, setAboutMode] = useState<'write' | 'preview'>('write');
+  // Prefer about; fall back to legacy description for existing albums.
+  const aboutValue = payload.about ?? payload.description ?? '';
+  const [aboutDraft, setAboutDraft] = useState(aboutValue);
+  const [captionLen, setCaptionLen] = useState((payload.caption ?? '').length);
+  const [aboutLen, setAboutLen] = useState(aboutValue.length);
+  const [copyrightLen, setCopyrightLen] = useState((payload.copyrightNotice ?? '').length);
+  const [producerCreditLen, setProducerCreditLen] = useState(
+    (payload.producerCredit ?? '').length,
+  );
+  const fieldKey = (part: string) => `${part}-${object.id}`;
+  const headerArtPath = resolvePrimaryArtworkPath(payload, contentById);
+  const { isCollapsed, toggle } = useAlbumSectionCollapse(object.id);
 
   return (
     <div className="a2-editor">
-      <header className="a2-editor-header">
-        <div>
-          <p className="a2-kicker">Album · Container</p>
+      <header className="a2-editor-topbar">
+        <h2 className="a2-editor-heading">Edit Album</h2>
+        <div className="a2-editor-header-actions a2-editor-header-actions--inline">
+          <button type="button" className="a2-danger" onClick={onDelete}>
+            Delete
+          </button>
+        </div>
+      </header>
+
+      {/* Cover sits directly right of the title — same pattern as Song. */}
+      <div className="a2-editor-title-row">
+        <div className="a2-editor-title-block">
+          <p className="a2-song-field-label">Album title</p>
           <input
-            className="a2-title-input"
+            className="a2-title-input a2-title-input--song"
             defaultValue={object.name}
-            key={`album-name-${object.id}`}
+            key={fieldKey('album-name')}
             onChange={(event) => debouncedName(event.target.value)}
-            aria-label="Album name"
+            aria-label="Album title"
           />
         </div>
-        <button type="button" className="a2-danger" onClick={onDelete}>
-          Delete
-        </button>
-      </header>
+        <ArtworkThumbnail
+          filePath={headerArtPath}
+          alt={`${object.name} cover`}
+          className="a2-artwork-thumb--header"
+        />
+      </div>
 
       <IncompleteBadges hints={albumIncompleteHints(object, tracks.length)} />
 
-      <section className="a2-section">
-        <h3>Overview</h3>
-        <label className="a2-field">
-          <span>Release date</span>
+      {/* Identity block mirrors Song: subtitle / caption / about / themes / creation date. */}
+      <section className="a2-section a2-section--song-identity">
+        <label className="a2-field a2-field--song">
+          <span className="a2-song-field-label">Subtitle</span>
           <input
-            defaultValue={payload.releaseDate ?? ''}
-            key={`album-date-${object.id}`}
-            onChange={(event) => debouncedPayload({ releaseDate: event.target.value })}
+            defaultValue={payload.subtitle ?? ''}
+            key={fieldKey('album-subtitle')}
+            placeholder="Optional secondary line (edition, feature, …)"
+            onChange={(event) => debouncedPayload({ subtitle: event.target.value })}
           />
         </label>
-        <label className="a2-field">
-          <span>Description</span>
+        <label className="a2-field a2-field--song">
+          <span className="a2-song-field-label">Caption</span>
           <textarea
-            rows={3}
-            defaultValue={payload.description ?? ''}
-            key={`album-desc-${object.id}`}
-            onChange={(event) => debouncedPayload({ description: event.target.value })}
+            rows={2}
+            defaultValue={payload.caption ?? ''}
+            key={fieldKey('album-caption')}
+            placeholder="Short public line for cards / featured"
+            onChange={(event) => {
+              setCaptionLen(event.target.value.length);
+              debouncedPayload({ caption: event.target.value });
+            }}
+          />
+          <span className={`a2-field-meta${captionLen > CAPTION_SOFT_MAX ? ' a2-char-warn' : ''}`}>
+            {captionLen}/{CAPTION_SOFT_MAX}
+            {captionLen > CAPTION_SOFT_MAX ? ' — prefer a shorter caption' : ''}
+          </span>
+        </label>
+        <div className="a2-field a2-field--song">
+          <div className="a2-field-heading-row a2-field-heading-row--song">
+            <span className="a2-song-field-label">About</span>
+            <div className="a2-segmented" role="group" aria-label="About editor mode">
+              <button
+                type="button"
+                className={aboutMode === 'write' ? 'is-active' : undefined}
+                onClick={() => setAboutMode('write')}
+              >
+                Write
+              </button>
+              <button
+                type="button"
+                className={aboutMode === 'preview' ? 'is-active' : undefined}
+                onClick={() => setAboutMode('preview')}
+              >
+                Preview
+              </button>
+            </div>
+          </div>
+          {aboutMode === 'write' ? (
+            <textarea
+              rows={5}
+              defaultValue={aboutValue}
+              key={fieldKey('album-about')}
+              placeholder="Primary public description (Markdown)"
+              onChange={(event) => {
+                const value = event.target.value;
+                setAboutDraft(value);
+                setAboutLen(value.length);
+                // Write to about; clear legacy description so About stays canonical.
+                debouncedPayload({ about: value, description: '' });
+              }}
+            />
+          ) : (
+            <pre className="a2-markdown-preview">
+              {aboutDraft.trim() || 'Nothing to preview yet.'}
+            </pre>
+          )}
+          <span className={`a2-field-meta${aboutLen > ABOUT_SOFT_MAX ? ' a2-char-warn' : ''}`}>
+            {aboutLen}/{ABOUT_SOFT_MAX}
+            {aboutLen > ABOUT_SOFT_MAX ? ' — consider shortening for cards / mobile' : ''}
+          </span>
+        </div>
+        <label className="a2-field">
+          <span className="a2-song-field-label">Themes / Keywords</span>
+          <TagsInput
+            key={fieldKey('album-themes')}
+            genres={payload.themes ?? []}
+            noun="keyword"
+            placeholder="e.g. memory, nightlife, Texas — Enter or comma"
+            onChange={(themes) => debouncedPayload({ themes })}
           />
         </label>
+        <label className="a2-field a2-field--date">
+          <span className="a2-label-with-help">
+            <span className="a2-song-field-label">Creation date</span>
+            <HelpPopover label="Creation date format help">
+              Digits only — day/month optional (<code>2025</code>, <code>07/2025</code>, or{' '}
+              <code>16/07/2025</code>).
+            </HelpPopover>
+          </span>
+          <input
+            className="a2-field-date"
+            defaultValue={albumCreationDate(payload)}
+            key={fieldKey('album-created')}
+            placeholder="DD/MM/YYYY"
+            inputMode="numeric"
+            autoComplete="off"
+            onChange={(event) => {
+              const next = sanitizeCreationDateInput(event.target.value);
+              event.target.value = next;
+              // Prefer creationDate; clear legacy releaseDate on edit.
+              debouncedPayload({ creationDate: next, releaseDate: '' });
+            }}
+          />
+        </label>
+        <p className="a2-help">
+          Genre, vocal presentation, musical ensemble, and creation process will be derived from
+          the Songs on this Album later — they are not edited here.
+        </p>
       </section>
 
       <ContainerTrackList
@@ -2532,15 +3459,92 @@ export function AlbumEditor({
         onMoveTrack={onMoveTrack}
       />
 
-      <ArtworkSection
+      <SongLinksSection
+        payload={payload}
+        onPatchPayload={onPatchPayload}
+        entityNoun="album"
+        collapsed={isCollapsed('links')}
+        onToggle={() => toggle('links')}
+      />
+
+      <RelatedAlbumsSection
+        object={object}
+        albumById={albumById}
+        onRelateAlbum={onRelateAlbum}
+        onUnrelateAlbum={onUnrelateAlbum}
+        onOpenAlbum={onOpenAlbum}
+        collapsed={isCollapsed('relatedAlbums')}
+        onToggle={() => toggle('relatedAlbums')}
+      />
+
+      <SongArtworkSection
         objectName={object.name}
-        artwork={payload.artwork}
+        payload={payload}
         contentById={contentById}
         onPatchPayload={onPatchPayload}
         onPromoteArtwork={onPromoteArtwork}
         onOpenContent={onOpenContent}
         onRenameCover={onRenameCover}
+        collapsed={isCollapsed('artwork')}
+        onToggle={() => toggle('artwork')}
       />
+
+      <CollapsibleSection
+        title="Credits & Rights"
+        className="a2-section--credits"
+        collapsed={isCollapsed('creditsRights')}
+        onToggle={() => toggle('creditsRights')}
+      >
+        <label className="a2-field">
+          <span>Producer</span>
+          <input
+            defaultValue={payload.producerCredit ?? ''}
+            key={fieldKey('album-producer')}
+            maxLength={600}
+            placeholder="e.g. Produced by Ben Sawyer"
+            onChange={(event) => {
+              setProducerCreditLen(event.target.value.length);
+              debouncedPayload({ producerCredit: event.target.value });
+            }}
+          />
+          <span
+            className={`a2-field-meta${producerCreditLen > CREDIT_SOFT_MAX ? ' a2-char-warn' : ''}`}
+          >
+            {producerCreditLen}/{CREDIT_SOFT_MAX}
+          </span>
+        </label>
+        <label className="a2-field">
+          <span>Copyright</span>
+          <input
+            defaultValue={payload.copyrightNotice ?? ''}
+            key={fieldKey('album-copyright')}
+            maxLength={500}
+            placeholder="e.g. © 2026 Sawyer House. All rights reserved."
+            onChange={(event) => {
+              setCopyrightLen(event.target.value.length);
+              debouncedPayload({ copyrightNotice: event.target.value });
+            }}
+          />
+          <span className={`a2-field-meta${copyrightLen > COPYRIGHT_SOFT_MAX ? ' a2-char-warn' : ''}`}>
+            {copyrightLen}/{COPYRIGHT_SOFT_MAX}
+          </span>
+        </label>
+      </CollapsibleSection>
+
+      <section className="a2-section">
+        <div className="a2-field a2-field--notes">
+          <div className="a2-notes-heading-row">
+            <h3 className="a2-notes-heading">Notes</h3>
+            <span className="a2-private-pill">Private</span>
+          </div>
+          <textarea
+            rows={3}
+            defaultValue={payload.notes ?? ''}
+            key={fieldKey('album-notes')}
+            onChange={(event) => debouncedPayload({ notes: event.target.value })}
+          />
+        </div>
+      </section>
     </div>
   );
 }
@@ -2563,88 +3567,318 @@ export function PlaylistEditor({
   const memberships = detail?.memberships ?? [];
   const debouncedName = useDebouncedCallback(onChangeName, 400);
   const debouncedPayload = useDebouncedCallback(onPatchPayload, 400);
+  const [aboutMode, setAboutMode] = useState<'write' | 'preview'>('write');
+  // Prefer about; fall back to legacy description for existing playlists.
+  const aboutValue = playlistAbout(payload);
+  const [aboutDraft, setAboutDraft] = useState(aboutValue);
+  const [captionLen, setCaptionLen] = useState((payload.caption ?? '').length);
+  const [aboutLen, setAboutLen] = useState(aboutValue.length);
+  const producerSeed = playlistProducerCredit(payload);
+  const [producerCreditLen, setProducerCreditLen] = useState(producerSeed.length);
+  const fieldKey = (part: string) => `${part}-${object.id}`;
+  const headerArtPath = resolvePrimaryArtworkPath(payload, contentById);
+  const { isCollapsed, toggle } = usePlaylistSectionCollapse(object.id);
 
   return (
     <div className="a2-editor">
-      <header className="a2-editor-header">
-        <div>
-          <p className="a2-kicker">Playlist · Container</p>
-          <input
-            className="a2-title-input"
-            defaultValue={object.name}
-            key={`playlist-name-${object.id}`}
-            onChange={(event) => debouncedName(event.target.value)}
-            aria-label="Playlist name"
-          />
+      <header className="a2-editor-topbar">
+        <h2 className="a2-editor-heading">Edit Playlist</h2>
+        <div className="a2-editor-header-actions a2-editor-header-actions--inline">
+          <button type="button" className="a2-danger" onClick={onDelete}>
+            Delete
+          </button>
         </div>
-        <button type="button" className="a2-danger" onClick={onDelete}>
-          Delete
-        </button>
       </header>
+
+      {/* Cover sits directly right of the title — same pattern as Song / Album. */}
+      <div className="a2-editor-title-row">
+        <div className="a2-editor-title-block">
+          <p className="a2-song-field-label">Playlist title</p>
+          <input
+            className="a2-title-input a2-title-input--song"
+            defaultValue={object.name}
+            key={fieldKey('playlist-name')}
+            onChange={(event) => debouncedName(event.target.value)}
+            aria-label="Playlist title"
+          />
+          <p className="a2-muted a2-help" style={{ marginTop: '0.35rem' }}>
+            Informal collection — Songs and Albums by reference. Compile still uses Album
+            membership for a song’s “album” field (not playlists).
+          </p>
+        </div>
+        <ArtworkThumbnail
+          filePath={headerArtPath}
+          alt={`${object.name} cover`}
+          className="a2-artwork-thumb--header"
+        />
+      </div>
 
       <IncompleteBadges hints={albumIncompleteHints(object, tracks.length)} />
 
-      <section className="a2-section">
-        <h3>Overview</h3>
-        <p className="a2-help">
-          Playlists curate Songs by reference — same membership model as Albums, different editorial
-          fields. Compile still uses Album membership for the song “album” field (not playlists).
-        </p>
-        <label className="a2-field">
-          <span>Curator</span>
+      <section className="a2-section a2-section--song-identity">
+        <label className="a2-field a2-field--song">
+          <span className="a2-song-field-label">Subtitle</span>
           <input
-            defaultValue={payload.curator ?? ''}
-            key={`playlist-curator-${object.id}`}
-            onChange={(event) => debouncedPayload({ curator: event.target.value })}
+            defaultValue={payload.subtitle ?? ''}
+            key={fieldKey('playlist-subtitle')}
+            placeholder="Optional secondary line (edition, feature, …)"
+            onChange={(event) => debouncedPayload({ subtitle: event.target.value })}
           />
         </label>
-        <label className="a2-field">
-          <span>Purpose</span>
-          <input
-            defaultValue={payload.purpose ?? ''}
-            key={`playlist-purpose-${object.id}`}
-            placeholder="Listening session, set warm-up, …"
-            onChange={(event) => debouncedPayload({ purpose: event.target.value })}
-          />
-        </label>
-        <label className="a2-field">
-          <span>Update date</span>
-          <input
-            defaultValue={payload.updateDate ?? ''}
-            key={`playlist-updated-${object.id}`}
-            placeholder="When you last curated this list"
-            onChange={(event) => debouncedPayload({ updateDate: event.target.value })}
-          />
-        </label>
-        <label className="a2-field">
-          <span>Description</span>
+        <label className="a2-field a2-field--song">
+          <span className="a2-song-field-label">Caption</span>
           <textarea
-            rows={3}
-            defaultValue={payload.description ?? ''}
-            key={`playlist-desc-${object.id}`}
-            onChange={(event) => debouncedPayload({ description: event.target.value })}
+            rows={2}
+            defaultValue={payload.caption ?? ''}
+            key={fieldKey('playlist-caption')}
+            placeholder="Short public line for cards / featured"
+            onChange={(event) => {
+              setCaptionLen(event.target.value.length);
+              debouncedPayload({ caption: event.target.value });
+            }}
+          />
+          <span className={`a2-field-meta${captionLen > CAPTION_SOFT_MAX ? ' a2-char-warn' : ''}`}>
+            {captionLen}/{CAPTION_SOFT_MAX}
+            {captionLen > CAPTION_SOFT_MAX ? ' — prefer a shorter caption' : ''}
+          </span>
+        </label>
+        <div className="a2-field a2-field--song">
+          <div className="a2-field-heading-row a2-field-heading-row--song">
+            <span className="a2-song-field-label">About</span>
+            <div className="a2-segmented" role="group" aria-label="About editor mode">
+              <button
+                type="button"
+                className={aboutMode === 'write' ? 'is-active' : undefined}
+                onClick={() => setAboutMode('write')}
+              >
+                Write
+              </button>
+              <button
+                type="button"
+                className={aboutMode === 'preview' ? 'is-active' : undefined}
+                onClick={() => setAboutMode('preview')}
+              >
+                Preview
+              </button>
+            </div>
+          </div>
+          {aboutMode === 'write' ? (
+            <textarea
+              rows={5}
+              defaultValue={aboutValue}
+              key={fieldKey('playlist-about')}
+              placeholder="Primary public description (Markdown)"
+              onChange={(event) => {
+                const value = event.target.value;
+                setAboutDraft(value);
+                setAboutLen(value.length);
+                debouncedPayload({ about: value, description: '' });
+              }}
+            />
+          ) : (
+            <pre className="a2-markdown-preview">
+              {aboutDraft.trim() || 'Nothing to preview yet.'}
+            </pre>
+          )}
+          <span className={`a2-field-meta${aboutLen > ABOUT_SOFT_MAX ? ' a2-char-warn' : ''}`}>
+            {aboutLen}/{ABOUT_SOFT_MAX}
+            {aboutLen > ABOUT_SOFT_MAX ? ' — consider shortening for cards / mobile' : ''}
+          </span>
+        </div>
+        <label className="a2-field">
+          <span className="a2-song-field-label">Themes / Keywords</span>
+          <TagsInput
+            key={fieldKey('playlist-themes')}
+            genres={payload.themes ?? []}
+            noun="keyword"
+            placeholder="e.g. late night, road trip — Enter or comma"
+            onChange={(themes) => debouncedPayload({ themes })}
           />
         </label>
+        <div className="a2-field-row a2-field-row--dates">
+          <label className="a2-field a2-field--date">
+            <span className="a2-label-with-help">
+              <span className="a2-song-field-label">Created date</span>
+              <HelpPopover label="Created date format help">
+                Digits only — day/month optional (<code>2025</code>, <code>07/2025</code>, or{' '}
+                <code>16/07/2025</code>).
+              </HelpPopover>
+            </span>
+            <input
+              className="a2-field-date"
+              defaultValue={payload.creationDate ?? ''}
+              key={fieldKey('playlist-created')}
+              placeholder="DD/MM/YYYY"
+              inputMode="numeric"
+              autoComplete="off"
+              onChange={(event) => {
+                const next = sanitizeCreationDateInput(event.target.value);
+                event.target.value = next;
+                debouncedPayload({ creationDate: next });
+              }}
+            />
+          </label>
+          <label className="a2-field a2-field--date">
+            <span className="a2-label-with-help">
+              <span className="a2-song-field-label">Last updated</span>
+              <HelpPopover label="Last updated format help">
+                Digits only — day/month optional. Use this when the playlist gains or loses music.
+              </HelpPopover>
+            </span>
+            <input
+              className="a2-field-date"
+              defaultValue={payload.updateDate ?? ''}
+              key={fieldKey('playlist-updated')}
+              placeholder="DD/MM/YYYY"
+              inputMode="numeric"
+              autoComplete="off"
+              onChange={(event) => {
+                const next = sanitizeCreationDateInput(event.target.value);
+                event.target.value = next;
+                debouncedPayload({ updateDate: next });
+              }}
+            />
+          </label>
+        </div>
       </section>
 
-      <ContainerTrackList
-        containerWord="Playlist"
+      <PlaylistMusicList
         tracks={tracks}
         memberships={memberships}
         onRemoveTrack={onRemoveTrack}
         onMoveTrack={onMoveTrack}
       />
 
-      <ArtworkSection
+      <SongLinksSection
+        payload={payload}
+        onPatchPayload={onPatchPayload}
+        entityNoun="playlist"
+        // Playlists push out informally — no streaming / distribution destinations.
+        allowedKinds={['song_pages', 'web', 'social']}
+        collapsed={isCollapsed('links')}
+        onToggle={() => toggle('links')}
+      />
+
+      <SongArtworkSection
         objectName={object.name}
-        artwork={payload.artwork}
+        payload={payload}
         contentById={contentById}
         onPatchPayload={onPatchPayload}
         onPromoteArtwork={onPromoteArtwork}
         onOpenContent={onOpenContent}
         onRenameCover={onRenameCover}
+        collapsed={isCollapsed('artwork')}
+        onToggle={() => toggle('artwork')}
       />
+
+      <CollapsibleSection
+        title="Credits"
+        className="a2-section--credits"
+        collapsed={isCollapsed('creditsRights')}
+        onToggle={() => toggle('creditsRights')}
+      >
+        <label className="a2-field">
+          <span>Curator / Producer</span>
+          <input
+            defaultValue={producerSeed}
+            key={fieldKey('playlist-producer')}
+            maxLength={600}
+            placeholder="e.g. Curated by Ben Sawyer"
+            onChange={(event) => {
+              setProducerCreditLen(event.target.value.length);
+              // Prefer producerCredit; clear legacy curator on edit.
+              debouncedPayload({ producerCredit: event.target.value, curator: '' });
+            }}
+          />
+          <span
+            className={`a2-field-meta${producerCreditLen > CREDIT_SOFT_MAX ? ' a2-char-warn' : ''}`}
+          >
+            {producerCreditLen}/{CREDIT_SOFT_MAX}
+          </span>
+        </label>
+        <p className="a2-help">
+          Playlists themselves aren’t copyrighted works — credit who put the list together here.
+        </p>
+      </CollapsibleSection>
+
+      <section className="a2-section">
+        <div className="a2-field a2-field--notes">
+          <div className="a2-notes-heading-row">
+            <h3 className="a2-notes-heading">Notes</h3>
+            <span className="a2-private-pill">Private</span>
+          </div>
+          <textarea
+            rows={3}
+            defaultValue={payload.notes ?? ''}
+            key={fieldKey('playlist-notes')}
+            onChange={(event) => debouncedPayload({ notes: event.target.value })}
+          />
+        </div>
+      </section>
     </div>
+  );
+}
+
+/** Flat Music list for playlists — Songs and Albums, never nested playlists. */
+function PlaylistMusicList({
+  tracks,
+  memberships,
+  onRemoveTrack,
+  onMoveTrack,
+}: {
+  tracks: Artist2CatalogObject[];
+  memberships: Artist2AlbumDetail['memberships'];
+  onRemoveTrack: (membershipId: string) => void;
+  onMoveTrack: (memberId: string, direction: -1 | 1) => void;
+}) {
+  return (
+    <section className="a2-section">
+      <h3>Music</h3>
+      <p className="a2-help">
+        Use → on Songs or Albums in the catalog sidebar to insert references here. Playlists stay
+        one level deep — other playlists can’t be nested.
+      </p>
+      {tracks.length === 0 ? (
+        <div className="a2-drop-zone">Insert songs or albums via → from the catalog</div>
+      ) : (
+        <ol className="a2-track-list">
+          {tracks.map((track, index) => {
+            const membership = memberships.find((m) => m.memberId === track.id);
+            const kindLabel = track.kind === 'album' ? 'Album' : 'Song';
+            return (
+              <li key={track.id} className="a2-track-row">
+                <span className="a2-track-pos">{index + 1}</span>
+                <span className="a2-track-name">
+                  {track.name}
+                  <span className="a2-muted"> · {kindLabel}</span>
+                </span>
+                <div className="a2-track-actions">
+                  <button
+                    type="button"
+                    onClick={() => onMoveTrack(track.id, -1)}
+                    disabled={index === 0}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onMoveTrack(track.id, 1)}
+                    disabled={index === tracks.length - 1}
+                  >
+                    ↓
+                  </button>
+                  {membership ? (
+                    <button type="button" onClick={() => onRemoveTrack(membership.id)}>
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
   );
 }
 
@@ -2746,6 +3980,20 @@ export function ContentEditor({
               </button>
             ) : null}
           </div>
+        ) : null}
+
+        {/*
+          Proportional ~300px preview of the chosen image, beneath the core
+          fields. Uses the shared thumbnail (resolves the local path to a file
+          URL) with a content-preview modifier so it shows the full image at its
+          natural aspect ratio rather than the square-cropped catalog thumb.
+        */}
+        {isImage && payload.filePath ? (
+          <ArtworkThumbnail
+            filePath={payload.filePath}
+            alt={`${object.name} preview`}
+            className="a2-artwork-thumb--content-preview"
+          />
         ) : null}
 
         {isVideo ? (

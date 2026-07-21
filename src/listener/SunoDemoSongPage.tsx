@@ -62,7 +62,7 @@ function preferRicherProviderMeta(
     (meta.creatorHandle ? 4 : 0) +
     (meta.modelBadge ? 2 : 0) +
     (meta.createdAt ? 2 : 0) +
-    (meta.playCount != null ? 1 : 0) +
+    (meta.sunoPlayCount != null ? 1 : 0) +
     (meta.tagList?.length ? 1 : 0) +
     (meta.stylePrompt ? 1 : 0);
 
@@ -155,8 +155,8 @@ export function SunoDemoSongPage({
           .split(/[,|]/)
           .map((t) => t.trim())
           .filter(Boolean);
-  const playLabel = formatCount(providerMeta?.playCount);
-  const upvoteLabel = formatCount(providerMeta?.upvoteCount);
+  const playLabel = formatCount(providerMeta?.sunoPlayCount);
+  const likeLabel = formatCount(providerMeta?.sunoLikeCount);
   const bpmLabel =
     providerMeta?.bpm != null && Number.isFinite(providerMeta.bpm)
       ? `${Math.round(providerMeta.bpm)} BPM`
@@ -229,8 +229,8 @@ export function SunoDemoSongPage({
             {createdLabel ? <span>{createdLabel}</span> : null}
             {bpmLabel ? <span>{bpmLabel}</span> : null}
             {providerMeta?.isInstrumental ? <span>Instrumental</span> : null}
-            {playLabel ? <span>{playLabel} plays</span> : null}
-            {upvoteLabel ? <span>{upvoteLabel} likes</span> : null}
+            {playLabel ? <span title="Plays reported by Suno (not Song Pages listening stats)">{playLabel} Suno plays</span> : null}
+            {likeLabel ? <span title="Likes reported by Suno">{likeLabel} Suno likes</span> : null}
           </p>
           <SongPageSourcePill song={song} sourceId="suno" />
         </div>

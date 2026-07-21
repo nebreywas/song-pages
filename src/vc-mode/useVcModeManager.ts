@@ -699,6 +699,34 @@ export function useVcModeManager({
     };
   }, [switchVcSurface, vcOpen]);
 
+  // VC controller can retarget the paste-submission playlist live (mirrors the
+  // designer's "Default Submission Playlist" select, but usable mid-show). We
+  // update activeConfig, persist, and rebroadcast so both the controller and the
+  // main window pick up the new target immediately.
+  useEffect(() => {
+    const app = getApp();
+    if (!vcOpen || !app?.vc?.onSetSubmissionPlaylist) return;
+
+    const off = app.vc.onSetSubmissionPlaylist((playlistId) => {
+      const nextId =
+        typeof playlistId === 'number' && Number.isFinite(playlistId) && playlistId > 0
+          ? Math.trunc(playlistId)
+          : null;
+      const prev = activeConfigRef.current;
+      if ((prev.defaultSubmissionPlaylistId ?? null) === nextId) return;
+      const next = normalizeVcConfig({ ...prev, defaultSubmissionPlaylistId: nextId });
+      activeConfigRef.current = next;
+      setActiveConfig(next);
+      void persistVcModeConfig(next);
+      // Override config on the payload since setActiveConfig hasn't flushed yet.
+      getApp()?.vc?.sendState({ ...buildStatePayloadRef.current(), config: next });
+    });
+
+    return () => {
+      off();
+    };
+  }, [vcOpen]);
+
   // Meme Surface — controller pushes a resolved meme; we own the transient
   // activeMeme state, broadcast it, and auto-clear it per the host's settings.
   useEffect(() => {

@@ -41,6 +41,29 @@ html:has(.listener-layout) #root {
   overflow: hidden;
 }
 
+/* Artist 2.0 — same viewport lock so the catalog sidebar and the editor pane
+   scroll independently instead of growing the whole page. */
+html:has(.a2-shell),
+html:has(.a2-shell) body {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+html:has(.a2-shell) #root {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.app-root:has(.a2-shell) {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .app-main:has(.listener-layout) {
   display: flex;
   flex-direction: column;
@@ -2046,6 +2069,70 @@ html:has(.listener-layout) #root {
   filter: brightness(1.08);
 }
 
+/* Bullet between "Now playing" and active mode bugs: Now playing • zen • radio */
+.player-now-playing-mode-sep {
+  flex-shrink: 0;
+  /* Pull the row gap in a touch so the bullet reads as a tight separator. */
+  margin: 0 -0.25rem;
+  font-size: 0.68rem;
+  line-height: 1.1;
+  color: var(--muted);
+}
+
+/* Zen's quiet silver bug stays visually secondary to the Now Playing label. */
+.player-now-playing-zen-suffix {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.player-now-playing-zen-link {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  color: #d6d5cf;
+  cursor: pointer;
+}
+
+.player-now-playing-zen-link:hover,
+.player-now-playing-zen-link.active {
+  color: #f0efe9;
+}
+
+/* Radio's red bug sits next to Zen when both modes are on. */
+.player-now-playing-radio-suffix {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.player-now-playing-radio-link {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  color: #e25555;
+  cursor: pointer;
+}
+
+.player-now-playing-radio-link:hover,
+.player-now-playing-radio-link.active {
+  color: #ff6b6b;
+}
+
 .player-volume {
   grid-column: 3;
   grid-row: 1;
@@ -2120,6 +2207,21 @@ html:has(.listener-layout) #root {
 .transport-btn.active:hover:not(:disabled) {
   color: goldenrod;
   background: var(--surface-2);
+}
+
+/* Super Shuffle: small dotted underline under the shuffle glyph (library-wide mode). */
+.transport-btn-shuffle.super-shuffle {
+  position: relative;
+}
+
+.transport-btn-shuffle.super-shuffle::after {
+  content: '';
+  position: absolute;
+  left: 28%;
+  right: 28%;
+  bottom: 0.28rem;
+  border-bottom: 1.5px dotted currentColor;
+  pointer-events: none;
 }
 
 .transport-btn-primary {
@@ -2261,6 +2363,74 @@ html:has(.listener-layout) #root {
 
 .player-on-deck-popover.panel {
   padding: 0.55rem 0.7rem;
+}
+
+.player-zen-popover {
+  min-width: 15rem;
+  max-width: min(20rem, 80vw);
+  padding: 0.55rem 0.7rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.player-zen-popover.panel {
+  padding: 0.55rem 0.7rem;
+}
+
+.player-zen-popover-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.player-zen-popover-label {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #d6d5cf;
+}
+
+.player-zen-popover-copy {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.player-radio-popover {
+  min-width: 15rem;
+  max-width: min(20rem, 80vw);
+  padding: 0.55rem 0.7rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.player-radio-popover.panel {
+  padding: 0.55rem 0.7rem;
+}
+
+.player-radio-popover-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.player-radio-popover-label {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #e25555;
+}
+
+.player-radio-popover-copy {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text);
 }
 
 .player-on-deck-popover-header {
@@ -2767,6 +2937,18 @@ html:has(.listener-layout) #root {
 .player-option-btn.active.player-option-btn-vc {
   border-color: #c92a2a;
   background: color-mix(in srgb, #c92a2a 22%, var(--panel));
+}
+
+.player-option-btn.active.player-option-btn-zen {
+  color: #e4e3dd;
+  border-color: rgba(214, 213, 207, 0.5);
+  background: color-mix(in srgb, #d6d5cf 12%, var(--panel));
+}
+
+.player-option-btn.active.player-option-btn-radio {
+  color: #ffc9c9;
+  border-color: rgba(226, 85, 85, 0.55);
+  background: color-mix(in srgb, #e25555 16%, var(--panel));
 }
 
 .player-option-btn.active.player-option-btn-effects-lab {

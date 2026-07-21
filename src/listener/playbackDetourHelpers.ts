@@ -3,6 +3,10 @@ import {
   playlistKeyForArtistId,
 } from '@shared/listener/playlistOrder';
 import {
+  mergeSuperShufflePool,
+  type SuperShuffleEntry,
+} from '@shared/listener/superShuffle';
+import {
   pickNextPrimarySongId as pickNextPrimaryFromPlanner,
   type PlaybackQueueOptions,
 } from '@shared/playback/queue/planner';
@@ -31,6 +35,26 @@ export async function loadOrderedPlaylistSongs(artistId: number): Promise<SongRo
   }
 
   return sortPlaylistSongs(songRows, 'order', 'asc', {});
+}
+
+/**
+ * Build the Super Shuffle pool from every sidebar playlist id.
+ * Order inside each playlist does not matter — we only need eligible song rows.
+ */
+export async function loadSuperShufflePool(
+  playlistIds: readonly number[],
+): Promise<SuperShuffleEntry<SongRow>[]> {
+  const app = getApp();
+  if (!app || !playlistIds.length) return [];
+
+  const lists = await Promise.all(
+    playlistIds.map(async (playlistId) => ({
+      playlistId,
+      songs: await app.listener.listSongs(playlistId),
+    })),
+  );
+
+  return mergeSuperShufflePool(lists);
 }
 
 export function pickNextPrimarySongId(

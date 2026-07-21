@@ -8,6 +8,7 @@ export type SortColumn =
   | 'artist'
   | 'album'
   | 'year'
+  | 'plays'
   | 'source'
   | 'length';
 export type SortDirection = 'asc' | 'desc';
@@ -27,6 +28,8 @@ export function sortPlaylistSongs(
   column: SortColumn,
   direction: SortDirection,
   runtimeDurations: Record<number, number>,
+  /** songId → play count when sorting the Plays column. */
+  playCounts: ReadonlyMap<number, number> = new Map(),
 ): SongRow[] {
   const mult = direction === 'asc' ? 1 : -1;
   const sorted = [...songs];
@@ -51,6 +54,12 @@ export function sortPlaylistSongs(
       case 'year':
         result = compareText(a.year || '', b.year || '');
         break;
+      case 'plays': {
+        const aPlays = playCounts.get(a.id) ?? 0;
+        const bPlays = playCounts.get(b.id) ?? 0;
+        result = aPlays - bPlays;
+        break;
+      }
       case 'source':
         result = compareText(
           resolvePlaylistSongSource(a).label,

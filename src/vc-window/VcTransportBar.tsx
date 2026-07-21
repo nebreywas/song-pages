@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { formatPlaybackTime } from '@shared/formatPlaybackTime';
 import type { EffectiveSeekBarPresentation } from '@shared/vcMode/assignmentSettings';
@@ -27,6 +27,16 @@ export function VcTransportBar({
   const scrubRef = useRef<HTMLDivElement>(null);
   const progress = playback.duration > 0 ? playback.currentTime / playback.duration : 0;
   const scale = scalePct / 100;
+  // Right-hand time can show either "−remaining" (default) or total song time.
+  // Click to toggle, mirroring the main listener player's time readout.
+  const [endDisplay, setEndDisplay] = useState<'remaining' | 'duration'>('remaining');
+  const remaining = Math.max(0, playback.duration - playback.currentTime);
+  const endLabel =
+    endDisplay === 'duration' ? formatPlaybackTime(playback.duration) : `−${formatPlaybackTime(remaining)}`;
+  const endAriaLabel =
+    endDisplay === 'duration'
+      ? `Total duration ${formatPlaybackTime(playback.duration)}. Click to show time remaining.`
+      : `Time remaining ${formatPlaybackTime(remaining)}. Click to show total duration.`;
 
   const seekFromClientX = useCallback(
     (clientX: number) => {
@@ -90,9 +100,15 @@ export function VcTransportBar({
         >
           <div className="vc-transport-scrub-fill" style={{ width: `${progress * 100}%` }} />
         </div>
-        <span className="vc-transport-time vc-transport-time-remaining">
-          −{formatPlaybackTime(Math.max(0, playback.duration - playback.currentTime))}
-        </span>
+        <button
+          type="button"
+          className="vc-transport-time vc-transport-time-remaining vc-transport-time-toggle"
+          onClick={() => setEndDisplay((prev) => (prev === 'remaining' ? 'duration' : 'remaining'))}
+          aria-label={endAriaLabel}
+          title={endDisplay === 'duration' ? 'Total time — click for remaining' : 'Remaining — click for total'}
+        >
+          {endLabel}
+        </button>
       </div>
     </div>
   );

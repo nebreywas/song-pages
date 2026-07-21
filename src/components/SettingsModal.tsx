@@ -5,10 +5,15 @@ import {
   type PlaylistLengthSettings,
 } from '@shared/listener/playlistLengthSettings';
 import {
+  normalizePlayCountDisplayMode,
   normalizeSongPageFontIncreaseLevel,
   normalizeYoutubeMiniPlayerBehavior,
   type ListenerPlayerSettings,
 } from '@shared/listener/playerSettings';
+import {
+  normalizeRadioVoiceId,
+  RADIO_VOICE_SETTINGS_OPTIONS,
+} from '@shared/listener/radioVoices';
 import type { LiveDebugSettings } from '@shared/liveDebug/settings';
 import { APP_THEME_OPTIONS, type AppThemeId } from '../lib/themes';
 import './settingsModal.css';
@@ -175,6 +180,51 @@ export function SettingsModal({
               <p className="settings-hint">
                 YouTube requires its video to stay visible while playing. Mini-player mode hides the
                 video, so pick how to keep things compliant when a YouTube track plays there.
+              </p>
+
+              <label className="settings-select-field">
+                <span>Play count display</span>
+                <select
+                  value={playerSettings.playCountDisplay}
+                  onChange={(event) =>
+                    onPlayerSettingsChange({
+                      ...playerSettings,
+                      playCountDisplay: normalizePlayCountDisplayMode(event.target.value),
+                    })
+                  }
+                >
+                  <option value="all-starts">All starts</option>
+                  <option value="estimated-full">Estimated full plays</option>
+                </select>
+              </label>
+              <p className="settings-hint">
+                Counts are derived from History (starts, interruptions, seekbar hits). Estimated
+                full plays softens interrupted listens; seek interactions are logged with from/to
+                positions for later refinement.
+              </p>
+
+              <label className="settings-select-field">
+                <span>Radio Voice</span>
+                <select
+                  value={playerSettings.radioVoiceId}
+                  onChange={(event) =>
+                    onPlayerSettingsChange({
+                      ...playerSettings,
+                      radioVoiceId: normalizeRadioVoiceId(event.target.value),
+                    })
+                  }
+                >
+                  {RADIO_VOICE_SETTINGS_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="settings-hint">
+                Curated announcer for Radio mode (player menu). Enhanced voices on Mac may need to be
+                downloaded in System Settings → Accessibility → Spoken Content. Random picks from this
+                list each break.
               </p>
             </section>
 

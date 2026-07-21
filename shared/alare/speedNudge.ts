@@ -13,6 +13,19 @@ export function clampAlareSpeedNudge(nudge: number): number {
 }
 
 /**
+ * Human-readable signed percent for a speed-nudge fraction, e.g. `0.05 → "+5.0%"`,
+ * `-0.025 → "-2.5%"`, `0 → "0.0%"`. Shared by the Live Debug HUD and the VC
+ * controller's transient message so the host sees the current trim value
+ * alongside the "ALARE Speed Up/Down/Reset" label. Clamps first so the readout
+ * never exceeds the real ±50% range.
+ */
+export function formatAlareSpeedNudgePercent(nudge: number): string {
+  const pct = clampAlareSpeedNudge(nudge) * 100;
+  const sign = pct > 0 ? '+' : '';
+  return `${sign}${pct.toFixed(1)}%`;
+}
+
+/**
  * Map wall-clock playback time to ALARE scroll time.
  * Positive nudge scrolls lyrics slightly ahead; negative lags behind.
  * Anchored at t=0 so song start stays aligned.

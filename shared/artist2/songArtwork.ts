@@ -1,6 +1,6 @@
 /**
- * Song artwork list — multi-image with exactly one Primary Cover (or none).
- * Legacy single `artwork` is mirrored from the primary for promote / rename / albums-compat.
+ * Song / Album artwork list — multi-image with exactly one Primary Cover (or none).
+ * Legacy single `artwork` is mirrored from the primary for promote / rename.
  */
 
 import type {
@@ -30,7 +30,7 @@ export const ARTWORK_ROLE_LABELS: Record<Artist2ArtworkRole, string> = {
 };
 
 /** Soft guidance for description / commentary fields. */
-export const ARTWORK_DESCRIPTION_SOFT_MAX = 60;
+export const ARTWORK_DESCRIPTION_SOFT_MAX = 120;
 export const ARTWORK_COMMENTARY_SOFT_MAX = 500;
 
 export function newArtworkEntryId(): string {
@@ -68,6 +68,7 @@ function coerceEntry(raw: unknown, index: number): Artist2ArtworkEntry | null {
     id: typeof row.id === 'string' && row.id.trim() ? row.id : newArtworkEntryId(),
     role: coerceRole(row.role),
     source,
+    name: typeof row.name === 'string' ? row.name : undefined,
     description: typeof row.description === 'string' ? row.description : undefined,
     commentary: typeof row.commentary === 'string' ? row.commentary : undefined,
     sortOrder: Number.isFinite(row.sortOrder) ? Number(row.sortOrder) : index * 10,
@@ -128,7 +129,7 @@ export function migrateLegacyArtwork(
 }
 
 /**
- * Canonical artwork list for Song editors / compile.
+ * Canonical artwork list for Song / Album editors.
  * Migrates legacy `artwork` when entries are empty.
  */
 export function normalizeSongArtwork(
@@ -215,12 +216,13 @@ export function setPrimaryArtwork(
 
 export function createArtworkEntry(
   source: Artist2ArtworkRef,
-  opts: { role?: Artist2ArtworkRole; sortOrder?: number } = {},
+  opts: { role?: Artist2ArtworkRole; sortOrder?: number; name?: string } = {},
 ): Artist2ArtworkEntry {
   return {
     id: newArtworkEntryId(),
     role: opts.role ?? 'additional_image',
     source,
+    name: opts.name,
     sortOrder: opts.sortOrder ?? 100,
   };
 }

@@ -81,5 +81,44 @@ export function useListenerPlayerSettings() {
     persist(next);
   }, [persist]);
 
-  return { settings, loaded, persist, toggleSeekLabel };
+  const setZenModeEnabled = useCallback(
+    (enabled: boolean) => {
+      persist({ ...sharedSettings, zenModeEnabled: enabled });
+    },
+    [persist],
+  );
+
+  const toggleZenMode = useCallback(() => {
+    setZenModeEnabled(!sharedSettings.zenModeEnabled);
+  }, [setZenModeEnabled]);
+
+  const setRadioModeEnabled = useCallback(
+    (enabled: boolean) => {
+      persist({ ...sharedSettings, radioModeEnabled: enabled });
+    },
+    [persist],
+  );
+
+  const toggleRadioMode = useCallback(() => {
+    setRadioModeEnabled(!sharedSettings.radioModeEnabled);
+  }, [setRadioModeEnabled]);
+
+  const setRadioVoiceId = useCallback(
+    (radioVoiceId: ListenerPlayerSettings['radioVoiceId']) => {
+      persist({ ...sharedSettings, radioVoiceId });
+    },
+    [persist],
+  );
+
+  return {
+    settings,
+    loaded,
+    persist,
+    toggleSeekLabel,
+    setZenModeEnabled,
+    toggleZenMode,
+    setRadioModeEnabled,
+    toggleRadioMode,
+    setRadioVoiceId,
+  };
 }

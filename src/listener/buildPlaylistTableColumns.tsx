@@ -16,6 +16,7 @@ import { IconClock } from './PlayerIcons';
 import { playlistColumnClassName } from './playlistColumnClasses';
 import { PlaylistSongSourceCell } from './PlaylistSongSourceCell';
 import { SkippedSongMarker } from './SkippedSongMarker';
+import type { PlaylistYearColumnMode } from '@shared/listener/playlistTableView';
 import type { SortColumn, SortDirection } from './sortPlaylist';
 import { SortableColumnHeader } from './SortableColumnHeader';
 import type { usePlaylistDragReorder } from './usePlaylistDragReorder';
@@ -42,6 +43,11 @@ export type PlaylistTableColumnContext = {
   isPlaying: boolean;
   /** Song id currently queued as On Deck (yellow title prefix in playlist). */
   onDeckSongId: number | null;
+  /** Year column slot shows Year or Plays (same grid width). */
+  yearColumnMode: PlaylistYearColumnMode;
+  /** songId → display play count for the Plays mode. */
+  playCountsBySongId: ReadonlyMap<number, number>;
+  onToggleYearPlaysColumn: () => void;
 };
 
 function skippedValueClass(song: SongRow, sessionSkippedIds: ReadonlySet<number>): string {
@@ -233,24 +239,39 @@ function buildColumn(
           </span>
         ),
       };
-    case 'year':
+    case 'year': {
+      const playsMode = ctx.yearColumnMode === 'plays';
       return {
         ...base,
         header: () => (
           <SortableColumnHeader
-            label="Year"
-            column="year"
+            label={playsMode ? 'Plays' : 'Year'}
+            column={playsMode ? 'plays' : 'year'}
             activeColumn={ctx.sortColumn}
             direction={ctx.sortDirection}
             onSort={ctx.onSort}
+            onDoubleClickAction={ctx.onToggleYearPlaysColumn}
+            doubleClickTitle={
+              playsMode ? 'Double-click to show Year' : 'Double-click to show Plays'
+            }
           />
         ),
-        cell: ({ row }) => (
-          <span className={skippedValueClass(row.original, ctx.sessionSkippedIds).trim() || undefined}>
-            {row.original.year || '—'}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const skipped = skippedValueClass(row.original, ctx.sessionSkippedIds).trim() || undefined;
+          if (playsMode) {
+            const count = ctx.playCountsBySongId.get(row.original.id) ?? 0;
+            return (
+              <span className={skipped} title={`${count} plays`}>
+                {count > 0 ? String(count) : '—'}
+              </span>
+            );
+          }
+          return (
+            <span className={skipped}>{row.original.year || '—'}</span>
+          );
+        },
       };
+    }
     case 'source':
       return {
         ...base,

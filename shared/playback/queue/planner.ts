@@ -1,5 +1,12 @@
 import { isSongSkipped, isSongUnavailable } from '../../listener/playlistKinds';
 import { skipSongIdsForPrimaryAdvance } from '../detours/state';
+import {
+  ACTIVE_SHUFFLE_STRATEGY,
+  commitShuffleBag,
+  drawShuffledSongId,
+  type ShuffleBagState,
+  type ShuffleStrategyId,
+} from './shuffleStrategy';
 
 type QueueSong = { id: number; skipped?: number | boolean | null; unavailable?: number | boolean | null };
 
@@ -10,6 +17,18 @@ export type PlaybackQueueOptions = {
   sessionSkippedIds?: ReadonlySet<number>;
   /** Detour-consumed tracks — skip when advancing the primary playlist cursor. */
   skipSongIds?: ReadonlySet<number>;
+  /**
+   * Which shuffle algorithm to use when `shuffle` is on.
+   * Defaults to `ACTIVE_SHUFFLE_STRATEGY` (`shuffle-bag`).
+   */
+  shuffleStrategy?: ShuffleStrategyId;
+  /**
+   * Mutable bag for `shuffle-bag` (and future stateful strategies).
+   * Callers hold this across advances; draws commit updates in place.
+   */
+  shuffleBag?: ShuffleBagState;
+  /** Bag scope — playlist id / `super` / etc. Required for correct bag refill. */
+  shuffleScopeKey?: string;
 };
 
 function isEligibleForPlayback(
@@ -56,20 +75,21 @@ export function pickNextPlayableSongId(
   }
 
   if (options.shuffle) {
-    if (playable.length === 1) return playable[0]?.id ?? null;
-    const candidates = playable.filter(
-      (song) => song.id !== currentSongId && !options.skipSongIds?.has(song.id),
-    );
-    if (candidates.length > 0) {
-      const pick = candidates[Math.floor(Math.random() * candidates.length)];
-      return pick?.id ?? null;
+    const strategy = options.shuffleStrategy ?? ACTIVE_SHUFFLE_STRATEGY;
+    const playableIds = playable.map((song) => song.id);
+    // Ephemeral bag when caller did not pass one (tests / legacy) — still correct
+    // for a single draw; multi-advance without-replacement needs a persisted bag.
+    const bag = options.shuffleBag ?? { scopeKey: '', remainingIds: [], exhausted: false };
+    const drawn = drawShuffledSongId(strategy, playableIds, bag, {
+      scopeKey: options.shuffleScopeKey ?? options.shuffleBag?.scopeKey ?? 'queue',
+      currentSongId,
+      excludeIds: options.skipSongIds,
+      repeatMode: options.repeatMode,
+    });
+    if (options.shuffleBag) {
+      commitShuffleBag(options.shuffleBag, drawn.bag);
     }
-    if (options.repeatMode === 'all') {
-      const wrapPool = playable.filter((song) => !options.skipSongIds?.has(song.id));
-      const pick = wrapPool[Math.floor(Math.random() * wrapPool.length)];
-      return pick?.id ?? null;
-    }
-    return null;
+    return drawn.songId;
   }
 
   for (let index = currentIndex + 1; index < sortedSongs.length; index += 1) {

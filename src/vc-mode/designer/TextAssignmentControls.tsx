@@ -196,6 +196,13 @@ export function TextAssignmentControls({
         </AssignmentField>
       ) : null}
 
+      {showLyricsTracking && lyricTracking === 'host-direct-scroll' ? (
+        <p className="vc-assignment-hint">
+          Lyrics don’t auto-scroll — scroll with the mouse wheel, click-and-drag, or bind the
+          “Lyric Scroll Forward / Back / Reset” commands to keys or Controller buttons.
+        </p>
+      ) : null}
+
       {showLyricPresentationEffect ? (
         <AssignmentField label="Lyric presentation">
           <select

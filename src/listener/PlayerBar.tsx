@@ -31,11 +31,15 @@ type PlayerBarProps = {
   /** Jump the playlist list to the currently playing song. */
   onRevealNowPlaying?: () => void;
   shuffle: boolean;
+  /** Library-wide Super Shuffle — dotted underline under the shuffle control. */
+  superShuffle?: boolean;
   repeatMode: RepeatMode;
   volume: number;
   currentTime: number;
   duration: number;
   onToggleShuffle: () => void;
+  /** Fast double-tap on shuffle toggles Super Shuffle (library-wide random). */
+  onToggleSuperShuffle?: () => void;
   onPrevious: () => void;
   onTogglePlayPause: () => void;
   onNext: () => void;
@@ -52,6 +56,10 @@ type PlayerBarProps = {
   onVcLiveClick?: () => void;
   vcLive?: boolean;
   vcDisabled?: boolean;
+  zenModeActive?: boolean;
+  onToggleZenMode?: () => void;
+  radioModeActive?: boolean;
+  onToggleRadioMode?: () => void;
   audioEffectsOpen?: boolean;
   onToggleAudioEffects?: () => void;
   seekTimeDisplay?: SeekTimeDisplay;
@@ -74,6 +82,8 @@ type PlayerBarProps = {
 };
 
 const MENU_IDLE_MS = 60_000;
+/** Delay single-click shuffle toggle so a fast double-tap can activate Super Shuffle instead. */
+const SUPER_SHUFFLE_DOUBLE_CLICK_MS = 320;
 
 function OptionsSeparator() {
   return (
@@ -92,11 +102,13 @@ export function PlayerBar({
   nowPlayingCoverUrl,
   onRevealNowPlaying,
   shuffle,
+  superShuffle = false,
   repeatMode,
   volume,
   currentTime,
   duration,
   onToggleShuffle,
+  onToggleSuperShuffle,
   onPrevious,
   onTogglePlayPause,
   onNext,
@@ -113,6 +125,10 @@ export function PlayerBar({
   onVcLiveClick,
   vcLive,
   vcDisabled,
+  zenModeActive = false,
+  onToggleZenMode,
+  radioModeActive = false,
+  onToggleRadioMode,
   audioEffectsOpen = false,
   onToggleAudioEffects,
   seekTimeDisplay = 'remaining',
@@ -135,8 +151,18 @@ export function PlayerBar({
 }: PlayerBarProps) {
   const progressRef = useRef<HTMLDivElement>(null);
   const menuIdleTimerRef = useRef<number | null>(null);
+  const pendingShuffleTimerRef = useRef<number | null>(null);
   const preMuteVolumeRef = useRef(0.85);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const clearPendingShuffleToggle = useCallback(() => {
+    if (pendingShuffleTimerRef.current != null) {
+      window.clearTimeout(pendingShuffleTimerRef.current);
+      pendingShuffleTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearPendingShuffleToggle, [clearPendingShuffleToggle]);
 
   const clearMenuIdleTimer = useCallback(() => {
     if (menuIdleTimerRef.current != null) {
@@ -254,11 +280,40 @@ export function PlayerBar({
       <div className="player-transport-controls">
         <button
           type="button"
-          className={`transport-btn transport-btn-shuffle${shuffle ? ' active' : ''}`}
-          onClick={onToggleShuffle}
+          className={`transport-btn transport-btn-shuffle${shuffle ? ' active' : ''}${
+            superShuffle ? ' super-shuffle' : ''
+          }`}
+          onClick={(event) => {
+            // Without Super Shuffle, single click toggles playlist shuffle immediately.
+            if (!onToggleSuperShuffle) {
+              onToggleShuffle();
+              return;
+            }
+            // detail > 1 is the 2nd click of a double-tap — never schedule playlist shuffle for it.
+            if (event.detail > 1) {
+              clearPendingShuffleToggle();
+              return;
+            }
+            clearPendingShuffleToggle();
+            pendingShuffleTimerRef.current = window.setTimeout(() => {
+              pendingShuffleTimerRef.current = null;
+              onToggleShuffle();
+            }, SUPER_SHUFFLE_DOUBLE_CLICK_MS);
+          }}
+          onDoubleClick={(event) => {
+            if (!onToggleSuperShuffle) return;
+            event.preventDefault();
+            clearPendingShuffleToggle();
+            onToggleSuperShuffle();
+          }}
           disabled={disabled}
-          aria-label="Shuffle"
-          aria-pressed={shuffle}
+          aria-label={superShuffle ? 'Super Shuffle on' : 'Shuffle'}
+          aria-pressed={superShuffle || shuffle}
+          title={
+            onToggleSuperShuffle
+              ? 'Click: shuffle this playlist. Double-click: Super Shuffle (all playlists).'
+              : undefined
+          }
         >
           <IconShuffle />
         </button>
@@ -295,6 +350,10 @@ export function PlayerBar({
         coverUrl={nowPlayingCoverUrl}
         onDeck={onDeck}
         onClearOnDeck={onClearOnDeck}
+        zenModeActive={zenModeActive}
+        onRemoveZenMode={onToggleZenMode}
+        radioModeActive={radioModeActive}
+        onRemoveRadioMode={onToggleRadioMode}
         onTitleActivate={onRevealNowPlaying}
         onRevealOnDeck={onRevealOnDeck}
         onCoverDoubleActivate={
@@ -381,6 +440,34 @@ export function PlayerBar({
                     title={vcLive ? 'End VC Mode' : 'VC Mode — listening party visual mixer'}
                   >
                     VC
+                  </button>
+                </>
+              ) : null}
+              {onToggleZenMode ? (
+                <>
+                  <OptionsSeparator />
+                  <button
+                    type="button"
+                    className={`player-option-btn player-option-btn-zen${zenModeActive ? ' active' : ''}`}
+                    onClick={() => handleMenuOption(onToggleZenMode)}
+                    aria-pressed={zenModeActive}
+                    title={zenModeActive ? 'Turn off Zen mode' : 'Turn on Zen mode'}
+                  >
+                    Zen
+                  </button>
+                </>
+              ) : null}
+              {onToggleRadioMode ? (
+                <>
+                  <OptionsSeparator />
+                  <button
+                    type="button"
+                    className={`player-option-btn player-option-btn-radio${radioModeActive ? ' active' : ''}`}
+                    onClick={() => handleMenuOption(onToggleRadioMode)}
+                    aria-pressed={radioModeActive}
+                    title={radioModeActive ? 'Turn off Radio mode' : 'Turn on Radio mode'}
+                  >
+                    Radio
                   </button>
                 </>
               ) : null}

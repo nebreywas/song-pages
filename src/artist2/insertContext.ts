@@ -1,24 +1,50 @@
 /**
  * Context-aware insert rules for the catalog sidebar.
- * Song containers accept tracks; Songs accept related-song links; artwork accepts images.
+ * Song containers accept tracks; Playlists also accept albums; Songs / Albums
+ * accept related links; artwork accepts images.
  */
 
-import type { Artist2CatalogObject, Artist2SongRelationKind } from '@shared/artist2';
-import { isSongContainerKind, normalizeSongRelations } from '@shared/artist2';
+import type {
+  Artist2AlbumRelationKind,
+  Artist2CatalogObject,
+  Artist2SongRelationKind,
+} from '@shared/artist2';
+import {
+  isSongContainerKind,
+  normalizeAlbumRelations,
+  normalizeSongArtwork,
+  normalizeSongRelations,
+} from '@shared/artist2';
 
 export type InsertContext = {
-  /** Album or Playlist currently open for track inserts. */
+  /** Album or Playlist currently open for member inserts. */
   containerTracks: {
     containerId: string;
     containerKind: 'album' | 'playlist';
     existingMemberIds: Set<string>;
+    /** Albums: songs only. Playlists: songs + albums. */
+    allowedMemberKinds: Set<'song' | 'album'>;
   } | null;
-  artwork: { objectId: string; currentContentId: string | null } | null;
+  /**
+   * Songs, Albums, and Playlists append to the multi-image artworkEntries list.
+   * existingContentIds blocks duplicates.
+   */
+  artwork: {
+    objectId: string;
+    targetKind: 'multi-image';
+    existingContentIds: Set<string>;
+  } | null;
   /** Selected Song can receive → related Song links. */
   relatedSongs: {
     songId: string;
     existingRelatedIds: Set<string>;
     defaultRelation: Artist2SongRelationKind;
+  } | null;
+  /** Selected Album can receive → related Album links. */
+  relatedAlbums: {
+    albumId: string;
+    existingRelatedIds: Set<string>;
+    defaultRelation: Artist2AlbumRelationKind;
   } | null;
 };
 
@@ -26,6 +52,7 @@ export const EMPTY_INSERT_CONTEXT: InsertContext = {
   containerTracks: null,
   artwork: null,
   relatedSongs: null,
+  relatedAlbums: null,
 };
 
 export function buildInsertContext(input: {
@@ -38,21 +65,30 @@ export function buildInsertContext(input: {
   let containerTracks: InsertContext['containerTracks'] = null;
   let artwork: InsertContext['artwork'] = null;
   let relatedSongs: InsertContext['relatedSongs'] = null;
+  let relatedAlbums: InsertContext['relatedAlbums'] = null;
 
   if (isSongContainerKind(selected.kind) && albumDetail && albumDetail.id === selected.id) {
     containerTracks = {
       containerId: albumDetail.id,
       containerKind: selected.kind,
       existingMemberIds: new Set(albumDetail.tracks.map((track) => track.id)),
+      allowedMemberKinds:
+        selected.kind === 'playlist'
+          ? new Set(['song', 'album'])
+          : new Set(['song']),
     };
   }
 
-  if (selected.kind === 'song' || isSongContainerKind(selected.kind)) {
-    const art = (selected.payload as { artwork?: { mode: string; contentId?: string } }).artwork;
-    artwork = {
-      objectId: selected.id,
-      currentContentId: art?.mode === 'contentRef' ? art.contentId ?? null : null,
-    };
+  if (selected.kind === 'song' || selected.kind === 'album' || selected.kind === 'playlist') {
+    // Multi-image list — every Content image already linked is off-limits.
+    const entries = normalizeSongArtwork(
+      selected.payload as Parameters<typeof normalizeSongArtwork>[0],
+    );
+    const existingContentIds = new Set<string>();
+    for (const entry of entries) {
+      if (entry.source.mode === 'contentRef') existingContentIds.add(entry.source.contentId);
+    }
+    artwork = { objectId: selected.id, targetKind: 'multi-image', existingContentIds };
   }
 
   if (selected.kind === 'song') {
@@ -66,15 +102,38 @@ export function buildInsertContext(input: {
     };
   }
 
-  return { containerTracks, artwork, relatedSongs };
+  if (selected.kind === 'album') {
+    const related = normalizeAlbumRelations(
+      (selected.payload as { relatedAlbums?: unknown }).relatedAlbums,
+    );
+    relatedAlbums = {
+      albumId: selected.id,
+      existingRelatedIds: new Set(related.map((row) => row.albumId)),
+      defaultRelation: 'sister',
+    };
+  }
+
+  return { containerTracks, artwork, relatedSongs, relatedAlbums };
+}
+
+function isAllowedContainerMember(
+  object: Artist2CatalogObject,
+  context: InsertContext,
+): boolean {
+  if (!context.containerTracks) return false;
+  if (context.containerTracks.existingMemberIds.has(object.id)) return false;
+  if (object.id === context.containerTracks.containerId) return false;
+  if (object.kind === 'song') {
+    return context.containerTracks.allowedMemberKinds.has('song');
+  }
+  if (object.kind === 'album') {
+    return context.containerTracks.allowedMemberKinds.has('album');
+  }
+  return false;
 }
 
 export function canInsertObject(object: Artist2CatalogObject, context: InsertContext): boolean {
-  if (
-    context.containerTracks &&
-    object.kind === 'song' &&
-    !context.containerTracks.existingMemberIds.has(object.id)
-  ) {
+  if (isAllowedContainerMember(object, context)) {
     return true;
   }
   if (
@@ -86,10 +145,18 @@ export function canInsertObject(object: Artist2CatalogObject, context: InsertCon
     return true;
   }
   if (
+    context.relatedAlbums &&
+    object.kind === 'album' &&
+    object.id !== context.relatedAlbums.albumId &&
+    !context.relatedAlbums.existingRelatedIds.has(object.id)
+  ) {
+    return true;
+  }
+  if (
     context.artwork &&
     object.kind === 'content' &&
     object.contentType === 'image' &&
-    object.id !== context.artwork.currentContentId
+    !context.artwork.existingContentIds.has(object.id)
   ) {
     return true;
   }
@@ -100,13 +167,10 @@ export function insertActionLabel(
   object: Artist2CatalogObject,
   context: InsertContext,
 ): string {
-  if (
-    context.containerTracks &&
-    object.kind === 'song' &&
-    !context.containerTracks.existingMemberIds.has(object.id)
-  ) {
+  if (isAllowedContainerMember(object, context) && context.containerTracks) {
     const label = context.containerTracks.containerKind === 'playlist' ? 'playlist' : 'album';
-    return `Insert “${object.name}” into ${label} tracks`;
+    const slot = context.containerTracks.containerKind === 'playlist' ? 'music' : 'tracks';
+    return `Insert “${object.name}” into ${label} ${slot}`;
   }
   if (
     context.relatedSongs &&
@@ -117,11 +181,19 @@ export function insertActionLabel(
     return `Relate “${object.name}” as Sister Song`;
   }
   if (
+    context.relatedAlbums &&
+    object.kind === 'album' &&
+    object.id !== context.relatedAlbums.albumId &&
+    !context.relatedAlbums.existingRelatedIds.has(object.id)
+  ) {
+    return `Relate “${object.name}” as Sister Album`;
+  }
+  if (
     context.artwork &&
     object.kind === 'content' &&
     object.contentType === 'image'
   ) {
-    return `Use “${object.name}” as cover artwork`;
+    return `Add “${object.name}” to artwork`;
   }
   return `Insert “${object.name}”`;
 }
@@ -129,13 +201,9 @@ export function insertActionLabel(
 export function resolveInsertAction(
   object: Artist2CatalogObject,
   context: InsertContext,
-): 'container-track' | 'related-song' | 'artwork' | null {
-  // Prefer container track insert when an album/playlist is open.
-  if (
-    context.containerTracks &&
-    object.kind === 'song' &&
-    !context.containerTracks.existingMemberIds.has(object.id)
-  ) {
+): 'container-track' | 'related-song' | 'related-album' | 'artwork' | null {
+  // Prefer container member insert when an album/playlist is open.
+  if (isAllowedContainerMember(object, context)) {
     return 'container-track';
   }
   if (
@@ -147,10 +215,18 @@ export function resolveInsertAction(
     return 'related-song';
   }
   if (
+    context.relatedAlbums &&
+    object.kind === 'album' &&
+    object.id !== context.relatedAlbums.albumId &&
+    !context.relatedAlbums.existingRelatedIds.has(object.id)
+  ) {
+    return 'related-album';
+  }
+  if (
     context.artwork &&
     object.kind === 'content' &&
     object.contentType === 'image' &&
-    object.id !== context.artwork.currentContentId
+    !context.artwork.existingContentIds.has(object.id)
   ) {
     return 'artwork';
   }

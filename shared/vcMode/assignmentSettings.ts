@@ -87,13 +87,20 @@ export const VC_TITLE_OVERFLOW_OPTIONS: Array<{ value: VcTitleOverflow; label: s
 export const DEFAULT_VC_TITLE_OVERFLOW: VcTitleOverflow = 'static';
 
 /** VC lyrics progression mode (ALARE §20). */
-export type VcLyricTracking = 'simple-scroll' | 'alare';
+export type VcLyricTracking = 'simple-scroll' | 'alare' | 'host-direct-scroll';
 
-export const VC_LYRIC_TRACKING_IDS = ['simple-scroll', 'alare'] as const satisfies readonly VcLyricTracking[];
+export const VC_LYRIC_TRACKING_IDS = [
+  'simple-scroll',
+  'alare',
+  'host-direct-scroll',
+] as const satisfies readonly VcLyricTracking[];
 
 export const VC_LYRIC_TRACKING_LABELS: Record<VcLyricTracking, string> = {
   'simple-scroll': 'Simple Scroll',
   alare: 'ALARE',
+  // Lyrics never auto-advance; the host scrolls the container by wheel, drag, or
+  // the bindable Lyric Scroll commands (keyboard / controller button).
+  'host-direct-scroll': 'Host Direct Scroll',
 };
 
 export const DEFAULT_VC_LYRIC_TRACKING: VcLyricTracking = 'simple-scroll';

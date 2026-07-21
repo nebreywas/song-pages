@@ -80,6 +80,8 @@ export type UsePlaybackTransportAdaptersOptions = {
   playSongById: (songId: number) => void;
   onVisualizerStep?: (direction: 1 | -1) => void;
   onToggleLiveDebug?: () => void;
+  /** Keyboard relative seeks (bypasses session) — record from→to on history. */
+  onHistorySeekRelative?: (fromSeconds: number, toSeconds: number) => void;
   playLockVc: PlayLockVcSync;
   media: {
     onYoutubeEnded: () => void;
@@ -102,6 +104,7 @@ export function usePlaybackTransportAdapters({
   playSongById,
   onVisualizerStep,
   onToggleLiveDebug,
+  onHistorySeekRelative,
   playLockVc,
   media,
 }: UsePlaybackTransportAdaptersOptions) {
@@ -122,6 +125,9 @@ export function usePlaybackTransportAdapters({
 
   const onToggleLiveDebugRef = useRef(onToggleLiveDebug);
   onToggleLiveDebugRef.current = onToggleLiveDebug;
+
+  const onHistorySeekRelativeRef = useRef(onHistorySeekRelative);
+  onHistorySeekRelativeRef.current = onHistorySeekRelative;
 
   const playLockVcRef = useRef(playLockVc);
   playLockVcRef.current = playLockVc;
@@ -147,7 +153,10 @@ export function usePlaybackTransportAdapters({
           },
           seekRelative: (deltaSeconds) => {
             if (!audio) return;
-            audio.currentTime = Math.max(0, audio.currentTime + deltaSeconds);
+            const fromSeconds = audio.currentTime;
+            const toSeconds = Math.max(0, fromSeconds + deltaSeconds);
+            onHistorySeekRelativeRef.current?.(fromSeconds, toSeconds);
+            audio.currentTime = toSeconds;
           },
           stutter: (durationMs) => {
             if (!audio) return;

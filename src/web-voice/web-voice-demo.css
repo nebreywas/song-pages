@@ -1,0 +1,324 @@
+/* Web Voice Demo — Chromium speechSynthesis explorer (Song Pages lab chrome). */
+
+.web-voice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-width: 64rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0.85rem 1rem 1.25rem;
+  box-sizing: border-box;
+  min-height: calc(100vh - 4.5rem);
+  overflow: auto;
+}
+
+.web-voice-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.web-voice-eyebrow {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent, #7aa2ff);
+}
+
+.web-voice-header h2 {
+  margin: 0 0 0.35rem;
+}
+
+.web-voice-lede {
+  margin: 0;
+  max-width: 40rem;
+  color: var(--muted, #8b93a7);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.web-voice-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+
+.web-voice-status span {
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+  color: var(--muted, #8b93a7);
+  background: color-mix(in srgb, var(--panel, #151b27) 88%, var(--surface-2, #1c2433));
+}
+
+.web-voice-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.web-voice-metrics article,
+.web-voice-panel {
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel, #151b27) 92%, var(--surface-2, #1c2433));
+  padding: 0.9rem 1rem;
+}
+
+.web-voice-metrics small {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--muted, #8b93a7);
+  font-size: 0.75rem;
+}
+
+.web-voice-metrics strong {
+  font-size: 1.2rem;
+  color: var(--text, #e8ecf4);
+}
+
+.web-voice-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.web-voice-section-head h3,
+.web-voice-section-head h4,
+.web-voice-panel > h3 {
+  margin: 0;
+}
+
+.web-voice-section-head p {
+  margin: 0.25rem 0 0;
+  color: var(--muted, #8b93a7);
+  font-size: 0.85rem;
+}
+
+.web-voice-voices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.web-voice-voices article {
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 8px;
+  padding: 0.85rem;
+  background: color-mix(in srgb, var(--surface-2, #1c2433) 70%, transparent);
+}
+
+.web-voice-voices h4 {
+  margin: 0 0 0.65rem;
+}
+
+.web-voice label {
+  display: block;
+  margin: 0.65rem 0;
+  color: var(--muted, #8b93a7);
+  font-size: 0.82rem;
+}
+
+.web-voice select,
+.web-voice textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.3rem;
+  box-sizing: border-box;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  background: #121824;
+  color: var(--text, #e8ecf4);
+  font: inherit;
+}
+
+/* Raw voiceURI readout — verifies compact vs enhanced vs premium variant. */
+.web-voice-uri {
+  margin: 0.25rem 0 0;
+  font-size: 0.7rem;
+  color: var(--muted, #8b93a7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.web-voice-uri code {
+  font-size: 0.68rem;
+  color: color-mix(in srgb, var(--accent, #7aa2ff) 70%, var(--muted, #8b93a7));
+}
+
+/* Engine picker — the escape hatch to Enhanced voices Chromium can't reach. */
+.web-voice-engine {
+  display: block;
+  margin-top: 0.85rem !important;
+  max-width: 30rem;
+}
+
+.web-voice-twins {
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px dashed color-mix(in srgb, var(--accent, #7aa2ff) 40%, var(--border, #2a3344));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent, #7aa2ff) 8%, transparent);
+  font-size: 0.78rem;
+  color: var(--text, #e8ecf4);
+}
+
+.web-voice-twins strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #8b93a7);
+}
+
+.web-voice-twins ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.web-voice-twins li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.55rem;
+}
+
+.web-voice-twin-chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--panel, #151b27) 70%, transparent);
+  font-size: 0.68rem;
+  color: var(--muted, #8b93a7);
+}
+
+.web-voice input[type='range'] {
+  width: 100%;
+  margin-top: 0.35rem;
+  accent-color: var(--accent, #7aa2ff);
+}
+
+.web-voice output {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--text, #e8ecf4);
+  font-variant-numeric: tabular-nums;
+}
+
+.web-voice button {
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  background: color-mix(in srgb, var(--panel, #151b27) 80%, var(--surface-2, #1c2433));
+  color: var(--text, #e8ecf4);
+  font: inherit;
+  cursor: pointer;
+}
+
+.web-voice button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent, #7aa2ff) 55%, var(--border, #2a3344));
+}
+
+.web-voice button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.web-voice-primary {
+  background: color-mix(in srgb, var(--accent, #7aa2ff) 28%, var(--panel, #151b27));
+  border-color: color-mix(in srgb, var(--accent, #7aa2ff) 55%, var(--border, #2a3344));
+}
+
+.web-voice-danger {
+  color: #ef9d9d;
+  border-color: color-mix(in srgb, #ef9d9d 35%, var(--border, #2a3344));
+}
+
+.web-voice-audition {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.web-voice-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+}
+
+.web-voice-controls > label:first-child {
+  min-width: 12rem;
+}
+
+.web-voice-check {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text, #e8ecf4) !important;
+}
+
+.web-voice-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.web-voice-preview {
+  border-top: 1px solid var(--border, #2a3344);
+  margin-top: 0.9rem;
+  padding-top: 0.85rem;
+}
+
+.web-voice-preview p {
+  margin: 0.55rem 0 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent, #7aa2ff) 10%, transparent);
+  color: var(--text, #e8ecf4);
+  line-height: 1.45;
+}
+
+.web-voice-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.75rem 0;
+}
+
+.web-voice-footer {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--muted, #8b93a7);
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .web-voice-metrics,
+  .web-voice-voices,
+  .web-voice-buttons {
+    grid-template-columns: 1fr;
+  }
+}

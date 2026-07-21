@@ -1,6 +1,6 @@
 # Open Questions & Deferred Work
 
-**Status:** Living backlog · **Last reviewed:** 2026-07-10  
+**Status:** Living backlog · **Last reviewed:** 2026-07-20  
 **Not an implementation schedule** — items here are decisions or triggers, not automatic sprint tasks.
 
 Use with [persistence-philosophy.md](./persistence-philosophy.md) and [README.md](./README.md). Resume product work (playback polish, VC Mode, content editor) unless a row below is explicitly pulled into a sprint.
@@ -119,6 +119,61 @@ Behavior is documented in architecture docs. Original MVP specs archived:
 - [archive/specs/kudos-system-1.md](./archive/specs/kudos-system-1.md)
 
 Open product work: VC polish, visual control window (mentioned in commands spec), surface design UX — not schema audits.
+
+---
+
+## Web Voice / spoken interludes
+
+Lab + first Listener slice: [web-voice-and-macos-tts.md](./web-voice-and-macos-tts.md). Demo mode: `CmdOrCtrl+5`. Radio mode: player menu next to Zen; voice picker in Settings.
+
+| Decision | Revisit when |
+|----------|----------------|
+| Move curated voices from `radioVoices.ts` into an external config file | Catalog needs non-dev edits / multi-app reuse |
+| Richer in-app Mac Enhanced install docs | Users hit missing Enhanced voices in the field |
+| Windows / Linux voice catalogs | Non-Mac packaging of spoken interludes |
+| Radio break probability / announcement set | Demo tuning after real listening |
+
+Do **not** expose the full system voice list in product UI — freeze known-good entries only.
+
+---
+
+## Play stats / History-backed counts
+
+History (`song_history` + `song_history_seeks`) is the durable listen log: starts, interruptions, playback seconds, and seek forward/back with from→to. Totals are derived on read (not stored per-playlist counters) so deleting a playlist does not erase lifetime song totals.
+
+| Item | Notes | Trigger to revisit |
+|------|-------|-------------------|
+| Surface play counts in playlist / song UI | Playlist Year column double-click toggles Plays (History-backed, playlist-scoped). Setting `playCountDisplay` chooses All starts vs Estimated full. | Tune formula / show lifetime totals elsewhere |
+| History prune vs long-term stats | History caps at 1000 rows; seeks prune with them. If lifetime stats must outlive the cap, add a rollup table on prune. | When 1000-row history feels short for stats |
+| Estimated-play formula tuning | Soft: `Floor(starts − (interruptions − 0.5×seekHitStarts))`. Not rights accounting. | User feedback after counts are visible |
+
+---
+
+## Super modes (library-wide)
+
+**Naming:** `SUPER [mode]` applies an action across the library (or a defined subset), not just the currently selected Artist/Playlist. First ship: **Super Shuffle** — double-tap the player-bar shuffle button; dotted underline while active; Next / natural-end draws from a **session snapshot** of all Artists & Playlists sidebar rows (captured when Super Shuffle turns on). Library adds/removes/skips apply the **next** time Super Shuffle starts. Deleted / missing picks skip forward to the next draw. Session-only (not persisted). Playlist-local shuffle remains a separate single-click toggle.
+
+| Item | Notes | Trigger to revisit |
+|------|-------|-------------------|
+| Super Shuffle inclusion UI | Turn individual sidebar playlists on/off while Super Shuffle is active; Artists-only / Playlists-only filters | When designing how inclusion should display beside the sidebar |
+| Persist Super Shuffle | Currently session-only like playlist shuffle | If users expect it to survive restart |
+| Other SUPER modes | Same library-scope convention for future actions | New library-wide playback behaviors |
+| Mid-session pool refresh | Snapshot is intentional; revisit if users expect live library edits during one Super Shuffle run | User feedback |
+| Now-playing remove guards | Soft UI blocks for deleting/removing the playing song or its source playlist/artist (`nowPlayingGuards.ts`). Not foolproof against races. | If users need force-delete while paused |
+
+---
+
+## Shuffle strategies
+
+Internal pluggable algorithms in `shared/playback/queue/shuffleStrategy.ts`. Product default is **`shuffle-bag`** (without-replacement). Legacy **`plain-random`** remains available. Future: **`shuffle-weight`** (bias popular songs before full 1× coverage). Active strategy is `ACTIVE_SHUFFLE_STRATEGY` until Settings exposes a picker. Playlist shuffle and Super Shuffle share the same strategies (separate bags).
+
+**Memory:** bags store song **ids** only. ~20k numbers is a couple hundred KB — not a concern in Electron. Do not put full song rows in the bag.
+
+| Item | Notes | Trigger to revisit |
+|------|-------|-------------------|
+| Settings UI for strategy | Expose `plain-random` / `shuffle-bag` / future modes | When users need to opt into legacy or weighted shuffle |
+| `shuffle-weight` | Emphasize high-play songs before the pool is exhausted at 1× | Play-stats / discovery experiments |
+| Persist strategy preference | Session-only constant today | When UI ships |
 
 ---
 

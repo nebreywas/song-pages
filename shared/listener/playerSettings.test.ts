@@ -14,16 +14,41 @@ test('normalizeListenerPlayerSettings defaults unknown values', () => {
   assert.deepEqual(normalizeListenerPlayerSettings(null), DEFAULT_LISTENER_PLAYER_SETTINGS);
   assert.deepEqual(normalizeListenerPlayerSettings({ seekTimeDisplay: 'nope' }), {
     seekTimeDisplay: 'remaining',
+    zenModeEnabled: false,
+    radioModeEnabled: false,
+    radioVoiceId: 'allison',
     showSunoPromptInformation: false,
     songPageFontIncreaseLevel: 0,
     youtubeMiniPlayerBehavior: 'projector',
+    playCountDisplay: 'all-starts',
   });
   assert.deepEqual(normalizeListenerPlayerSettings({ seekTimeDisplay: 'duration' }), {
     seekTimeDisplay: 'duration',
+    zenModeEnabled: false,
+    radioModeEnabled: false,
+    radioVoiceId: 'allison',
     showSunoPromptInformation: false,
     songPageFontIncreaseLevel: 0,
     youtubeMiniPlayerBehavior: 'projector',
+    playCountDisplay: 'all-starts',
   });
+});
+
+test('normalizeListenerPlayerSettings requires an explicit Zen opt-in', () => {
+  assert.equal(normalizeListenerPlayerSettings({ zenModeEnabled: true }).zenModeEnabled, true);
+  assert.equal(normalizeListenerPlayerSettings({ zenModeEnabled: false }).zenModeEnabled, false);
+  assert.equal(
+    normalizeListenerPlayerSettings({ zenModeEnabled: 'yes' as unknown as boolean }).zenModeEnabled,
+    false,
+  );
+});
+
+test('normalizeListenerPlayerSettings requires an explicit Radio opt-in', () => {
+  assert.equal(normalizeListenerPlayerSettings({ radioModeEnabled: true }).radioModeEnabled, true);
+  assert.equal(normalizeListenerPlayerSettings({ radioModeEnabled: false }).radioModeEnabled, false);
+  assert.equal(normalizeListenerPlayerSettings({ radioVoiceId: 'nathan' }).radioVoiceId, 'nathan');
+  assert.equal(normalizeListenerPlayerSettings({ radioVoiceId: 'random' }).radioVoiceId, 'random');
+  assert.equal(normalizeListenerPlayerSettings({ radioVoiceId: 'nope' }).radioVoiceId, 'allison');
 });
 
 test('normalizeListenerPlayerSettings requires opt-in for Suno prompts', () => {
@@ -88,5 +113,16 @@ test('normalizeListenerPlayerSettings keeps a valid YouTube mini-player behavior
     normalizeListenerPlayerSettings({ youtubeMiniPlayerBehavior: 'bogus' as never })
       .youtubeMiniPlayerBehavior,
     'projector',
+  );
+});
+
+test('normalizeListenerPlayerSettings keeps playCountDisplay mode', () => {
+  assert.equal(
+    normalizeListenerPlayerSettings({ playCountDisplay: 'estimated-full' }).playCountDisplay,
+    'estimated-full',
+  );
+  assert.equal(
+    normalizeListenerPlayerSettings({ playCountDisplay: 'bogus' as never }).playCountDisplay,
+    'all-starts',
   );
 });

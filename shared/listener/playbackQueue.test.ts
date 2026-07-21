@@ -35,8 +35,43 @@ test('pickNextPlayableSongId repeat all wrap ignores detour-consumed rows', () =
 });
 
 test('pickNextPlayableSongId shuffle repeat all wraps from last song', () => {
-  const result = pickNextPlayableSongId(songs, 5, { shuffle: true, repeatMode: 'all' });
+  const result = pickNextPlayableSongId(songs, 5, {
+    shuffle: true,
+    repeatMode: 'all',
+    // Keep legacy independent-random behavior for this characterization check.
+    shuffleStrategy: 'plain-random',
+  });
   assert.ok(result === 1 || result === 3);
+});
+
+test('pickNextPlayableSongId shuffle-bag consumes a persisted bag in order', () => {
+  const bag = {
+    scopeKey: 'test-playlist',
+    // Prefill so the test does not depend on Math.random.
+    remainingIds: [3, 5, 1],
+    exhausted: false,
+  };
+
+  const first = pickNextPlayableSongId(songs, 1, {
+    shuffle: true,
+    repeatMode: 'all',
+    shuffleStrategy: 'shuffle-bag',
+    shuffleBag: bag,
+    shuffleScopeKey: 'test-playlist',
+  });
+  // Current (1) is pruned from the bag; next draw is 3.
+  assert.equal(first, 3);
+  assert.deepEqual(bag.remainingIds, [5]);
+
+  const second = pickNextPlayableSongId(songs, 3, {
+    shuffle: true,
+    repeatMode: 'all',
+    shuffleStrategy: 'shuffle-bag',
+    shuffleBag: bag,
+    shuffleScopeKey: 'test-playlist',
+  });
+  assert.equal(second, 5);
+  assert.deepEqual(bag.remainingIds, []);
 });
 
 test('pickPreviousPlayableSongId wraps on repeat all', () => {

@@ -63,6 +63,7 @@ describe('songPatchFromSunoClip', () => {
     assert.equal(patch.payload.tags, undefined);
     assert.equal(patch.payload.bpm, 92);
     assert.equal(patch.payload.isInstrumental, false);
+    assert.equal(patch.payload.explicit, null);
     assert.equal(patch.payload.suno?.clipId, CLIP_ID);
     assert.equal(patch.payload.suno?.shareUrl, `https://suno.com/song/${CLIP_ID}`);
     assert.equal(patch.staticCoverUrl, 'https://cdn2.suno.ai/image_large_sample.jpeg');
@@ -71,6 +72,14 @@ describe('songPatchFromSunoClip', () => {
     assert.equal(serialized.includes('audio.mp3'), false);
     assert.equal(serialized.includes('lyric-video.mp4'), false);
     assert.equal(serialized.includes('animated-cover.mp4'), false);
+  });
+
+  it('maps Studio explicit flag onto the song payload', () => {
+    const patch = songPatchFromSunoClip({
+      ...sampleClip,
+      is_explicit: true,
+    });
+    assert.equal(patch.payload.explicit, true);
   });
 
   it('keeps lyrics separate from style prompt', () => {

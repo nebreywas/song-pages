@@ -1,6 +1,8 @@
 export type {
   Artist2AlbumDetail,
   Artist2AlbumPayload,
+  Artist2AlbumRelation,
+  Artist2AlbumRelationKind,
   Artist2AiModelEntry,
   Artist2AiPromptEntry,
   Artist2Artist,
@@ -23,6 +25,7 @@ export type {
   Artist2EditorSelection,
   Artist2TrackSummary,
   Artist2LibraryFilter,
+  Artist2LibraryFilterKey,
   Artist2Membership,
   Artist2ObjectPayload,
   Artist2ObjectStatus,
@@ -37,9 +40,16 @@ export type {
   Artist2SongRecording,
   Artist2SongRelation,
   Artist2SongRelationKind,
+  Artist2MusicalEnsemble,
+  Artist2PrimaryVocalPresentation,
   Artist2SunoProvenance,
   Artist2VideoEntry,
   Artist2VideoKind,
+  Artist2AdaptationType,
+  Artist2AdaptedPartyRole,
+  Artist2AdaptedWork,
+  Artist2OriginalCopyrightStatus,
+  Artist2SourceMaterialKind,
 } from './types';
 
 export type {
@@ -48,14 +58,41 @@ export type {
 } from './providersSocialRegistry';
 
 export {
+  albumAbout,
+  albumCreationDate,
   albumIncompleteHints,
+  ARTIST2_ALBUM_RELATION_KINDS,
+  ARTIST2_LIBRARY_FILTER_ALL,
   ARTIST2_SONG_RELATION_KINDS,
+  albumRelationLabel,
   artist2ContentTypeLabel,
+  coerceMusicalEnsemble,
+  coercePrimaryVocalPresentation,
   isSongContainerKind,
+  MUSICAL_ENSEMBLE_LABELS,
+  MUSICAL_ENSEMBLES,
+  playlistAbout,
+  playlistProducerCredit,
+  PRIMARY_VOCAL_PRESENTATION_LABELS,
+  PRIMARY_VOCAL_PRESENTATIONS,
   songIncompleteHints,
   songCreationDate,
+  songPrimaryLanguage,
   songRelationLabel,
   songYearForCompile,
+  ADAPTATION_TYPE_LABELS,
+  ADAPTATION_TYPES,
+  ADAPTED_PARTY_ROLE_LABELS,
+  ADAPTED_PARTY_ROLES,
+  emptyAdaptedWork,
+  ORIGINAL_COPYRIGHT_STATUS_LABELS,
+  ORIGINAL_COPYRIGHT_STATUSES,
+  patchAdaptedWork,
+  songAdaptedWork,
+  SOURCE_MATERIAL_HELP,
+  SOURCE_MATERIAL_KINDS,
+  SOURCE_MATERIAL_LABELS,
+  toggleAdaptedWorkListValue,
 } from './types';
 export {
   BPM_MAX,
@@ -70,6 +107,11 @@ export {
   removeSongRelation,
   upsertSongRelation,
 } from './songRelations';
+export {
+  normalizeAlbumRelations,
+  removeAlbumRelation,
+  upsertAlbumRelation,
+} from './albumRelations';
 export {
   ensureSinglePrimary,
   legacyRecordingFromList,
@@ -173,3 +215,33 @@ export {
   isAlreadyCoverNamed,
   slugifyForCoverFilename,
 } from './coverFilename';
+export {
+  normalizeSongSectionCollapseStore,
+  setSongSectionCollapsed,
+  songSectionIsCollapsed,
+  SONG_EDITOR_SECTION_IDS,
+  SONG_SECTION_COLLAPSE_SETTINGS_KEY,
+  type SongEditorSectionId,
+  type SongSectionCollapseFlags,
+  type SongSectionCollapseStore,
+} from './songEditorSectionCollapse';
+export {
+  normalizeAlbumSectionCollapseStore,
+  setAlbumSectionCollapsed,
+  albumSectionIsCollapsed,
+  ALBUM_EDITOR_SECTION_IDS,
+  ALBUM_SECTION_COLLAPSE_SETTINGS_KEY,
+  type AlbumEditorSectionId,
+  type AlbumSectionCollapseFlags,
+  type AlbumSectionCollapseStore,
+} from './albumEditorSectionCollapse';
+export {
+  normalizePlaylistSectionCollapseStore,
+  setPlaylistSectionCollapsed,
+  playlistSectionIsCollapsed,
+  PLAYLIST_EDITOR_SECTION_IDS,
+  PLAYLIST_SECTION_COLLAPSE_SETTINGS_KEY,
+  type PlaylistEditorSectionId,
+  type PlaylistSectionCollapseFlags,
+  type PlaylistSectionCollapseStore,
+} from './playlistEditorSectionCollapse';

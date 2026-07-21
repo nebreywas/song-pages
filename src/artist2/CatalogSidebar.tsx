@@ -8,14 +8,20 @@ import type {
   Artist2AlbumTrackSummaries,
   Artist2CatalogObject,
   Artist2LibraryFilter,
+  Artist2LibraryFilterKey,
   Artist2TrackSummary,
 } from '@shared/artist2';
 
 import {
+  catalogObjectHasRecording,
   catalogTypeLabel,
   filterCatalogObjects,
   formatCatalogAddedDate,
+  nextSortKeyForColumn,
   sortCatalogObjects,
+  sortColumnFromKey,
+  toggleLibraryFilter,
+  type CatalogSortColumn,
   type CatalogSortKey,
 } from './catalogSidebarUtils';
 import {
@@ -23,6 +29,8 @@ import {
   insertActionLabel,
   type InsertContext,
 } from './insertContext';
+
+type CatalogCreateKind = 'song' | 'album' | 'playlist' | 'image' | 'text' | 'video' | 'audio';
 
 type CatalogSidebarProps = {
   objects: Artist2CatalogObject[];
@@ -32,15 +40,57 @@ type CatalogSidebarProps = {
   filter: Artist2LibraryFilter;
   search: string;
   insertContext: InsertContext;
+  /** Highlights Artist Profile when the artist editor is open. */
+  artistProfileActive: boolean;
+  createMenuOpen: boolean;
   onFilterChange: (filter: Artist2LibraryFilter) => void;
   onSearchChange: (value: string) => void;
   onSelect: (id: string) => void;
   onInsert: (object: Artist2CatalogObject) => void;
+  onOpenArtistProfile: () => void;
+  onOpenDeletedItems: () => void;
+  onToggleCreateMenu: () => void;
+  onCreate: (kind: CatalogCreateKind) => void;
 };
+
+/** Clickable catalog column header — toggles sort and shows the active direction. */
+function SortHeader({
+  column,
+  label,
+  className,
+  activeColumn,
+  direction,
+  onSort,
+}: {
+  column: CatalogSortColumn;
+  label: string;
+  className: string;
+  activeColumn: CatalogSortColumn;
+  direction: 'asc' | 'desc';
+  onSort: (column: CatalogSortColumn) => void;
+}) {
+  const active = activeColumn === column;
+  return (
+    <button
+      type="button"
+      role="columnheader"
+      aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={`a2-catalog-col-sort ${className}${active ? ' is-active' : ''}`}
+      onClick={() => onSort(column)}
+      title={`Sort by ${label}`}
+    >
+      <span className="a2-catalog-sort-label">{label}</span>
+      <span className="a2-catalog-sort-arrow" aria-hidden="true">
+        {active ? (direction === 'asc' ? '▲' : '▼') : ''}
+      </span>
+    </button>
+  );
+}
 
 function CatalogTableRow({
   name,
   typeLabel,
+  hasRecording,
   addedLabel,
   selected,
   canInsert,
@@ -52,6 +102,7 @@ function CatalogTableRow({
 }: {
   name: string;
   typeLabel: string;
+  hasRecording: boolean;
   addedLabel: string;
   selected: boolean;
   canInsert: boolean;
@@ -70,6 +121,13 @@ function CatalogTableRow({
         {name}
       </button>
       <span className="a2-catalog-col-type">{typeLabel}</span>
+      <span
+        className="a2-catalog-col-recording"
+        title={hasRecording ? 'Has recording' : undefined}
+        aria-label={hasRecording ? 'Has recording' : undefined}
+      >
+        {hasRecording ? '♫' : ''}
+      </span>
       <span className="a2-catalog-col-added">{addedLabel}</span>
       <div className="a2-catalog-col-insert">
         {canInsert && onInsert ? (
@@ -104,9 +162,10 @@ function NestedTrackRow({
   onInsert: (object: Artist2CatalogObject) => void;
 }) {
   const song = objectById.get(track.id);
+  const memberKind = track.kind === 'album' || song?.kind === 'album' ? 'album' : 'song';
   const pseudoObject = (song ?? {
     id: track.id,
-    kind: 'song',
+    kind: memberKind,
     name: track.name,
     createdAt: '',
   }) as Artist2CatalogObject;
@@ -115,7 +174,8 @@ function NestedTrackRow({
   return (
     <CatalogTableRow
       name={track.name}
-      typeLabel="Song"
+      typeLabel={memberKind === 'album' ? 'Album' : 'Song'}
+      hasRecording={catalogObjectHasRecording(song)}
       addedLabel={formatCatalogAddedDate(song?.createdAt)}
       selected={selectedId === track.id}
       canInsert={canInsert}
@@ -135,18 +195,35 @@ export function CatalogSidebar({
   filter,
   search,
   insertContext,
+  artistProfileActive,
+  createMenuOpen,
   onFilterChange,
   onSearchChange,
   onSelect,
   onInsert,
+  onOpenArtistProfile,
+  onOpenDeletedItems,
+  onToggleCreateMenu,
+  onCreate,
 }: CatalogSidebarProps) {
   const [sortKey, setSortKey] = useState<CatalogSortKey>('name-asc');
   const [expandedAlbumIds, setExpandedAlbumIds] = useState<Set<string>>(() => new Set());
 
   const visibleRows = useMemo(() => {
-    const filtered = filterCatalogObjects(objects, filter);
+    // Kind filter first, then name search within that subset.
+    const filtered = filterCatalogObjects(objects, filter, search);
     return sortCatalogObjects(filtered, sortKey);
-  }, [objects, filter, sortKey]);
+  }, [objects, filter, search, sortKey]);
+
+  function handleFilterToggle(key: Artist2LibraryFilterKey) {
+    onFilterChange(toggleLibraryFilter(filter, key));
+  }
+
+  const activeSort = sortColumnFromKey(sortKey);
+
+  function handleSortColumn(column: CatalogSortColumn) {
+    setSortKey((prev) => nextSortKeyForColumn(column, prev));
+  }
 
   function toggleContainer(containerId: string) {
     setExpandedAlbumIds((prev) => {
@@ -169,6 +246,7 @@ export function CatalogSidebar({
         <CatalogTableRow
           name={obj.name}
           typeLabel={catalogTypeLabel(obj)}
+          hasRecording={catalogObjectHasRecording(obj)}
           addedLabel={formatCatalogAddedDate(obj.createdAt)}
           selected={selectedId === obj.id}
           canInsert={canInsert}
@@ -192,7 +270,9 @@ export function CatalogSidebar({
         {isContainer && expanded ? (
           <ul className="a2-nested-list">
             {(albumTrackSummaries[obj.id] ?? []).length === 0 ? (
-              <li className="a2-nested-empty">No tracks in this {containerWord} yet.</li>
+              <li className="a2-nested-empty">
+                No {obj.kind === 'playlist' ? 'music' : 'tracks'} in this {containerWord} yet.
+              </li>
             ) : (
               (albumTrackSummaries[obj.id] ?? []).map((track) => (
                 <li key={`${obj.id}-${track.id}`}>
@@ -215,7 +295,71 @@ export function CatalogSidebar({
 
   return (
     <aside className="a2-sidebar">
+      {/* Catalog-scoped actions live above search so the top bar stays artist/compile only. */}
+      <div className="a2-sidebar-actions">
+        <button
+          type="button"
+          className={artistProfileActive ? 'is-active' : undefined}
+          onClick={onOpenArtistProfile}
+        >
+          Artist Profile
+        </button>
+        <button type="button" onClick={onOpenDeletedItems}>
+          Deleted Items
+        </button>
+        <div className="a2-create-wrap">
+          <button type="button" onClick={onToggleCreateMenu}>
+            Add…
+          </button>
+          {createMenuOpen ? (
+            <div className="a2-create-menu" role="menu">
+              <button type="button" role="menuitem" onClick={() => onCreate('song')}>
+                Song
+              </button>
+              <button type="button" role="menuitem" onClick={() => onCreate('album')}>
+                Container · Album
+              </button>
+              <button type="button" role="menuitem" onClick={() => onCreate('playlist')}>
+                Container · Playlist
+              </button>
+              <button type="button" role="menuitem" onClick={() => onCreate('image')}>
+                Content · Image
+              </button>
+              <button type="button" role="menuitem" onClick={() => onCreate('video')}>
+                Content · Video
+              </button>
+              <button type="button" role="menuitem" onClick={() => onCreate('audio')}>
+                Content · Audio
+              </button>
+              <button type="button" role="menuitem" onClick={() => onCreate('text')}>
+                Content · Text
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       <div className="a2-sidebar-controls">
+        <div className="a2-sidebar-filter-toggles" role="group" aria-label="Catalog filter">
+          {(
+            [
+              ['all', 'All'],
+              ['songs', 'Songs'],
+              ['containers', 'Containers'],
+              ['content', 'Content'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={filter[key] ? 'is-active' : undefined}
+              aria-pressed={filter[key]}
+              onClick={() => handleFilterToggle(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <input
           type="search"
           className="a2-sidebar-search-input"
@@ -224,35 +368,39 @@ export function CatalogSidebar({
           onChange={(event) => onSearchChange(event.target.value)}
           aria-label="Search catalog"
         />
-        <div className="a2-sidebar-control-row">
-          <label className="a2-sidebar-control">
-            <span>Filter</span>
-            <select value={filter} onChange={(event) => onFilterChange(event.target.value as Artist2LibraryFilter)}>
-              <option value="all">All</option>
-              <option value="songs">Songs</option>
-              <option value="containers">Containers</option>
-              <option value="content">Content</option>
-            </select>
-          </label>
-          <label className="a2-sidebar-control">
-            <span>Sort</span>
-            <select value={sortKey} onChange={(event) => setSortKey(event.target.value as CatalogSortKey)}>
-              <option value="name-asc">Name A–Z</option>
-              <option value="name-desc">Name Z–A</option>
-              <option value="added-desc">Added (newest)</option>
-              <option value="added-asc">Added (oldest)</option>
-              <option value="type-asc">Type</option>
-            </select>
-          </label>
-        </div>
       </div>
 
       <div className="a2-catalog-table">
-        <div className="a2-catalog-table-head" aria-hidden="true">
+        {/* Column headers double as sort toggles (click to sort, click again to flip). */}
+        <div className="a2-catalog-table-head" role="row">
           <span className="a2-catalog-col-expand" />
-          <span className="a2-catalog-col-name">Name</span>
-          <span className="a2-catalog-col-type">Type</span>
-          <span className="a2-catalog-col-added">Added</span>
+          <SortHeader
+            column="name"
+            label="Name"
+            className="a2-catalog-col-name"
+            activeColumn={activeSort.column}
+            direction={activeSort.direction}
+            onSort={handleSortColumn}
+          />
+          <SortHeader
+            column="type"
+            label="Type"
+            className="a2-catalog-col-type"
+            activeColumn={activeSort.column}
+            direction={activeSort.direction}
+            onSort={handleSortColumn}
+          />
+          <span className="a2-catalog-col-recording" title="Recording">
+            R
+          </span>
+          <SortHeader
+            column="added"
+            label="Added"
+            className="a2-catalog-col-added"
+            activeColumn={activeSort.column}
+            direction={activeSort.direction}
+            onSort={handleSortColumn}
+          />
           <span className="a2-catalog-col-insert" />
         </div>
 

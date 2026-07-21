@@ -804,7 +804,10 @@ function applySongPresentation(
         color: presentation.color,
         markdownSource: presentation.markdownSource,
         textAlign: presentation.textAlign,
-        lyricTracking: 'simple-scroll',
+        // Both Simple Scroll and Host Direct Scroll share this presentation
+        // (markdown / edge fade / bracket removal); only the render behavior
+        // differs (auto-scroll transform vs. manual scroll container).
+        lyricTracking: tracking,
         lyricPresentationEffect,
         lyricTypographyMode,
         prettySoftBreakLongLines,

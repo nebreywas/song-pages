@@ -16,9 +16,11 @@ import { Artist2Mode } from './artist2/Artist2Mode';
 import { DeveloperMode } from './developer/DeveloperMode';
 import { AboutMode } from './about/AboutMode';
 import { PrettyLyricsLab } from './pretty-lyrics/PrettyLyricsLab';
+import { WebVoiceDemo } from './web-voice/WebVoiceDemo';
 
 function appHeaderTitle(mode: AppMode): string {
   if (mode === 'artist2') return 'Song Pages: Artist 2.0';
+  if (mode === 'web-voice') return 'Song Pages: Web Voice Demo';
   return 'Song Pages';
 }
 
@@ -52,7 +54,8 @@ export default function App() {
 
   return (
     <div className="app-root">
-      {mode !== 'listener' ? (
+      {/* Artist 2.0 owns its own title row (artist switcher / compile sit flush right). */}
+      {mode !== 'listener' && mode !== 'artist2' ? (
         <header className="app-header">
           <h1 className="app-title">{appHeaderTitle(mode)}</h1>
         </header>
@@ -65,6 +68,7 @@ export default function App() {
           {mode === 'artist2' ? <Artist2Mode /> : null}
           {mode === 'developer' ? <DeveloperMode /> : null}
           {mode === 'pretty-lyrics' ? <PrettyLyricsLab /> : null}
+          {mode === 'web-voice' ? <WebVoiceDemo /> : null}
           {mode === 'about' ? <AboutMode /> : null}
         </BridgeRequired>
       </main>

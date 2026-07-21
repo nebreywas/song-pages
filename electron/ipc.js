@@ -687,6 +687,28 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle('listener:recordSongHistorySeek', (_event, input) => {
+    const songHistory = require('./listener/songHistory');
+    try {
+      return songHistory.recordSongHistorySeek(input || {});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
+  ipcMain.handle('listener:listSongHistorySeekHitEntryIds', (_event, limit) => {
+    const songHistory = require('./listener/songHistory');
+    try {
+      return songHistory.listSongHistorySeekHitEntryIds(
+        typeof limit === 'number' ? limit : undefined,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+  });
+
   // --- Artist Mode (compile) ---
 
   ipcMain.handle('artist:pickAudio', async () => {
@@ -940,6 +962,140 @@ function registerIpcHandlers() {
     });
   });
 
+  // Editor artwork meta line — size from disk + pixel size via Electron nativeImage.
+  ipcMain.handle('artist2:probeLocalImage', (_event, filePath) => {
+    return artist2Ok(() => {
+      const fs = require('fs');
+      const path = require('path');
+      const { nativeImage } = require('electron');
+      if (!filePath || typeof filePath !== 'string') return null;
+      const absolute = path.resolve(filePath.trim());
+      if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) return null;
+      const fileSizeBytes = fs.statSync(absolute).size;
+      const image = nativeImage.createFromPath(absolute);
+      const size = image.isEmpty() ? { width: 0, height: 0 } : image.getSize();
+      return {
+        fileSizeBytes,
+        widthPx: size.width || 0,
+        heightPx: size.height || 0,
+      };
+    });
+  });
+
+  // --- Web Voice Demo: native macOS `say` engine -------------------------
+  // Chromium's speechSynthesis matches voices by *name string* when speaking,
+  // so when compact + enhanced variants share a display name ("Samantha"),
+  // the enhanced download is unreachable from the renderer. The `say` CLI
+  // accepts the exact voice name including the "(Enhanced)" suffix, so we
+  // shell out from the main process to actually reach those voices.
+
+  /** Currently playing `say` child process — one utterance at a time. */
+  let nativeSayChild = null;
+
+  function stopNativeSay() {
+    if (nativeSayChild) {
+      try {
+        nativeSayChild.kill('SIGTERM');
+      } catch {
+        // Already exited — nothing to clean up.
+      }
+      nativeSayChild = null;
+    }
+  }
+
+  ipcMain.handle('webVoice:listNativeVoices', () => {
+    return artist2Ok(() => {
+      if (process.platform !== 'darwin') return [];
+      const { execFileSync } = require('child_process');
+      const raw = execFileSync('/usr/bin/say', ['-v', '?'], { encoding: 'utf8' });
+      const voices = [];
+      for (const line of raw.split('\n')) {
+        // Format: "Samantha (Enhanced) en_US    # Hello! My name is Samantha."
+        // Names are padded to a fixed column; long names ("Samantha (Enhanced)")
+        // leave only ONE space before the locale, so match on \s+ and rely on
+        // the locale token sitting directly before the "#" sample comment.
+        const match = line.match(/^(.+?)\s+([a-zA-Z]{2,3}[_-][A-Za-z0-9_-]+)\s+#\s*(.*)$/);
+        if (!match) continue;
+        const name = match[1].trim();
+        const lang = match[2].replace('_', '-');
+        voices.push({
+          name,
+          lang,
+          sample: match[3].trim(),
+          enhanced: /\(enhanced\)/i.test(name),
+          premium: /\(premium\)/i.test(name),
+        });
+      }
+      return voices;
+    });
+  });
+
+  ipcMain.handle('webVoice:speakNative', async (_event, payload) => {
+    return artist2Ok(async () => {
+      if (process.platform !== 'darwin') throw new Error('Native say is macOS only');
+      const { spawn } = require('child_process');
+      const voice = typeof payload?.voice === 'string' ? payload.voice : '';
+      const text = typeof payload?.text === 'string' ? payload.text : '';
+      // `say` takes words-per-minute, not a multiplier. ~175 wpm is its
+      // natural default, so map the demo's 0.72–1.12 rate onto that.
+      const rateMultiplier = Number(payload?.rate) || 1;
+      const wpm = Math.round(175 * Math.min(2, Math.max(0.4, rateMultiplier)));
+      if (!text.trim()) return { done: true };
+
+      // Pitch: `say` has no CLI flag, but Apple embedded speech commands work
+      // inline in the text. [[pbas +/-N]] shifts the baseline pitch in
+      // (roughly) semitones, so convert the demo's multiplier the same way a
+      // musical interval would be: semitones = 12 * log2(multiplier).
+      const pitchMultiplier = Number(payload?.pitch) || 1;
+      let pitchPrefix = '';
+      if (pitchMultiplier > 0 && Math.abs(pitchMultiplier - 1) > 0.005) {
+        const semitones = 12 * Math.log2(Math.min(2, Math.max(0.5, pitchMultiplier)));
+        const clamped = Math.min(10, Math.max(-10, semitones));
+        pitchPrefix = `[[pbas ${clamped >= 0 ? '+' : ''}${clamped.toFixed(1)}]] `;
+      }
+
+      stopNativeSay();
+      // Text goes via stdin (-f -) so quotes/newlines in scripts can't break
+      // the argument list. spawn without a shell — no injection surface.
+      const args = ['-r', String(wpm), '-f', '-'];
+      if (voice) args.unshift('-v', voice);
+      const child = spawn('/usr/bin/say', args, { stdio: ['pipe', 'ignore', 'pipe'] });
+      nativeSayChild = child;
+      child.stdin.write(pitchPrefix + text);
+      child.stdin.end();
+
+      return await new Promise((resolve, reject) => {
+        let stderr = '';
+        child.stderr.on('data', (chunk) => {
+          stderr += String(chunk);
+        });
+        child.on('error', (error) => {
+          if (nativeSayChild === child) nativeSayChild = null;
+          reject(error);
+        });
+        child.on('close', (code, signal) => {
+          if (nativeSayChild === child) nativeSayChild = null;
+          if (signal) {
+            resolve({ done: false, stopped: true });
+            return;
+          }
+          if (code !== 0) {
+            reject(new Error(stderr.trim() || `say exited with code ${code}`));
+            return;
+          }
+          resolve({ done: true });
+        });
+      });
+    });
+  });
+
+  ipcMain.handle('webVoice:stopNative', () => {
+    return artist2Ok(() => {
+      stopNativeSay();
+      return true;
+    });
+  });
+
   ipcMain.handle('artist2:renameCoverForObject', (_event, objectId) => {
     const renameCover = require('./artist2/renameCover');
     return artist2Ok(() => renameCover.renameCoverForObject(objectId));
@@ -978,6 +1134,16 @@ function registerIpcHandlers() {
   ipcMain.handle('artist2:unlinkRelatedSongs', (_event, payload) => {
     const catalog = require('./artist2/catalog');
     return artist2Ok(() => catalog.unlinkRelatedSongs(payload || {}));
+  });
+
+  ipcMain.handle('artist2:linkRelatedAlbums', (_event, payload) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.linkRelatedAlbums(payload || {}));
+  });
+
+  ipcMain.handle('artist2:unlinkRelatedAlbums', (_event, payload) => {
+    const catalog = require('./artist2/catalog');
+    return artist2Ok(() => catalog.unlinkRelatedAlbums(payload || {}));
   });
 
   ipcMain.handle('artist2:repairBrokenReference', (_event, payload) => {
@@ -1118,6 +1284,15 @@ function registerIpcHandlers() {
     const mainWindow = vcWindow.getMainWindowRef();
     if (!mainWindow || mainWindow.isDestroyed() || typeof playlistId !== 'number') return;
     mainWindow.webContents.send('listener:submission-playlist-updated', playlistId);
+  });
+
+  // Controller changes the VC paste-target playlist live. `null` clears it; any
+  // other value is coerced to a positive id on the main-window side.
+  ipcMain.on('vc:setSubmissionPlaylist', (_event, playlistId) => {
+    const mainWindow = vcWindow.getMainWindowRef();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const next = typeof playlistId === 'number' && Number.isFinite(playlistId) ? playlistId : null;
+    mainWindow.webContents.send('vc:set-submission-playlist', next);
   });
 
   // --- Meme Surface (VC controller → main renderer → projector) ---

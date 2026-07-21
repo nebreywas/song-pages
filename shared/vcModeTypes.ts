@@ -469,6 +469,12 @@ export type VcHotkeyAction =
   | 'alareSpeedDown'
   /** Reset ALARE lyric scroll trim to default (⌘⌥0). */
   | 'alareSpeedReset'
+  /** Host Direct Scroll: nudge lyrics forward (down) a page-ish amount. */
+  | 'lyricScrollForward'
+  /** Host Direct Scroll: nudge lyrics back (up) a page-ish amount. */
+  | 'lyricScrollBack'
+  /** Host Direct Scroll: jump lyrics back to the top. */
+  | 'lyricScrollReset'
   /** Randomize the active visualizer plugin (host override). */
   | 'changeVisualizer'
   /** Next visualizer in the catalog list. */

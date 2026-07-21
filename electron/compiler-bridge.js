@@ -4,6 +4,7 @@
 const path = require('path');
 const { app } = require('electron');
 const { slugifySiteText } = require('./compiler-slugify');
+const { ensureTsLoader } = require('./tsLoader');
 
 class CompileSecurityError extends Error {
   constructor(message) {
@@ -17,7 +18,7 @@ function loadCompileModules() {
   if (app.isPackaged) {
     return require('./compiler-dist/bundle.cjs');
   }
-  require('tsx/cjs/api').register();
+  ensureTsLoader();
   return {
     compileArtistPage: require('../compiler/artistPageCompileService.ts').compileArtistPage,
     buildStrictCompileFileMapFromManifest:

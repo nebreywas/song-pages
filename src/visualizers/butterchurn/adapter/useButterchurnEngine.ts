@@ -5,6 +5,21 @@ import type { ButterchurnVisualizer } from 'butterchurn';
 import { resumeAudioContext } from '../../../audio/graph/registry';
 import { resolvePresetByKey } from '../presets/registry';
 
+/**
+ * CSS px → device px for the WebGL drawing buffer. Capped at 2× — Butterchurn
+ * cost grows with buffer area and >2× is invisible at listening distance.
+ */
+function deviceBufferSize(
+  cssWidth: number,
+  cssHeight: number,
+): { bufferWidth: number; bufferHeight: number } {
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  return {
+    bufferWidth: Math.max(1, Math.round(cssWidth * ratio)),
+    bufferHeight: Math.max(1, Math.round(cssHeight * ratio)),
+  };
+}
+
 type UseButterchurnEngineOptions = {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   audioContext: AudioContext | null;
@@ -51,9 +66,22 @@ export function useButterchurnEngine({
     sizeRef.current = { width, height };
     const visualizer = visualizerRef.current;
     if (!visualizer || !ready) return;
+    // Butterchurn never touches the canvas element itself — its final screen
+    // pass simply viewports at the width/height we hand it, and pixelRatio
+    // only scales internal textures. If the canvas attributes are left at the
+    // 300×150 default, CSS stretches that tiny buffer across the panel
+    // (blurry, wrong aspect — the "not scaled to viewport" bug). So on every
+    // host resize we size the drawing buffer in device pixels and tell the
+    // renderer that exact buffer size.
+    const { bufferWidth, bufferHeight } = deviceBufferSize(width, height);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.width = bufferWidth;
+      canvas.height = bufferHeight;
+    }
     // Butterchurn requires a third options argument — omitting it throws.
-    visualizer.setRendererSize?.(width, height, {});
-  }, [height, ready, width]);
+    visualizer.setRendererSize?.(bufferWidth, bufferHeight, { pixelRatio: 1 });
+  }, [canvasRef, height, ready, width]);
 
   useEffect(() => {
     if (!enabled) {
@@ -89,10 +117,17 @@ export function useButterchurnEngine({
         visualizerRef.current?.destroy?.();
 
         const { width: bootWidth, height: bootHeight } = sizeRef.current;
+        // Size the drawing buffer before creating the WebGL context, and give
+        // Butterchurn the buffer size (device px) with pixelRatio 1 so its
+        // output viewport exactly covers the buffer. See the resize effect
+        // above for why Butterchurn won't manage the canvas for us.
+        const { bufferWidth, bufferHeight } = deviceBufferSize(bootWidth, bootHeight);
+        canvas.width = bufferWidth;
+        canvas.height = bufferHeight;
         const visualizer = butterchurn.createVisualizer(audioContext, canvas, {
-          width: Math.max(1, bootWidth),
-          height: Math.max(1, bootHeight),
-          pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+          width: bufferWidth,
+          height: bufferHeight,
+          pixelRatio: 1,
         });
 
         visualizer.connectAudio(audioNode);

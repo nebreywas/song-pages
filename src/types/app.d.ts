@@ -1,4 +1,11 @@
-export type AppMode = 'listener' | 'artist' | 'artist2' | 'developer' | 'about' | 'pretty-lyrics';
+export type AppMode =
+  | 'listener'
+  | 'artist'
+  | 'artist2'
+  | 'developer'
+  | 'about'
+  | 'pretty-lyrics'
+  | 'web-voice';
 
 /** In-memory cache analytics event from the main process ring buffer. */
 export type CacheEventRow = {
@@ -382,6 +389,13 @@ declare global {
             interrupted?: boolean;
           },
         ) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+        recordSongHistorySeek: (input: {
+          historyEntryId: number;
+          fromSeconds: number;
+          toSeconds: number;
+          direction?: 'forward' | 'back';
+        }) => Promise<{ ok: boolean; data?: unknown; error?: string; skipped?: boolean }>;
+        listSongHistorySeekHitEntryIds: (limit?: number) => Promise<number[]>;
         listSongHistory: (limit?: number) => Promise<unknown[]>;
         clearSongHistory: () => Promise<{ ok: boolean; error?: string }>;
       };
@@ -543,6 +557,16 @@ declare global {
           data?: string | null;
           error?: string;
         }>;
+        /** Local image filesize + pixel dimensions for Artwork editor meta. */
+        probeLocalImage: (filePath: string) => Promise<{
+          ok: boolean;
+          data?: {
+            fileSizeBytes: number;
+            widthPx: number;
+            heightPx: number;
+          } | null;
+          error?: string;
+        }>;
         renameCoverForObject: (objectId: string) => Promise<{
           ok: boolean;
           data?: {
@@ -615,6 +639,30 @@ declare global {
           };
           error?: string;
         }>;
+        linkRelatedAlbums: (payload: {
+          fromAlbumId: string;
+          toAlbumId: string;
+          relation?: import('@shared/artist2').Artist2AlbumRelationKind;
+          note?: string;
+        }) => Promise<{
+          ok: boolean;
+          data?: {
+            from: import('@shared/artist2').Artist2CatalogObject;
+            to: import('@shared/artist2').Artist2CatalogObject;
+          };
+          error?: string;
+        }>;
+        unlinkRelatedAlbums: (payload: {
+          fromAlbumId: string;
+          toAlbumId: string;
+        }) => Promise<{
+          ok: boolean;
+          data?: {
+            from: import('@shared/artist2').Artist2CatalogObject;
+            to: import('@shared/artist2').Artist2CatalogObject | null;
+          };
+          error?: string;
+        }>;
         repairBrokenReference: (payload: {
           reportId: string;
           refIndex: number;
@@ -623,6 +671,32 @@ declare global {
           data?: { repaired: boolean; kind: string; detail?: unknown };
           error?: string;
         }>;
+      };
+      /** Web Voice Demo — native macOS `say` TTS (reaches Enhanced voices). */
+      webVoice: {
+        listNativeVoices: () => Promise<{
+          ok: boolean;
+          data?: {
+            name: string;
+            lang: string;
+            sample: string;
+            enhanced: boolean;
+            premium: boolean;
+          }[];
+          error?: string;
+        }>;
+        speakNative: (payload: {
+          voice?: string;
+          text: string;
+          rate?: number;
+          /** Multiplier (1 = neutral); mapped to [[pbas]] semitone shift. */
+          pitch?: number;
+        }) => Promise<{
+          ok: boolean;
+          data?: { done: boolean; stopped?: boolean };
+          error?: string;
+        }>;
+        stopNative: () => Promise<{ ok: boolean; error?: string }>;
       };
       visualizer: {
         open: (options?: {
@@ -702,10 +776,12 @@ declare global {
         onActiveVisualizerReport: (callback: (id: string) => void) => () => void;
         onSyncActiveVisualizer: (callback: (id: string) => void) => () => void;
         onSwitchSurface: (callback: (designId: string) => void) => () => void;
+        onSetSubmissionPlaylist: (callback: (playlistId: number | null) => void) => () => void;
         togglePlayLock: () => void;
         togglePlayLockReleaseOnNext: () => void;
         setPlayLockReleaseOnNext: (enabled: boolean) => void;
         notifySubmissionPlaylistUpdated: (playlistId: number) => void;
+        setSubmissionPlaylist: (playlistId: number | null) => void;
         resolveMeme: (
           rawInput: string,
         ) => Promise<

@@ -133,6 +133,9 @@ const LEGACY_ACTION_BY_COMMAND = {
   'alare-speed-up': 'alareSpeedUp',
   'alare-speed-down': 'alareSpeedDown',
   'alare-speed-reset': 'alareSpeedReset',
+  'lyric-scroll-forward': 'lyricScrollForward',
+  'lyric-scroll-back': 'lyricScrollBack',
+  'lyric-scroll-reset': 'lyricScrollReset',
   'change-visualizer': 'changeVisualizer',
   'show-visualizer-name': 'showVisualizerName',
 };

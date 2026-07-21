@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
+  ALARE_SPEED_NUDGE_STEP,
+  clampAlareSpeedNudge,
+  formatAlareSpeedNudgePercent,
+} from '@shared/alare';
+import {
   getBuiltinCommand,
   listOverlayMappings,
   parseKudoPresetIdFromCommandId,
@@ -43,11 +48,20 @@ export function ControllerWindowApp() {
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submissionBusy, setSubmissionBusy] = useState(false);
+  // Custom playlists the host can retarget paste-submissions to, from the controller.
+  const [userPlaylists, setUserPlaylists] = useState<Array<{ id: number; name: string; song_count: number }>>([]);
   const [memeInput, setMemeInput] = useState('');
   const [memeBusy, setMemeBusy] = useState(false);
   const [memeError, setMemeError] = useState<string | null>(null);
   const submissionInputRef = useRef<HTMLInputElement>(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
+  // Mirror of the VC window's ALARE speed trim so the controller can append the
+  // live value (e.g. "ALARE Speed Up (+5.0%)") to its status flash. The nudge is
+  // VC-window-local and never sent over IPC, but every speed command is
+  // broadcast via `onInvoke`, so we replay the same pure step math here. Reset on
+  // song change to match VcAlareNudgeProvider (the VC window zeroes the trim when
+  // a new song starts).
+  const alareNudgeRef = useRef(0);
 
   const showInvokeFeedback = (message: string) => {
     setInvokeFeedback(message);
@@ -128,15 +142,48 @@ export function ControllerWindowApp() {
         return;
       }
       const command = getBuiltinCommand(payload.commandId);
-      if (command) showInvokeFeedback(command.label);
+      if (!command) return;
+      // ALARE speed commands: replay the trim locally and show the live value so
+      // the host sees e.g. "ALARE Speed Up (+5.0%)" rather than a bare label.
+      if (
+        payload.commandId === 'alare-speed-up' ||
+        payload.commandId === 'alare-speed-down' ||
+        payload.commandId === 'alare-speed-reset'
+      ) {
+        const next =
+          payload.commandId === 'alare-speed-reset'
+            ? 0
+            : alareNudgeRef.current +
+              (payload.commandId === 'alare-speed-up' ? ALARE_SPEED_NUDGE_STEP : -ALARE_SPEED_NUDGE_STEP);
+        alareNudgeRef.current = clampAlareSpeedNudge(next);
+        showInvokeFeedback(`${command.label} (${formatAlareSpeedNudgePercent(alareNudgeRef.current)})`);
+        return;
+      }
+      showInvokeFeedback(command.label);
     });
     return () => offInvoke?.();
   }, [kudoPresets, vcState?.surfaceDesigns?.designs]);
+
+  // Zero the mirrored ALARE trim whenever the playing song changes, matching the
+  // VC window's reset so the controller's readout can't drift across songs.
+  const currentSongId = vcState?.currentSong?.id ?? null;
+  useEffect(() => {
+    alareNudgeRef.current = 0;
+  }, [currentSongId]);
 
   useEffect(() => {
     const app = getApp();
     void app?.getSettings?.(KUDOS_SETTINGS_KEY).then((raw) => {
       setKudoPresets(migrateKudosState(raw).presets);
+    });
+  }, []);
+
+  // Load custom playlists once so the controller can offer them as paste targets.
+  useEffect(() => {
+    const app = getApp();
+    void app?.listener?.listUserPlaylists?.().then((rows) => {
+      if (!Array.isArray(rows)) return;
+      setUserPlaylists(rows.map((row) => ({ id: row.id, name: row.name, song_count: row.song_count })));
     });
   }, []);
 
@@ -260,6 +307,14 @@ export function ControllerWindowApp() {
 
   const submissionPlaylistId = vcState?.config.defaultSubmissionPlaylistId ?? null;
 
+  // Retarget the paste playlist live; empty value clears it (hides the paste field).
+  const changeSubmissionPlaylist = (raw: string) => {
+    const parsed = raw === '' ? null : Number.parseInt(raw, 10);
+    const nextId = parsed != null && Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    setSubmissionError(null);
+    getApp()?.vc?.setSubmissionPlaylist?.(nextId);
+  };
+
   const handleSubmissionPaste = async (event: React.ClipboardEvent<HTMLInputElement>) => {
     const text = event.clipboardData.getData('text').trim();
     if (!text || submissionPlaylistId == null || submissionBusy) return;
@@ -357,19 +412,40 @@ export function ControllerWindowApp() {
         </div>
       </header>
 
-      {submissionPlaylistId != null ? (
+      {vcState && (userPlaylists.length > 0 || submissionPlaylistId != null) ? (
         <section className="controller-submission">
-          <label className="controller-submission-field">
-            <span className="controller-submission-label">Paste Song Link…</span>
-            <input
-              ref={submissionInputRef}
-              type="text"
-              className="controller-submission-input"
-              placeholder={EXTERNAL_SONG_INTAKE_PLACEHOLDER}
-              disabled={submissionBusy}
-              onPaste={(event) => void handleSubmissionPaste(event)}
-            />
-          </label>
+          {userPlaylists.length > 0 ? (
+            <label className="controller-submission-field">
+              <span className="controller-submission-label">Submission Playlist</span>
+              <select
+                className="controller-submission-select"
+                value={submissionPlaylistId ?? ''}
+                onChange={(event) => changeSubmissionPlaylist(event.target.value)}
+                aria-label="Playlist that receives pasted song links"
+              >
+                <option value="">None (hide paste field)</option>
+                {userPlaylists.map((playlist) => (
+                  <option key={playlist.id} value={playlist.id}>
+                    {playlist.name}
+                    {playlist.song_count > 0 ? ` (${playlist.song_count})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {submissionPlaylistId != null ? (
+            <label className="controller-submission-field">
+              <span className="controller-submission-label">Paste Song Link…</span>
+              <input
+                ref={submissionInputRef}
+                type="text"
+                className="controller-submission-input"
+                placeholder={EXTERNAL_SONG_INTAKE_PLACEHOLDER}
+                disabled={submissionBusy}
+                onPaste={(event) => void handleSubmissionPaste(event)}
+              />
+            </label>
+          ) : null}
           {submissionError ? (
             <p className="controller-submission-error" role="alert">
               {submissionError}
@@ -452,7 +528,14 @@ export function ControllerWindowApp() {
         <h2>Kudos</h2>
         <div className="controller-kudo-grid">
           {kudoPresets.map((preset) => (
-            <button key={preset.id} type="button" className="btn controller-kudo-btn" onClick={() => fireKudo(preset.id)}>
+            <button
+              key={preset.id}
+              type="button"
+              className="btn controller-kudo-btn"
+              onClick={() => fireKudo(preset.id)}
+              // Full name on hover since long labels truncate to fit the button.
+              title={preset.name}
+            >
               {preset.name}
             </button>
           ))}

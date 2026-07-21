@@ -5,9 +5,10 @@
 const fs = require('fs');
 const path = require('path');
 const catalog = require('./catalog');
+const { ensureTsLoader } = require('../tsLoader');
 
 function loadCoverFilenameHelpers() {
-  require('tsx/cjs/api').register();
+  ensureTsLoader();
   return require('../../shared/artist2/coverFilename.ts');
 }
 

@@ -10,11 +10,12 @@ const path = require('path');
 const { app } = require('electron');
 const catalog = require('./catalog');
 const sunoFeature = require('../listener/sunoDemo/feature');
+const { ensureTsLoader } = require('../tsLoader');
 
 const COVER_MAX_BYTES = 8 * 1024 * 1024;
 
 function loadSongPatchFromSunoClip() {
-  require('tsx/cjs/api').register();
+  ensureTsLoader();
   return require('../../shared/artist2/songPatchFromSunoClip.ts');
 }
 
@@ -104,7 +105,7 @@ async function importSunoIntoSong(objectId, rawInput) {
 
   // Merge Suno streaming link into existing structured rows (cutover — no flat links).
   try {
-    require('tsx/cjs/api').register();
+    ensureTsLoader();
     const { normalizeSongLinks, upsertStreamingLink } = require('../../shared/artist2/songLinks.ts');
     const {
       applySunoToCreationProcess,

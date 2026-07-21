@@ -3,7 +3,11 @@
 .a2-shell {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 56px);
+  /* Fill the (now height-locked) app-main and clip at the shell edge so the
+     toolbar stays put and only the workspace panes scroll. */
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   background: var(--bg, #0c1018);
   color: var(--text, #e8ecf4);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -18,16 +22,28 @@
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  padding: 0.65rem 0.9rem;
+  padding: 0.5rem 1rem;
   border-bottom: 1px solid var(--border, #2a3344);
+  flex-shrink: 0;
+  background: var(--surface, #121824);
+}
+
+.a2-toolbar-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   flex-shrink: 0;
 }
 
-.a2-toolbar-left,
 .a2-toolbar-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.65rem;
+  margin-left: auto;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .a2-artist-select {
@@ -41,6 +57,7 @@
 .a2-artist-select select,
 .a2-sidebar-search input,
 .a2-field input,
+.a2-field select,
 .a2-field textarea,
 .a2-title-input {
   background: #121824;
@@ -51,6 +68,7 @@
 }
 
 .a2-toolbar button,
+.a2-sidebar-actions button,
 .a2-create-menu button,
 .a2-file-row button,
 .a2-track-actions button,
@@ -66,6 +84,7 @@
 }
 
 .a2-toolbar button:hover,
+.a2-sidebar-actions button:hover,
 .a2-create-menu button:hover,
 .a2-file-row button:hover,
 .a2-track-actions button:hover,
@@ -156,11 +175,15 @@
 .a2-workspace {
   display: grid;
   grid-template-columns: minmax(340px, 420px) 1fr;
+  /* Bound the single row to the workspace height so the sidebar and main panes
+     scroll internally (each has its own overflow) rather than overflowing. */
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   flex: 1;
 }
 
-.a2-toolbar button.is-active {
+.a2-toolbar button.is-active,
+.a2-sidebar-actions button.is-active {
   background: #1a2740;
   border-color: #3a5580;
 }
@@ -176,11 +199,63 @@
   background: #0e131c;
 }
 
+.a2-sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  padding-bottom: 0.55rem;
+  margin-bottom: 0.15rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+}
+
+.a2-sidebar-actions > button,
+.a2-sidebar-actions .a2-create-wrap > button {
+  flex: 1 1 0;
+  white-space: nowrap;
+}
+
+.a2-sidebar-actions .a2-create-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.a2-sidebar-actions .a2-create-wrap > button {
+  width: 100%;
+}
+
 .a2-sidebar-controls {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
   flex-shrink: 0;
+}
+
+.a2-sidebar-filter-toggles {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.a2-sidebar-filter-toggles button {
+  flex: 1 1 0;
+  background: #1a2333;
+  color: inherit;
+  border: 1px solid var(--border, #2a3344);
+  border-radius: 4px;
+  padding: 0.3rem 0.35rem;
+  cursor: pointer;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.a2-sidebar-filter-toggles button:hover {
+  background: #243044;
+}
+
+.a2-sidebar-filter-toggles button.is-active {
+  background: #1a2740;
+  border-color: #3a5580;
 }
 
 .a2-sidebar-search-input,
@@ -223,7 +298,7 @@
 .a2-catalog-table-head,
 .a2-catalog-table-row {
   display: grid;
-  grid-template-columns: 1.35rem minmax(0, 1fr) 4.75rem 4.25rem 2rem;
+  grid-template-columns: 1.35rem minmax(0, 1fr) 4.75rem 1.35rem 4.25rem 2rem;
   align-items: center;
   gap: 0.35rem;
   padding: 0 0.45rem;
@@ -298,9 +373,58 @@
   white-space: nowrap;
 }
 
+.a2-catalog-col-recording {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.a2-catalog-table-row .a2-catalog-col-recording {
+  font-size: 0.85rem;
+  color: var(--text, #e6ebf5);
+}
+
 .a2-catalog-col-insert {
   display: flex;
   justify-content: center;
+}
+
+/* Sortable column headers (must follow col-name/type/added so they win on conflicts). */
+.a2-catalog-col-sort {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: transparent;
+  border: none;
+  margin: 0;
+  padding: 0.2rem 0.1rem;
+  cursor: pointer;
+  color: var(--muted, #8b95a8);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.a2-catalog-col-sort:hover,
+.a2-catalog-col-sort.is-active {
+  color: var(--text, #e6ebf5);
+}
+
+.a2-catalog-sort-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.a2-catalog-sort-arrow {
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  line-height: 1;
 }
 
 .a2-catalog-empty {
@@ -632,6 +756,22 @@
   object-fit: cover;
 }
 
+/*
+  Content image preview: ~300px wide, natural aspect ratio (no square crop).
+  Height follows the image; capped so very tall images stay reasonable.
+*/
+.a2-artwork-thumb--content-preview {
+  width: min(300px, 100%);
+  height: auto;
+  margin-top: 0.75rem;
+}
+
+.a2-artwork-thumb--content-preview img {
+  height: auto;
+  max-height: 340px;
+  object-fit: contain;
+}
+
 .a2-artwork-thumb--empty {
   display: flex;
   align-items: center;
@@ -640,6 +780,12 @@
   font-size: 0.68rem;
   text-align: center;
   padding: 0.25rem;
+}
+
+/* Inside the Song artwork picker, the under-thumb hint carries the CTA — keep
+   the empty tile quiet so the two labels don't compete. */
+.a2-artwork-thumb-hit .a2-artwork-thumb--empty span {
+  display: none;
 }
 
 .a2-artwork-layout {
@@ -656,6 +802,100 @@
 .a2-artwork-layout .a2-artwork-thumb {
   width: 6rem;
   height: 6rem;
+}
+
+/* Clickable thumbnail column with tiny press-hint under the image. */
+.a2-artwork-thumb-col {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 6.5rem;
+}
+
+.a2-artwork-thumb-hit {
+  display: block;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.a2-artwork-thumb-hit:focus-visible {
+  outline: 2px solid var(--accent, #5b9fd4);
+  outline-offset: 2px;
+}
+
+.a2-artwork-thumb-hit:hover .a2-artwork-thumb {
+  border-color: #4a5870;
+}
+
+.a2-artwork-thumb-hint {
+  font-size: 0.62rem;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--muted, #8b95a8);
+}
+
+.a2-artwork-name-type-row {
+  align-items: flex-end;
+}
+
+.a2-field--artwork-name {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  max-width: 16rem;
+}
+
+/* Narrow type dropdown — sits to the right of Name. */
+.a2-field--artwork-type {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 10.5rem;
+}
+
+.a2-field--artwork-type select {
+  width: 10.5rem;
+  max-width: 100%;
+}
+
+/* Filename + Rename Tool on one row; rename stays flush right. */
+.a2-file-row--artwork {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.a2-filename-truncate {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.a2-file-row--artwork .a2-rename-flush {
+  flex: 0 0 auto;
+  margin-top: 0;
+  margin-left: auto;
+}
+
+.a2-artwork-file-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.a2-artwork-file-meta {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: var(--muted, #8b95a8);
 }
 
 .a2-kicker {
@@ -700,6 +940,67 @@
   font-size: 0.95rem;
 }
 
+/* Collapsible Song Editor sections — chevron sits beside the section title. */
+.a2-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+
+.a2-section.is-collapsed .a2-section-head {
+  margin-bottom: 0;
+}
+
+.a2-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.a2-section-toggle h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text, #e8ecf4);
+}
+
+.a2-section-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.9rem;
+  flex: 0 0 auto;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--muted, #8b95a8);
+  transform: rotate(0deg);
+  transition: transform 0.12s ease;
+}
+
+/* Expanded: chevron points down (rotated from ›). */
+.a2-section-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.a2-section-head-trailing {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.a2-section-body {
+  min-width: 0;
+}
+
 .a2-field {
   display: flex;
   flex-direction: column;
@@ -724,9 +1025,10 @@
   resize: vertical;
 }
 
-/* Section title sits inline with the Write/Preview toggle (drop default h3 margin). */
+/* Lyrics title stays white even when nested under muted field labels. */
 .a2-lyrics-heading {
   margin: 0;
+  color: var(--text, #e8ecf4);
 }
 
 /* Preview mirrors the write textarea footprint and stays responsive. */
@@ -764,6 +1066,24 @@
   resize: vertical;
 }
 
+/* Full-width responsive field — overrides the general 36rem input/textarea cap
+   (artwork Caption/Description + Commentary, Additional vocals, …). */
+.a2-field--full input,
+.a2-field--full textarea {
+  width: 100%;
+  max-width: none;
+}
+
+.a2-field--full textarea {
+  resize: vertical;
+}
+
+/* Credits & Rights single-line fields fill the editor column (no 36rem cap). */
+.a2-section--credits .a2-field input {
+  width: 100%;
+  max-width: none;
+}
+
 /* After general field widths so Subtitle / Caption / About fill the title column. */
 .a2-section--song-identity .a2-field--song > input,
 .a2-section--song-identity .a2-field--song > textarea,
@@ -789,6 +1109,15 @@
 .a2-ref-note code {
   font-size: 0.78rem;
   color: #b8c4d8;
+}
+
+/*
+  Cancel the global .a2-secondary top margin inside file rows so buttons like
+  "Rename Tool" sit flush with the plain "Choose image…" button (the row is
+  vertically centered, so a stray top margin makes them look uneven).
+*/
+.a2-file-row .a2-secondary {
+  margin-top: 0;
 }
 
 .a2-ref-note {
@@ -845,6 +1174,7 @@
   font-size: 0.9rem;
 }
 
+/* Related Songs list spans the full editor width (no fixed cap). */
 .a2-related-list {
   margin: 0.4rem 0 0;
   padding: 0;
@@ -852,7 +1182,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  max-width: 40rem;
+  width: 100%;
 }
 
 .a2-related-row {
@@ -873,6 +1203,16 @@
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Relation dropdown + Unlink sit together, flush right of the row. */
+.a2-related-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .a2-related-type {
@@ -1348,9 +1688,131 @@
   font-variant-numeric: tabular-nums;
 }
 
-.a2-field--half input {
+.a2-field--half input,
+.a2-field--half select {
   width: 100%;
   max-width: 18rem;
+}
+
+/* Language row: one shared control height so Primary / Additional / Explicit line up. */
+.a2-field-row--languages {
+  --a2-lang-control-height: 2.15rem;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.a2-field-row--languages > .a2-field {
+  margin-bottom: 0;
+}
+
+/* Primary language — fixed width text field. */
+.a2-field-row--languages .a2-field--language {
+  flex: 0 0 14.5rem;
+  min-width: 14.5rem;
+  max-width: 14.5rem;
+}
+
+.a2-field-row--languages .a2-field--language input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: var(--a2-lang-control-height);
+  min-height: var(--a2-lang-control-height);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/*
+ * Additional languages — same control height as Primary; modest width so Explicit
+ * stays beside it instead of drifting to the far edge.
+ */
+.a2-field-row--languages .a2-field--languages-extra {
+  flex: 0 1 20rem;
+  min-width: 14rem;
+  max-width: 22rem;
+}
+
+.a2-field-row--languages .a2-field--languages-extra .a2-tag-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--a2-lang-control-height);
+  min-height: var(--a2-lang-control-height);
+  padding: 0 0.4rem;
+  overflow: hidden;
+}
+
+/* Explicit column mirrors label + control so the control shares the input baseline. */
+.a2-field-row--languages .a2-field--explicit {
+  flex: 0 0 auto;
+}
+
+.a2-field-row--languages .a2-explicit-pill-spacer {
+  display: block;
+  line-height: 1.25;
+  visibility: hidden;
+  user-select: none;
+}
+
+/* Checkbox, then a compact “explicit” bug (same scale as Private, dark purple / white). */
+.a2-field-row--languages .a2-explicit-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: var(--a2-lang-control-height);
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.a2-field-row--languages .a2-explicit-toggle input {
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: #5b2d7a;
+}
+
+/* Mirror .a2-private-pill sizing — dark purple fill, white label. */
+.a2-field-row--languages .a2-explicit-pill {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #5b2d7a;
+  background: #3d1a55;
+  color: #fff;
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0.45;
+}
+
+.a2-field-row--languages .a2-explicit-toggle.is-checked .a2-explicit-pill {
+  opacity: 1;
+}
+
+/* Lyric quote fills the editor column like Notes / full-width fields. */
+.a2-field--lyric-quote {
+  margin-top: 0.85rem;
+}
+
+.a2-field--lyric-quote textarea {
+  width: 100%;
+  max-width: none;
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
+/* Ensemble + BPM row: both keep their natural caps, aligned on one line. */
+.a2-field-row--ensemble {
+  align-items: flex-end;
+}
+
+.a2-field-row--ensemble .a2-field--half {
+  flex: 0 1 18rem;
+}
+
+.a2-field-row--ensemble .a2-field--bpm {
+  flex: 0 0 auto;
 }
 
 .a2-tag-input {
@@ -1759,6 +2221,18 @@
   border-color: #5a4a20;
 }
 
+/* Recording publish toggle shows the action it performs:
+   green "Publish" while unpublished, red "Unpublish" while published. */
+.a2-vis-toggle.a2-publish-toggle--publish {
+  color: #4fbf7b;
+  border-color: #2f6b46;
+}
+
+.a2-vis-toggle.a2-publish-toggle--unpublish {
+  color: #e05e5e;
+  border-color: #7a3030;
+}
+
 /* Delete confirmation popover anchored to the trash icon. */
 .a2-delete-anchor {
   position: relative;
@@ -1963,6 +2437,9 @@
   margin-bottom: 0.35rem;
   font-size: 0.82rem;
   opacity: 0.85;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .a2-chip-check {
@@ -2062,6 +2539,15 @@
   box-sizing: border-box;
 }
 
+/* Creation-process tab fields are responsive: fill the panel width instead of
+   the general 36rem cap. Multi-column rows keep their per-field minimum via
+   `.a2-field-row .a2-field` (flex: 1 1 8rem; min-width: 6rem). */
+.a2-process-panel .a2-field input,
+.a2-process-panel .a2-field textarea {
+  width: 100%;
+  max-width: none;
+}
+
 /* Positive / negative "bug": green + by default, red − when negative.
    Pill shape to match the Primary / Make primary bug. */
 .a2-sign-bug {
@@ -2108,8 +2594,28 @@
   cursor: default;
 }
 
-.a2-same-as-music {
-  margin-bottom: 0.55rem;
+/* "Same as music" — single line beside the Clear button in the panel head. */
+.a2-process-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+}
+
+.a2-same-as-music-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--muted, #8b95a8);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.a2-same-as-music-inline input[type='checkbox'] {
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: 0;
 }
 
 .a2-same-as-music-summary {
@@ -2138,9 +2644,17 @@
 }
 
 .a2-artwork-entry {
-  padding: 0.65rem 0.75rem;
+  position: relative;
+  padding: 0.65rem 0.75rem 2.1rem;
   border: 1px solid var(--border, #2a3344);
   border-radius: 8px;
+}
+
+/* Trash sits flush in the bottom-right corner of the artwork card. */
+.a2-artwork-entry > .a2-artwork-remove {
+  position: absolute;
+  right: 0.45rem;
+  bottom: 0.35rem;
 }
 
 .a2-section--stub {
@@ -2280,4 +2794,39 @@
 .a2-report-detail code {
   font-size: 0.78rem;
   word-break: break-all;
+}
+
+/* —— Adapted Work & Provenance —— */
+.a2-adapted-enable {
+  margin: 0.15rem 0 0.65rem;
+  font-size: 0.88rem;
+}
+
+.a2-adapted-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border, #2a3344);
+}
+
+.a2-adapted-note {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.78rem;
+  color: var(--muted, #8b95a8);
+  line-height: 1.4;
+}
+
+.a2-adapted-subhead {
+  margin: 1rem 0 0.45rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text, #e8ecf4);
+}
+
+.a2-adapted-radio-grid,
+.a2-adapted-check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.85rem;
 }

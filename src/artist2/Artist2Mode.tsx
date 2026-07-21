@@ -6,6 +6,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type { Artist2CatalogObject, Artist2CompileBuildResult, Artist2DeleteImpact } from '@shared/artist2';
+import {
+  createArtworkEntry,
+  ensureSinglePrimaryArtwork,
+  legacyArtworkFromEntries,
+  normalizeSongArtwork,
+} from '@shared/artist2';
 
 import { ArtistEditor } from './ArtistEditor';
 import { CatalogSidebar } from './CatalogSidebar';
@@ -223,7 +229,9 @@ export function Artist2Mode() {
         await catalog.insertSongIntoAlbum(insertContext.containerTracks.containerId, object.id);
         const label =
           insertContext.containerTracks.containerKind === 'playlist' ? 'playlist' : 'album';
-        setStatusMessage(`Inserted “${object.name}” into ${label} tracks.`);
+        const slot =
+          insertContext.containerTracks.containerKind === 'playlist' ? 'music' : 'tracks';
+        setStatusMessage(`Inserted “${object.name}” into ${label} ${slot}.`);
         return;
       }
       if (action === 'related-song' && insertContext.relatedSongs) {
@@ -235,11 +243,38 @@ export function Artist2Mode() {
         setStatusMessage(`Related “${object.name}” as Sister Song (mirrored).`);
         return;
       }
-      if (action === 'artwork' && insertContext.artwork) {
-        await catalog.updateObject(insertContext.artwork.objectId, {
-          payload: { artwork: { mode: 'contentRef', contentId: object.id } },
+      if (action === 'related-album' && insertContext.relatedAlbums) {
+        await catalog.linkRelatedAlbums({
+          fromAlbumId: insertContext.relatedAlbums.albumId,
+          toAlbumId: object.id,
+          relation: insertContext.relatedAlbums.defaultRelation,
         });
-        setStatusMessage(`Attached Content “${object.name}” as cover artwork.`);
+        setStatusMessage(`Related “${object.name}” as Sister Album (mirrored).`);
+        return;
+      }
+      if (action === 'artwork' && insertContext.artwork && catalog.selected) {
+        // Songs / Albums / Playlists keep a multi-image list — append Content.
+        const entries = normalizeSongArtwork(
+          catalog.selected.payload as Parameters<typeof normalizeSongArtwork>[0],
+        );
+        const maxOrder = entries.reduce((m, e) => Math.max(m, e.sortOrder), 0);
+        const appended = ensureSinglePrimaryArtwork([
+          ...entries,
+          createArtworkEntry(
+            { mode: 'contentRef', contentId: object.id },
+            {
+              role: entries.length === 0 ? 'primary_cover' : 'additional_image',
+              sortOrder: maxOrder + 10,
+            },
+          ),
+        ]);
+        await catalog.updateObject(insertContext.artwork.objectId, {
+          payload: {
+            artworkEntries: appended,
+            artwork: legacyArtworkFromEntries(appended),
+          },
+        });
+        setStatusMessage(`Added Content “${object.name}” to artwork.`);
       }
     } catch (err) {
       setStatusMessage(err instanceof Error ? err.message : String(err));
@@ -287,7 +322,10 @@ export function Artist2Mode() {
   return (
     <div className="a2-shell">
       <header className="a2-toolbar">
-        <div className="a2-toolbar-left">
+        <h1 className="a2-toolbar-title">Song Pages: Artist 2.0</h1>
+
+        {/* Artist switcher + compile stay flush right of the mode title. */}
+        <div className="a2-toolbar-right">
           <label className="a2-artist-select">
             <span>Artist</span>
             <select
@@ -345,59 +383,12 @@ export function Artist2Mode() {
           {catalog.activeArtistId ? (
             <button
               type="button"
-              className={catalog.selection.type === 'artist' ? 'is-active' : undefined}
-              onClick={() => catalog.selectArtist()}
-            >
-              Artist profile
-            </button>
-          ) : null}
-          {catalog.activeArtistId ? (
-            <button type="button" onClick={() => setDeletedModalOpen(true)}>
-              Deleted items
-            </button>
-          ) : null}
-        </div>
-
-        <div className="a2-toolbar-right">
-          {catalog.activeArtistId ? (
-            <button
-              type="button"
               disabled={compileInFlight}
               onClick={() => void openCompileModal()}
             >
               Compile site…
             </button>
           ) : null}
-          <div className="a2-create-wrap">
-            <button type="button" onClick={() => setCreateMenuOpen((open) => !open)}>
-              Add…
-            </button>
-            {createMenuOpen ? (
-              <div className="a2-create-menu" role="menu">
-                <button type="button" role="menuitem" onClick={() => void handleCreate('song')}>
-                  Song
-                </button>
-                <button type="button" role="menuitem" onClick={() => void handleCreate('album')}>
-                  Container · Album
-                </button>
-                <button type="button" role="menuitem" onClick={() => void handleCreate('playlist')}>
-                  Container · Playlist
-                </button>
-                <button type="button" role="menuitem" onClick={() => void handleCreate('image')}>
-                  Content · Image
-                </button>
-                <button type="button" role="menuitem" onClick={() => void handleCreate('video')}>
-                  Content · Video
-                </button>
-                <button type="button" role="menuitem" onClick={() => void handleCreate('audio')}>
-                  Content · Audio
-                </button>
-                <button type="button" role="menuitem" onClick={() => void handleCreate('text')}>
-                  Content · Text
-                </button>
-              </div>
-            ) : null}
-          </div>
         </div>
       </header>
 
@@ -511,10 +502,16 @@ export function Artist2Mode() {
             filter={catalog.filter}
             search={catalog.search}
             insertContext={insertContext}
+            artistProfileActive={catalog.selection.type === 'artist'}
+            createMenuOpen={createMenuOpen}
             onFilterChange={catalog.setFilter}
             onSearchChange={catalog.setSearch}
             onSelect={catalog.selectObject}
             onInsert={(obj) => void handleInsert(obj)}
+            onOpenArtistProfile={() => catalog.selectArtist()}
+            onOpenDeletedItems={() => setDeletedModalOpen(true)}
+            onToggleCreateMenu={() => setCreateMenuOpen((open) => !open)}
+            onCreate={(kind) => void handleCreate(kind)}
           />
 
           <main className="a2-main">
@@ -535,6 +532,7 @@ export function Artist2Mode() {
                 object={catalog.selected}
                 contentById={catalog.contentById}
                 songById={objectById}
+                artistName={catalog.activeArtist?.name ?? 'Artist'}
                 onChangeName={(name) => void persistName(catalog.selected!.id, name)}
                 onPatchPayload={(payload) => void persistPayload(catalog.selected!.id, payload)}
                 onDelete={() => requestDelete(catalog.selected!.id)}
@@ -605,6 +603,7 @@ export function Artist2Mode() {
                 object={catalog.selected}
                 detail={catalog.albumDetail}
                 contentById={catalog.contentById}
+                albumById={objectById}
                 onChangeName={(name) => void persistName(catalog.selected!.id, name)}
                 onPatchPayload={(payload) => void persistPayload(catalog.selected!.id, payload)}
                 onDelete={() => requestDelete(catalog.selected!.id)}
@@ -613,6 +612,27 @@ export function Artist2Mode() {
                   void catalog.moveTrack(catalog.selected!.id, memberId, direction)
                 }
                 onOpenContent={(contentId) => catalog.selectObject(contentId)}
+                onOpenAlbum={(albumId) => catalog.selectObject(albumId)}
+                onRelateAlbum={async (toAlbumId, relation) => {
+                  try {
+                    await catalog.linkRelatedAlbums({
+                      fromAlbumId: catalog.selected!.id,
+                      toAlbumId,
+                      relation,
+                    });
+                    setStatusMessage('Related Album updated (mirrored both ways).');
+                  } catch (err) {
+                    setStatusMessage(err instanceof Error ? err.message : String(err));
+                  }
+                }}
+                onUnrelateAlbum={async (toAlbumId) => {
+                  try {
+                    await catalog.unlinkRelatedAlbums(catalog.selected!.id, toAlbumId);
+                    setStatusMessage('Related Album unlinked.');
+                  } catch (err) {
+                    setStatusMessage(err instanceof Error ? err.message : String(err));
+                  }
+                }}
                 onPromoteArtwork={async (name) => {
                   try {
                     const result = await catalog.promoteArtwork(catalog.selected!.id, name);

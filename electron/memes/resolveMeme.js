@@ -12,17 +12,26 @@
  */
 const logger = require('../logger');
 const { validateRemoteUrl } = require('../net/urlPolicy');
+const { ensureTsLoader } = require('../tsLoader');
 
 const MAX_REDIRECTS = 3;
-const PROBE_TIMEOUT_MS = 8000;
+// Per-hop HEAD timeout. Kept short: this runs while the host is mid-show and
+// the controller's Send button is disabled — a slow CDN should fail fast
+// rather than hold the Meme Field hostage (was 8s, which read as a hang).
+const PROBE_TIMEOUT_MS = 3000;
+
+// Shared .ts modules, loaded once. Registering tsx per-call used to stack
+// module-loader hooks and synchronously block the main process on every
+// submit (freezing all VC Mode IPC relays) — see electron/tsLoader.js.
+let sharedModules = null;
 
 function loadShared() {
-  // The Electron main process has no TypeScript loader by default — register
-  // tsx before requiring any shared `.ts` module (matches electron/artist2/*).
-  require('tsx/cjs/api').register();
+  if (sharedModules) return sharedModules;
+  ensureTsLoader();
   const { parseMemeInput } = require('../../shared/memes/parseMemeInput.ts');
   const { MEME_MAX_BYTES } = require('../../shared/memes/types.ts');
-  return { parseMemeInput, MEME_MAX_BYTES };
+  sharedModules = { parseMemeInput, MEME_MAX_BYTES };
+  return sharedModules;
 }
 
 /**

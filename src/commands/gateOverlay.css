@@ -50,7 +50,8 @@
 
 .gate-overlay-row {
   display: grid;
-  grid-template-columns: 2.25rem 1fr auto;
+  /* minmax(0, 1fr) lets the label column shrink so its text can truncate. */
+  grid-template-columns: 2.25rem minmax(0, 1fr) auto;
   gap: 0.5rem;
   align-items: center;
   font-size: 0.85rem;
@@ -71,6 +72,11 @@
 
 .gate-overlay-label {
   color: var(--text);
+  /* Truncate long command labels to a single line instead of wrapping. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gate-overlay-unavailable-tag {

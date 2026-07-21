@@ -30,8 +30,16 @@ export type SunoClipProviderMetadata = {
   creatorDisplayName: string | null;
   creatorAvatarUrl: string | null;
   explicit: boolean | null;
-  playCount: number | null;
-  upvoteCount: number | null;
+  /**
+   * Studio-reported play count for this clip on Suno.
+   * Provider-imported only — never map into Song Pages History / playStats.
+   */
+  sunoPlayCount: number | null;
+  /**
+   * Studio-reported upvote/like count on Suno.
+   * Provider-imported only — never map into Song Pages likes.
+   */
+  sunoLikeCount: number | null;
   commentCount: number | null;
   isInstrumental: boolean | null;
   /** Full-song lyric / "Made with Suno" MP4 (`video_url`). */
@@ -120,8 +128,8 @@ function emptyMetadata(clipId: string): SunoClipProviderMetadata {
     creatorDisplayName: null,
     creatorAvatarUrl: null,
     explicit: null,
-    playCount: null,
-    upvoteCount: null,
+    sunoPlayCount: null,
+    sunoLikeCount: null,
     commentCount: null,
     isInstrumental: null,
     videoUrl: null,
@@ -200,8 +208,9 @@ export function metadataFromSunoClip(clip: Record<string, unknown> | null | unde
     creatorDisplayName,
     creatorAvatarUrl,
     explicit: asBoolean(clip.is_explicit) ?? asBoolean(clip.explicit) ?? null,
-    playCount: asFiniteNumber(clip.play_count) ?? asFiniteNumber(clip.playCount),
-    upvoteCount: asFiniteNumber(clip.upvote_count) ?? asFiniteNumber(clip.upvoteCount),
+    // Rename at the boundary so Studio counters never look like Song Pages stats.
+    sunoPlayCount: asFiniteNumber(clip.play_count) ?? asFiniteNumber(clip.playCount),
+    sunoLikeCount: asFiniteNumber(clip.upvote_count) ?? asFiniteNumber(clip.upvoteCount),
     commentCount: asFiniteNumber(clip.comment_count) ?? asFiniteNumber(clip.commentCount),
     isInstrumental,
     videoUrl: asNonEmptyString(clip.video_url) ?? asNonEmptyString(clip.videoUrl),
@@ -236,7 +245,6 @@ export function parseSunoProviderMetadata(raw: unknown): SunoClipProviderMetadat
     const tags = typeof obj.tags === 'string' ? obj.tags : '';
     return {
       ...emptyMetadata(asNonEmptyString(obj.clipId) ?? ''),
-      ...obj,
       schemaVersion: SUNO_CLIP_METADATA_SCHEMA_VERSION,
       provider: SUNO_PROVIDER_ID,
       clipId: asNonEmptyString(obj.clipId) ?? '',
@@ -253,8 +261,9 @@ export function parseSunoProviderMetadata(raw: unknown): SunoClipProviderMetadat
       creatorDisplayName: asNonEmptyString(obj.creatorDisplayName),
       creatorAvatarUrl: asNonEmptyString(obj.creatorAvatarUrl),
       explicit: asBoolean(obj.explicit),
-      playCount: asFiniteNumber(obj.playCount),
-      upvoteCount: asFiniteNumber(obj.upvoteCount),
+      // Accept renamed keys plus legacy playCount/upvoteCount from older snapshots.
+      sunoPlayCount: asFiniteNumber(obj.sunoPlayCount) ?? asFiniteNumber(obj.playCount),
+      sunoLikeCount: asFiniteNumber(obj.sunoLikeCount) ?? asFiniteNumber(obj.upvoteCount),
       commentCount: asFiniteNumber(obj.commentCount),
       isInstrumental: asBoolean(obj.isInstrumental),
       videoUrl: asNonEmptyString(obj.videoUrl),

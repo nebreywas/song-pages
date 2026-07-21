@@ -116,6 +116,8 @@ export function songPatchFromSunoClip(
       slugManual: false,
       bpm: meta.bpm,
       isInstrumental: meta.isInstrumental,
+      // Studio’s explicit flag — author can clear/change it in Song Editor.
+      explicit: meta.explicit,
       linkEntries,
       creationProcesses: creation.creationProcesses,
       aiPrompts: creation.aiPrompts,

@@ -4,6 +4,8 @@
 
 import type { Artist2CatalogObject, Artist2ContentPayload } from '@shared/artist2';
 
+import { ArtworkFileMeta } from './ArtworkFileMeta';
+
 function basename(path: string | null | undefined): string {
   if (!path) return 'No file';
   const parts = path.split(/[/\\]/);
@@ -56,6 +58,7 @@ export function ArtworkRefView({
       <div className="a2-artwork-ref-main">
         <strong>{content.name}</strong>
         <span className="a2-artwork-ref-file">{basename(filePath)}</span>
+        <ArtworkFileMeta filePath={filePath} />
       </div>
       <div className="a2-artwork-ref-actions">
         {onOpenContent ? (

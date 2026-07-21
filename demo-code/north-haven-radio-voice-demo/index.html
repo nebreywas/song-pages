@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Between Voice Calibration</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <p class="eyebrow">Song Pages · Between experiment</p>
+      <h1>Web Voice Calibration</h1>
+      <p>Test calm, public-radio-style browser voices with live North Haven weather.</p>
+    </div>
+    <div class="status"><span id="weatherStatus">Weather not loaded</span><span id="speechStatus">Voice ready</span></div>
+  </header>
+
+  <section class="metrics">
+    <article><small>North Haven time</small><strong id="clock">—</strong></article>
+    <article><small>Current temperature</small><strong id="temperature">—</strong></article>
+    <article><small>Conditions</small><strong id="conditions">—</strong></article>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><div><h2>Voice setup</h2><p>Start with the suggested voices, then audition and tune them.</p></div><button id="refreshVoices">Refresh voices</button></div>
+    <div class="voices">
+      <article>
+        <h3>Male voice</h3>
+        <label>Installed voice<select id="maleVoice"></select></label>
+        <label>Rate <input id="maleRate" type="range" min="0.72" max="1.12" value="0.88" step="0.01"><output id="maleRateValue">0.88</output></label>
+        <label>Pitch <input id="malePitch" type="range" min="0.72" max="1.18" value="0.92" step="0.01"><output id="malePitchValue">0.92</output></label>
+        <button class="primary audition" data-profile="male">Audition male voice</button>
+      </article>
+      <article>
+        <h3>Female voice</h3>
+        <label>Installed voice<select id="femaleVoice"></select></label>
+        <label>Rate <input id="femaleRate" type="range" min="0.72" max="1.12" value="0.90" step="0.01"><output id="femaleRateValue">0.90</output></label>
+        <label>Pitch <input id="femalePitch" type="range" min="0.72" max="1.18" value="1.00" step="0.01"><output id="femalePitchValue">1.00</output></label>
+        <button class="primary audition" data-profile="female">Audition female voice</button>
+      </article>
+    </div>
+    <div class="controls">
+      <label>Active presenter<select id="activeProfile"><option value="male">Male</option><option value="female">Female</option><option value="alternate">Alternate voices</option></select></label>
+      <label class="check"><input id="gentlePauses" type="checkbox" checked> Add gentle sentence pauses</label>
+      <button id="stopSpeech" class="danger">Stop speech</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><div><h2>Live announcements</h2><p>Generated at the moment you press the button.</p></div><button id="refreshWeather">Refresh weather</button></div>
+    <div class="buttons">
+      <button data-action="time">Say the time</button>
+      <button data-action="temperature">Say current temperature</button>
+      <button data-action="today">Say today’s forecast</button>
+      <button data-action="extended">Say longer forecast</button>
+      <button data-action="full" class="primary">Full radio break</button>
+      <button data-action="return">Now returning to music</button>
+    </div>
+    <div class="preview"><div class="section-head"><h3>Last generated script</h3><button id="speakAgain">Speak again</button></div><p id="scriptPreview">Choose an announcement above.</p></div>
+  </section>
+
+  <section class="panel">
+    <h2>Quick lines</h2>
+    <div class="quick">
+      <button data-line="You’re listening to Song Pages.">You’re listening to Song Pages.</button>
+      <button data-line="A little room to breathe, before the next song.">A little room to breathe…</button>
+      <button data-line="Here on North Haven, the music will return in just a moment.">Here on North Haven…</button>
+      <button data-line="That was your moment between. Now, back to the music.">That was your moment between.</button>
+      <button data-line="No rush. The next song is ready when you are.">No rush.</button>
+    </div>
+    <label>Custom line<textarea id="customText" rows="3">Good afternoon. You’re listening from North Haven, Maine. The next song begins in just a moment.</textarea></label>
+    <button id="speakCustom" class="primary">Speak custom line</button>
+  </section>
+
+  <footer>Weather data: Open-Meteo. Voice quality depends on voices installed on this computer.</footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

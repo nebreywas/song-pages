@@ -1,0 +1,497 @@
+/**
+ * Song Chips — lightweight reference components + designer shell.
+ */
+
+/* —— Designer modal —— */
+.a2-song-chips-modal {
+  width: min(100%, 920px);
+  max-height: min(92vh, 820px);
+}
+
+.a2-song-chips-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: 1rem;
+  padding-top: 0.75rem;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.schip-designer-options {
+  overflow: auto;
+  max-height: min(68vh, 600px);
+  padding-right: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.schip-designer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border, #2a3344);
+}
+
+.schip-designer-section:last-child {
+  border-bottom: none;
+}
+
+.schip-designer-heading {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #8b95a8);
+}
+
+.schip-designer-subhead {
+  margin: 0.4rem 0 0.1rem;
+  font-size: 0.72rem;
+  color: var(--muted, #8b95a8);
+}
+
+.schip-designer-blurb,
+.schip-designer-note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted, #8b95a8);
+}
+
+.schip-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.4rem;
+}
+
+.schip-type-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border, #2a3344);
+  background: #0f141e;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.schip-type-tile.is-active {
+  border-color: #6b9fd4;
+  box-shadow: inset 0 0 0 1px #6b9fd4;
+}
+
+.schip-type-tile-num {
+  font-size: 0.68rem;
+  color: var(--muted, #8b95a8);
+}
+
+.schip-type-tile-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.schip-designer-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+}
+
+.schip-designer-preview-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  gap: 1rem;
+  padding: 1.25rem 1rem;
+  border-radius: 10px;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(107, 78, 168, 0.14), transparent 55%),
+    linear-gradient(160deg, #0a0e16 0%, #121a28 100%);
+  border: 1px solid var(--border, #2a3344);
+  min-height: 220px;
+}
+
+.schip-designer-preview-stage--light-paper {
+  background: linear-gradient(160deg, #f6f4f8 0%, #ebe7f2 100%);
+  border-color: rgba(100, 90, 120, 0.2);
+}
+
+.schip-designer-preview-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted, #8b95a8);
+}
+
+.schip-preview-label {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #8b95a8);
+}
+
+.schip-preview-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+@media (max-width: 720px) {
+  .a2-song-chips-body {
+    grid-template-columns: 1fr;
+  }
+
+  .schip-designer-options {
+    max-height: 40vh;
+  }
+}
+
+/* —— Chip shell —— */
+.schip {
+  --schip-bg: #ffffff;
+  --schip-text: #1a1d24;
+  --schip-muted: #6b7385;
+  --schip-accent: #6b4ea8;
+  --schip-border: rgba(40, 44, 56, 0.12);
+  --schip-play: #6b4ea8;
+  --schip-font: 'Avenir Next', 'Segoe UI', 'Helvetica Neue', system-ui, sans-serif;
+
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--schip-font);
+  color: var(--schip-text);
+  vertical-align: middle;
+  max-width: 100%;
+}
+
+.schip--theme-dark {
+  --schip-bg: #14151c;
+  --schip-text: #f0f1f5;
+  --schip-muted: #9aa0b0;
+  --schip-accent: #9b7dff;
+  --schip-border: rgba(255, 255, 255, 0.12);
+  --schip-play: #7c5cff;
+}
+
+.schip--chrome-disabled {
+  opacity: 0.45;
+  filter: grayscale(0.3);
+  pointer-events: none;
+}
+
+.schip--chrome-selected {
+  outline: 2px solid var(--schip-accent);
+  outline-offset: 2px;
+}
+
+.schip--chrome-playing {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--schip-accent) 50%, transparent);
+}
+
+.schip--chrome-loading {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* Cover */
+.schip-cover {
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: #1a1e28;
+  display: grid;
+  place-items: center;
+}
+
+.schip-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.schip-cover--square {
+  border-radius: 4px;
+}
+
+.schip-cover--rounded {
+  border-radius: 8px;
+}
+
+.schip-cover--circle {
+  border-radius: 50%;
+}
+
+.schip-cover--sm {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.schip-cover--md {
+  width: 2.35rem;
+  height: 2.35rem;
+}
+
+.schip-cover--lg {
+  width: 3.25rem;
+  height: 3.25rem;
+}
+
+.schip-cover-empty {
+  color: #8b95a8;
+  font-size: 0.75rem;
+}
+
+/* Play */
+.schip-play {
+  flex: 0 0 auto;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--schip-play);
+}
+
+.schip-play--outline {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--schip-play);
+}
+
+.schip-play--outline .schip-play-triangle {
+  border-color: transparent transparent transparent var(--schip-play);
+}
+
+.schip-play--lg {
+  width: 2.15rem;
+  height: 2.15rem;
+}
+
+.schip-play--inline {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.schip-play-triangle {
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0.26rem 0 0.26rem 0.4rem;
+  border-color: transparent transparent transparent #fff;
+  margin-left: 0.08rem;
+}
+
+.schip-play--inline .schip-play-triangle {
+  border-width: 0.18rem 0 0.18rem 0.28rem;
+}
+
+.schip-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.schip-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.schip-meta {
+  font-size: 0.68rem;
+  color: var(--schip-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.schip-genre-pill {
+  display: inline-block;
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--schip-accent) 16%, transparent);
+  color: var(--schip-accent);
+  font-weight: 600;
+  font-size: 0.62rem;
+}
+
+.schip-length {
+  font-size: 0.72rem;
+  color: var(--schip-muted);
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+
+.schip-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--schip-border);
+  flex: 0 0 auto;
+}
+
+.schip-menu,
+.schip-like {
+  color: var(--schip-muted);
+  font-size: 0.9rem;
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+
+.schip-explicit {
+  display: inline-grid;
+  place-items: center;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  font-size: 0.52rem;
+  font-weight: 700;
+  color: var(--schip-muted);
+  flex: 0 0 auto;
+}
+
+.schip-note {
+  color: var(--schip-accent);
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+/* —— Type: Inline Mention —— */
+.schip-inline-sentence {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--schip-text, #1a1d24);
+}
+
+.schip-designer-preview-stage--light-paper .schip-inline-sentence {
+  color: #2a2d36;
+}
+
+.schip--type-inline-mention {
+  gap: 0.35rem;
+  padding: 0.12rem 0.45rem 0.12rem 0.55rem;
+  border-radius: 999px;
+  vertical-align: baseline;
+}
+
+.schip--type-inline-mention .schip-title {
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--schip-accent);
+}
+
+.schip--type-inline-mention.schip--surface-fill {
+  background: color-mix(in srgb, var(--schip-accent) 14%, transparent);
+}
+
+.schip--type-inline-mention.schip--surface-outline {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--schip-accent) 45%, transparent);
+}
+
+.schip--type-inline-mention.schip--surface-text {
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0.2rem;
+}
+
+/* —— Type: Compact —— */
+.schip--type-compact {
+  padding: 0.4rem 0.5rem;
+  border-radius: 12px;
+  background: var(--schip-bg);
+  border: 1px solid var(--schip-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  min-width: 12rem;
+  max-width: 16rem;
+}
+
+.schip--type-compact .schip-cover--md {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+/* —— Type: Row —— */
+.schip--type-row {
+  width: min(100%, 22rem);
+  padding: 0.4rem 0.55rem;
+  border-radius: 12px;
+  background: var(--schip-bg);
+  border: 1px solid var(--schip-border);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+}
+
+.schip--type-row .schip-cover--md {
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+/* —— Type: Play —— */
+.schip--type-play {
+  padding: 0.45rem 0.65rem 0.45rem 0.5rem;
+  border-radius: 14px;
+  background: var(--schip-bg);
+  border: 1px solid var(--schip-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  min-width: 11rem;
+}
+
+/* —— Type: Artwork —— */
+.schip--type-artwork {
+  padding: 0.4rem 0.7rem 0.4rem 0.4rem;
+  border-radius: 14px;
+  background: var(--schip-bg);
+  border: 1px solid var(--schip-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.schip--type-artwork .schip-cover--lg {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.schip--type-artwork .schip-cover--circle {
+  border-radius: 50%;
+}
+
+/* —— Type: Mention Badge —— */
+.schip--type-mention-badge {
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.schip--type-mention-badge .schip-title {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--schip-accent);
+}
+
+.schip--type-mention-badge.schip--surface-fill {
+  background: color-mix(in srgb, var(--schip-accent) 14%, transparent);
+}
+
+.schip--type-mention-badge.schip--surface-outline {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--schip-accent) 45%, transparent);
+}
+
+.schip--type-mention-badge.schip--surface-text {
+  background: transparent;
+  padding-left: 0;
+}

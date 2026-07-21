@@ -102,6 +102,9 @@ contextBridge.exposeInMainWorld('app', {
     recordSongHistoryStart: (input) => ipcRenderer.invoke('listener:recordSongHistoryStart', input),
     updateSongHistoryEntry: (entryId, patch) =>
       ipcRenderer.invoke('listener:updateSongHistoryEntry', entryId, patch),
+    recordSongHistorySeek: (input) => ipcRenderer.invoke('listener:recordSongHistorySeek', input),
+    listSongHistorySeekHitEntryIds: (limit) =>
+      ipcRenderer.invoke('listener:listSongHistorySeekHitEntryIds', limit),
     listSongHistory: (limit) => ipcRenderer.invoke('listener:listSongHistory', limit),
     clearSongHistory: () => ipcRenderer.invoke('listener:clearSongHistory'),
   },
@@ -147,6 +150,7 @@ contextBridge.exposeInMainWorld('app', {
     importSunoIntoSong: (objectId, rawInput) =>
       ipcRenderer.invoke('artist2:importSunoIntoSong', objectId, rawInput),
     resolveLocalFileUrl: (filePath) => ipcRenderer.invoke('artist2:resolveLocalFileUrl', filePath),
+    probeLocalImage: (filePath) => ipcRenderer.invoke('artist2:probeLocalImage', filePath),
     renameCoverForObject: (objectId) => ipcRenderer.invoke('artist2:renameCoverForObject', objectId),
     getAlbumDetail: (albumId) => ipcRenderer.invoke('artist2:getAlbumDetail', albumId),
     addMembership: (payload) => ipcRenderer.invoke('artist2:addMembership', payload),
@@ -156,8 +160,18 @@ contextBridge.exposeInMainWorld('app', {
     promoteArtwork: (payload) => ipcRenderer.invoke('artist2:promoteArtwork', payload),
     linkRelatedSongs: (payload) => ipcRenderer.invoke('artist2:linkRelatedSongs', payload),
     unlinkRelatedSongs: (payload) => ipcRenderer.invoke('artist2:unlinkRelatedSongs', payload),
+    linkRelatedAlbums: (payload) => ipcRenderer.invoke('artist2:linkRelatedAlbums', payload),
+    unlinkRelatedAlbums: (payload) => ipcRenderer.invoke('artist2:unlinkRelatedAlbums', payload),
     repairBrokenReference: (payload) =>
       ipcRenderer.invoke('artist2:repairBrokenReference', payload),
+  },
+
+  // Web Voice Demo — native macOS `say` engine. Reaches Enhanced/Premium
+  // voices that Chromium's speechSynthesis cannot address by name.
+  webVoice: {
+    listNativeVoices: () => ipcRenderer.invoke('webVoice:listNativeVoices'),
+    speakNative: (payload) => ipcRenderer.invoke('webVoice:speakNative', payload),
+    stopNative: () => ipcRenderer.invoke('webVoice:stopNative'),
   },
 
   visualizer: {
@@ -222,6 +236,9 @@ contextBridge.exposeInMainWorld('app', {
     setPlayLockReleaseOnNext: (enabled) => ipcRenderer.send('vc:setPlayLockReleaseOnNext', enabled === true),
     notifySubmissionPlaylistUpdated: (playlistId) =>
       ipcRenderer.send('vc:notifySubmissionPlaylistUpdated', playlistId),
+    /** Controller → main: change which playlist receives VC link pastes (null = none). */
+    setSubmissionPlaylist: (playlistId) =>
+      ipcRenderer.send('vc:setSubmissionPlaylist', playlistId ?? null),
     /** Resolve a pasted meme link to direct media (main-process fetch, no API). */
     resolveMeme: (rawInput) => ipcRenderer.invoke('vc:resolveMeme', rawInput),
     /** Project an already-resolved meme onto the meme-surface region. */
@@ -307,6 +324,11 @@ contextBridge.exposeInMainWorld('app', {
       const handler = (_event, designId) => callback(designId);
       ipcRenderer.on('vc:switch-surface', handler);
       return () => ipcRenderer.removeListener('vc:switch-surface', handler);
+    },
+    onSetSubmissionPlaylist: (callback) => {
+      const handler = (_event, playlistId) => callback(playlistId);
+      ipcRenderer.on('vc:set-submission-playlist', handler);
+      return () => ipcRenderer.removeListener('vc:set-submission-playlist', handler);
     },
     onTogglePlayLock: (callback) => {
       const handler = () => callback();

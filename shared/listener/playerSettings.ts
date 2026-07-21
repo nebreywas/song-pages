@@ -1,3 +1,15 @@
+import {
+  normalizeRadioVoiceId,
+  type RadioVoiceId,
+} from './radioVoices';
+import {
+  normalizePlayCountDisplayMode,
+  type PlayCountDisplayMode,
+} from './playStats';
+
+export type { PlayCountDisplayMode };
+export { normalizePlayCountDisplayMode };
+
 export const LISTENER_PLAYER_SETTINGS_KEY = 'ui.listenerPlayer';
 
 export type SeekTimeDisplay = 'remaining' | 'duration';
@@ -30,6 +42,18 @@ export type ListenerPlayerSettings = {
   /** Right seek label — countdown remaining or total track length. */
   seekTimeDisplay: SeekTimeDisplay;
   /**
+   * Insert a short silence pseudo-track after every three naturally completed
+   * songs. Persisted as a player preference so Zen survives app restarts.
+   */
+  zenModeEnabled: boolean;
+  /**
+   * Between-song radio announcements (TTS). Compatible with Zen — when both
+   * fire, Zen silence is split around the radio break.
+   */
+  radioModeEnabled: boolean;
+  /** Curated announcer voice, or Random. See shared/listener/radioVoices.ts. */
+  radioVoiceId: RadioVoiceId;
+  /**
    * When true, Suno song pages show style tags + Style prompt text.
    * Default off — keep song pages lyrics-forward.
    */
@@ -38,13 +62,23 @@ export type ListenerPlayerSettings = {
   songPageFontIncreaseLevel: SongPageFontIncreaseLevel;
   /** YouTube-TOS mitigation when a YouTube track plays in mini-player mode. */
   youtubeMiniPlayerBehavior: YoutubeMiniPlayerBehavior;
+  /**
+   * How play counts should be shown when we surface them in the UI.
+   * `all-starts` = every play press; `estimated-full` = soft full-listen estimate
+   * from starts / interruptions / seek hits (see playStats.ts).
+   */
+  playCountDisplay: PlayCountDisplayMode;
 };
 
 export const DEFAULT_LISTENER_PLAYER_SETTINGS: ListenerPlayerSettings = {
   seekTimeDisplay: 'remaining',
+  zenModeEnabled: false,
+  radioModeEnabled: false,
+  radioVoiceId: 'allison',
   showSunoPromptInformation: false,
   songPageFontIncreaseLevel: 0,
   youtubeMiniPlayerBehavior: 'projector',
+  playCountDisplay: 'all-starts',
 };
 
 /** Multipliers for levels 1–4 — keep UI labels as 1–4 only. */
@@ -94,9 +128,13 @@ export function normalizeListenerPlayerSettings(raw: unknown): ListenerPlayerSet
   const value = raw as Partial<ListenerPlayerSettings>;
   return {
     seekTimeDisplay: value.seekTimeDisplay === 'duration' ? 'duration' : 'remaining',
+    zenModeEnabled: value.zenModeEnabled === true,
+    radioModeEnabled: value.radioModeEnabled === true,
+    radioVoiceId: normalizeRadioVoiceId(value.radioVoiceId),
     showSunoPromptInformation: value.showSunoPromptInformation === true,
     songPageFontIncreaseLevel: normalizeSongPageFontIncreaseLevel(value.songPageFontIncreaseLevel),
     youtubeMiniPlayerBehavior: normalizeYoutubeMiniPlayerBehavior(value.youtubeMiniPlayerBehavior),
+    playCountDisplay: normalizePlayCountDisplayMode(value.playCountDisplay),
   };
 }
 

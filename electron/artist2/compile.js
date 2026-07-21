@@ -4,9 +4,10 @@
 
 const catalog = require('./catalog');
 const { runCompile } = require('../compiler-bridge');
+const { ensureTsLoader } = require('../tsLoader');
 
 function loadBuildCompileManifest() {
-  require('tsx/cjs/api').register();
+  ensureTsLoader();
   return require('../../shared/artist2/buildCompileManifest.ts');
 }
 

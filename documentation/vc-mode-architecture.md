@@ -128,9 +128,23 @@ Song content kinds map to presentation rule sets via `SONG_CONTENT_SETTINGS_RULE
 
 **Lyrics display options** (per lyrics assignment, applied in content resolution):
 
-- **Lyric tracking** — `simple-scroll` (default, compatibility) or `alare` (approximate line timeline). See [ALARE.md](./ALARE.md).
-- `lyricsEdgeFade` — top/bottom feather while scrolling (Simple Scroll; default on)
-- `lyricsRemoveBracketed` — strip `[Chorus]`-style annotations via `stripBracketedLyricsText` from `shared/lyricsText.ts` (Simple Scroll only; default off). ALARE strips brackets automatically.
+- **Lyric tracking** — `simple-scroll` (default, compatibility), `alare` (approximate line timeline; see [ALARE.md](./ALARE.md)), or `host-direct-scroll` (lyrics never auto-advance; the host scrolls manually).
+- `lyricsEdgeFade` — top/bottom feather while scrolling (Simple Scroll / Host Direct Scroll; default on)
+- `lyricsRemoveBracketed` — strip `[Chorus]`-style annotations via `stripBracketedLyricsText` from `shared/lyricsText.ts` (Simple Scroll / Host Direct Scroll; default off). ALARE strips brackets automatically.
+
+**Host Direct Scroll** (`src/vc-window/VcHostDirectScrollLyricsView.tsx`) renders a real
+`overflow-y: auto` container instead of the playback-driven `translateY` transform. The host
+drives the position three ways, all landing on the same `scrollTop`:
+
+- **Mouse wheel** — native to the scroll container.
+- **Grab-and-drag** — pointer down + move (with a small dead zone so a click doesn't jitter).
+- **Bindable commands** — `lyric-scroll-forward` / `lyric-scroll-back` / `lyric-scroll-reset`
+  (catalog `category: 'lyrics'`), routed over the shared `vc:hotkey` channel like ALARE speed.
+  Bind them to keys or a Controller button. Scroll resets to the top on song change.
+
+Suited to spoken word, sermons, rehearsals, and variable-tempo sets where clock-based scrolling
+would drift from the actual delivery. (Lyric presentation effects / typography don't apply in this
+mode — it's a plain scroll surface.)
 
 ---
 

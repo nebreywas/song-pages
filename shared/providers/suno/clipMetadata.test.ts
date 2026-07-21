@@ -61,7 +61,8 @@ test('metadataFromSunoClip maps Studio fields without copying lyrics', () => {
   assert.equal(meta.modelName, 'chirp-crow');
   assert.equal(meta.creatorHandle, 'bensawyer');
   assert.equal(meta.creatorDisplayName, 'Ben Sawyer');
-  assert.equal(meta.playCount, 1200);
+  assert.equal(meta.sunoPlayCount, 1200);
+  assert.equal(meta.sunoLikeCount, 42);
   assert.equal(meta.bpm, 88);
   assert.equal(meta.isInstrumental, false);
   assert.equal(meta.explicit, false);
@@ -91,6 +92,20 @@ test('parseSunoProviderMetadata accepts raw Studio clip JSON', () => {
   const meta = parseSunoProviderMetadata(SAMPLE_CLIP);
   assert.equal(meta?.modelBadge, 'v5');
   assert.equal(meta?.tags, 'hip hop, boom bap, vinyl');
+});
+
+test('parseSunoProviderMetadata maps legacy playCount/upvoteCount into suno* fields', () => {
+  const meta = parseSunoProviderMetadata({
+    schemaVersion: 1,
+    provider: 'suno',
+    clipId: 'legacy',
+    playCount: 99,
+    upvoteCount: 7,
+  });
+  assert.equal(meta?.sunoPlayCount, 99);
+  assert.equal(meta?.sunoLikeCount, 7);
+  assert.equal('playCount' in (meta ?? {}), false);
+  assert.equal('upvoteCount' in (meta ?? {}), false);
 });
 
 test('formatSunoCreatedDate is human-readable UTC', () => {

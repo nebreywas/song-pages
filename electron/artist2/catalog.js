@@ -5,6 +5,9 @@
 
 const crypto = require('crypto');
 const { getDatabase } = require('../database');
+// Register-once tsx loader — never call require('tsx/cjs/api').register()
+// directly (it stacks module hooks per call and blocks the main process).
+const { ensureTsLoader } = require('../tsLoader');
 
 function nowIso() {
   return new Date().toISOString();
@@ -146,8 +149,8 @@ function findArtworkRefsToContent(contentId, artistId) {
   return refs;
 }
 
-/** Song-container memberships for a song (albums + playlists). */
-function findSongContainerMemberships(songId) {
+/** Song/Album → container memberships (albums may live inside playlists). */
+function findSongContainerMemberships(memberId) {
   const rows = getDatabase()
     .prepare(
       `SELECT m.id AS membership_id, m.position, c.id AS parent_id, c.name AS parent_name, c.kind AS parent_kind
@@ -157,28 +160,30 @@ function findSongContainerMemberships(songId) {
          AND c.kind IN ('album', 'playlist')
          AND ${activeObjectClause('c')}`,
     )
-    .all(songId);
+    .all(memberId);
 
   return rows.map((row) => ({
     refKind: 'containerMembership',
     parentKind: row.parent_kind,
     parentId: row.parent_id,
     parentName: row.parent_name,
-    field: 'tracks',
-    detail: `Track position ${row.position + 1}`,
+    field: row.parent_kind === 'playlist' ? 'music' : 'tracks',
+    detail: `Position ${row.position + 1}`,
     membershipId: row.membership_id,
   }));
 }
 
-/** Track list on a container when the container itself is deleted (informational for reports). */
+/** Members on a container when the container itself is deleted (informational for reports). */
 function findContainerTrackMemberships(containerId, parentKind) {
+  const memberKinds =
+    parentKind === 'playlist' ? "('song', 'album')" : "('song')";
   const rows = getDatabase()
     .prepare(
-      `SELECT m.id AS membership_id, m.position, s.id AS song_id, s.name AS song_name
+      `SELECT m.id AS membership_id, m.position, s.id AS member_id, s.name AS member_name, s.kind AS member_kind
        FROM artist2_memberships m
        INNER JOIN artist2_objects s ON s.id = m.member_id
        WHERE m.container_id = ?
-         AND s.kind = 'song'
+         AND s.kind IN ${memberKinds}
          AND ${activeObjectClause('s')}`,
     )
     .all(containerId);
@@ -188,11 +193,11 @@ function findContainerTrackMemberships(containerId, parentKind) {
     parentKind,
     parentId: containerId,
     parentName: '',
-    field: 'tracks',
-    detail: `Had track “${row.song_name}” at position ${row.position + 1}`,
+    field: parentKind === 'playlist' ? 'music' : 'tracks',
+    detail: `Had ${row.member_kind} “${row.member_name}” at position ${row.position + 1}`,
     membershipId: row.membership_id,
-    memberId: row.song_id,
-    memberName: row.song_name,
+    memberId: row.member_id,
+    memberName: row.member_name,
   }));
 }
 
@@ -222,7 +227,7 @@ function clearArtworkContentRef(objectId, contentId) {
     if (changed) {
       payload.artworkEntries = nextEntries;
       try {
-        require('tsx/cjs/api').register();
+        ensureTsLoader();
         const { legacyArtworkFromEntries } = require('../../shared/artist2/songArtwork.ts');
         payload.artwork = legacyArtworkFromEntries(nextEntries);
       } catch {
@@ -282,7 +287,16 @@ function getDeleteImpact(id) {
     brokenRefs = findArtworkRefsToContent(existing.id, existing.artistId);
   } else if (existing.kind === 'song') {
     brokenRefs = findSongContainerMemberships(existing.id);
-  } else if (isSongContainerKind(existing.kind)) {
+  } else if (existing.kind === 'album') {
+    // Albums may be members of playlists, and also own their own track list.
+    const asMember = findSongContainerMemberships(existing.id);
+    const asContainer = findContainerTrackMemberships(existing.id, existing.kind).map((ref) => ({
+      ...ref,
+      parentName: existing.name,
+      detail: ref.detail,
+    }));
+    brokenRefs = [...asMember, ...asContainer];
+  } else if (existing.kind === 'playlist') {
     const trackRefs = findContainerTrackMemberships(existing.id, existing.kind);
     brokenRefs = trackRefs.map((ref) => ({
       ...ref,
@@ -365,7 +379,7 @@ function mergePayload(existing, patch) {
   if (Array.isArray(patch.recordings)) {
     next.recordings = patch.recordings;
     try {
-      require('tsx/cjs/api').register();
+      ensureTsLoader();
       const { ensureSinglePrimary, legacyRecordingFromList } = require('../../shared/artist2/songRecordings.ts');
       next.recordings = ensureSinglePrimary(next.recordings);
       next.recording = legacyRecordingFromList(next.recordings);
@@ -408,6 +422,12 @@ function mergePayload(existing, patch) {
   if (Array.isArray(patch.relatedSongs)) {
     next.relatedSongs = patch.relatedSongs;
   }
+  if (Array.isArray(patch.relatedAlbums)) {
+    next.relatedAlbums = patch.relatedAlbums;
+  }
+  if (Array.isArray(patch.themes)) {
+    next.themes = patch.themes;
+  }
   if (Array.isArray(patch.creationProcesses)) {
     next.creationProcesses = patch.creationProcesses;
   }
@@ -418,7 +438,7 @@ function mergePayload(existing, patch) {
   if (Array.isArray(patch.artworkEntries)) {
     next.artworkEntries = patch.artworkEntries;
     try {
-      require('tsx/cjs/api').register();
+      ensureTsLoader();
       const { legacyArtworkFromEntries } = require('../../shared/artist2/songArtwork.ts');
       next.artwork = legacyArtworkFromEntries(next.artworkEntries);
     } catch {
@@ -429,7 +449,7 @@ function mergePayload(existing, patch) {
   } else if (patch.artwork && typeof patch.artwork === 'object') {
     next.artwork = patch.artwork;
     try {
-      require('tsx/cjs/api').register();
+      ensureTsLoader();
       const { applyLegacyArtworkToEntries } = require('../../shared/artist2/songArtwork.ts');
       next.artworkEntries = applyLegacyArtworkToEntries(
         existing.artworkEntries,
@@ -536,20 +556,58 @@ function defaultPayload(kind, contentType) {
       stylePrompt: '',
       bpm: null,
       isInstrumental: null,
+      explicit: false,
+      lyricQuote: '',
+      adaptedWork: { enabled: false },
     };
   }
   if (kind === 'album') {
     return {
+      subtitle: '',
+      caption: '',
+      about: '',
+      themes: [],
+      creationDate: '',
+      notes: '',
       artwork: { mode: 'inline', path: null },
+      artworkEntries: [],
+      linkEntries: [
+        {
+          id: newId(),
+          kind: 'song_pages',
+          label: 'Song Pages',
+          visibility: 'public',
+          sortOrder: 0,
+          songPagesState: 'not_published',
+        },
+      ],
+      relatedAlbums: [],
+      producerCredit: '',
+      copyrightNotice: '',
     };
   }
   if (kind === 'playlist') {
     return {
-      description: '',
-      curator: '',
-      purpose: '',
+      subtitle: '',
+      caption: '',
+      about: '',
+      themes: [],
+      creationDate: '',
       updateDate: '',
+      notes: '',
       artwork: { mode: 'inline', path: null },
+      artworkEntries: [],
+      linkEntries: [
+        {
+          id: newId(),
+          kind: 'song_pages',
+          label: 'Song Pages',
+          visibility: 'public',
+          sortOrder: 0,
+          songPagesState: 'not_published',
+        },
+      ],
+      producerCredit: '',
     };
   }
   if (kind === 'content' && contentType === 'image') {
@@ -586,6 +644,7 @@ function createObject({ artistId, kind, contentType = null, name, payload }) {
 
   // Song URL slug starts derived from the public label; manual edits lock it later.
   if (kind === 'song' && !body.slug) {
+    ensureTsLoader();
     const { slugifySongName } = require('../../shared/artist2/songSlug.ts');
     body.slug = slugifySongName(trimmed);
     body.slugManual = false;
@@ -670,7 +729,9 @@ function deleteObject(id) {
         `UPDATE artist2_objects SET deleted_at = ?, updated_at = ? WHERE id = ?`,
       ).run(ts, ts, id);
     } else if (isSongContainerKind(existing.kind)) {
+      // Drop owned memberships; albums may also be playlist members — clear both.
       db.prepare('DELETE FROM artist2_memberships WHERE container_id = ?').run(id);
+      db.prepare('DELETE FROM artist2_memberships WHERE member_id = ?').run(id);
       db.prepare(
         `UPDATE artist2_objects SET deleted_at = ?, updated_at = ? WHERE id = ?`,
       ).run(ts, ts, id);
@@ -766,7 +827,7 @@ function listMemberships(containerId) {
     .map(mapMembership);
 }
 
-/** Lightweight track counts for soft incomplete badges in the catalog list. */
+/** Lightweight member counts for soft incomplete badges in the catalog list. */
 function listMembershipCounts(artistId) {
   const rows = getDatabase()
     .prepare(
@@ -775,6 +836,10 @@ function listMembershipCounts(artistId) {
        INNER JOIN artist2_objects o ON o.id = m.container_id
        INNER JOIN artist2_objects s ON s.id = m.member_id
        WHERE o.artist_id = ? AND o.kind IN ('album', 'playlist')
+         AND (
+           (o.kind = 'album' AND s.kind = 'song')
+           OR (o.kind = 'playlist' AND s.kind IN ('song', 'album'))
+         )
          AND ${activeObjectClause('o')}
          AND ${activeObjectClause('s')}
        GROUP BY m.container_id`,
@@ -788,25 +853,34 @@ function listMembershipCounts(artistId) {
   return counts;
 }
 
-/** Container id → ordered track summaries for expandable sidebar discovery. */
+/** Container id → ordered member summaries for expandable sidebar discovery. */
 function listAlbumTrackSummaries(artistId) {
   const rows = getDatabase()
     .prepare(
-      `SELECT m.container_id AS container_id, s.id AS song_id, s.name AS song_name, m.position
+      `SELECT m.container_id AS container_id, s.id AS member_id, s.name AS member_name,
+              s.kind AS member_kind, m.position
        FROM artist2_memberships m
        INNER JOIN artist2_objects c ON c.id = m.container_id
        INNER JOIN artist2_objects s ON s.id = m.member_id
-       WHERE c.artist_id = ? AND c.kind IN ('album', 'playlist') AND s.kind = 'song'
+       WHERE c.artist_id = ? AND c.kind IN ('album', 'playlist')
+         AND (
+           (c.kind = 'album' AND s.kind = 'song')
+           OR (c.kind = 'playlist' AND s.kind IN ('song', 'album'))
+         )
          AND ${activeObjectClause('c')}
          AND ${activeObjectClause('s')}
        ORDER BY m.container_id ASC, m.position ASC, m.id ASC`,
     )
     .all(artistId);
-  /** @type {Record<string, Array<{ id: string, name: string }>>} */
+  /** @type {Record<string, Array<{ id: string, name: string, kind: string }>>} */
   const summaries = {};
   for (const row of rows) {
     if (!summaries[row.container_id]) summaries[row.container_id] = [];
-    summaries[row.container_id].push({ id: row.song_id, name: row.song_name });
+    summaries[row.container_id].push({
+      id: row.member_id,
+      name: row.member_name,
+      kind: row.member_kind === 'album' ? 'album' : 'song',
+    });
   }
   return summaries;
 }
@@ -817,9 +891,12 @@ function getAlbumDetail(albumId) {
     throw new Error('Album or playlist not found.');
   }
   const memberships = listMemberships(albumId);
+  // Albums stay songs-only; playlists may include songs and albums (never playlists).
+  const allowedMemberKinds =
+    album.kind === 'playlist' ? new Set(['song', 'album']) : new Set(['song']);
   const tracks = memberships
     .map((m) => getObject(m.memberId))
-    .filter((obj) => obj && obj.kind === 'song');
+    .filter((obj) => obj && allowedMemberKinds.has(obj.kind));
   return { ...album, memberships, tracks };
 }
 
@@ -829,14 +906,25 @@ function addMembership({ containerId, memberId }) {
   if (!container || !isSongContainerKind(container.kind)) {
     throw new Error('Container must be an album or playlist.');
   }
-  if (!member || member.kind !== 'song') {
-    throw new Error('Only songs can be added to an album or playlist.');
+  if (!member) {
+    throw new Error('Member not found.');
+  }
+  // Albums: songs only. Playlists: songs + albums — never nested playlists.
+  if (container.kind === 'album') {
+    if (member.kind !== 'song') {
+      throw new Error('Only songs can be added to an album.');
+    }
+  } else if (member.kind !== 'song' && member.kind !== 'album') {
+    throw new Error('Playlists may only include songs and albums.');
   }
   if (container.deletedAt || member.deletedAt) {
-    throw new Error('Cannot add a deleted song or container to a track list.');
+    throw new Error('Cannot add a deleted object to a container.');
   }
   if (container.artistId !== member.artistId) {
-    throw new Error('Song and container must belong to the same artist.');
+    throw new Error('Member and container must belong to the same artist.');
+  }
+  if (container.id === member.id) {
+    throw new Error('A playlist cannot contain itself.');
   }
 
   const existing = getDatabase()
@@ -866,7 +954,7 @@ function addMembership({ containerId, memberId }) {
     )
     .run(id, containerId, memberId, position);
 
-  // Touch album updated_at so the catalog feels live.
+  // Touch container updated_at so the catalog feels live.
   updateObject(containerId, {});
   return getAlbumDetail(containerId);
 }
@@ -931,11 +1019,11 @@ function promoteArtwork({ objectId, name }) {
   let entriesForSong = null;
   let primaryEntryId = null;
 
-  // Prefer Primary Cover from multi-image list when present.
+  // Prefer Primary Cover from multi-image list when present (Songs + Albums).
   try {
-    require('tsx/cjs/api').register();
+    ensureTsLoader();
     const { normalizeSongArtwork } = require('../../shared/artist2/songArtwork.ts');
-    if (obj.kind === 'song') {
+    if (obj.kind === 'song' || obj.kind === 'album' || obj.kind === 'playlist') {
       entriesForSong = normalizeSongArtwork(payload);
       const primary = entriesForSong.find((e) => e.role === 'primary_cover') || entriesForSong[0];
       if (primary) {
@@ -966,12 +1054,16 @@ function promoteArtwork({ objectId, name }) {
   });
 
   const contentRef = { mode: 'contentRef', contentId: content.id };
-  if (obj.kind === 'song' && entriesForSong && primaryEntryId) {
+  if (
+    (obj.kind === 'song' || obj.kind === 'album' || obj.kind === 'playlist') &&
+    entriesForSong &&
+    primaryEntryId
+  ) {
     payload.artworkEntries = entriesForSong.map((entry) =>
       entry.id === primaryEntryId ? { ...entry, source: contentRef } : entry,
     );
     try {
-      require('tsx/cjs/api').register();
+      ensureTsLoader();
       const { legacyArtworkFromEntries } = require('../../shared/artist2/songArtwork.ts');
       payload.artwork = legacyArtworkFromEntries(payload.artworkEntries);
     } catch {
@@ -990,7 +1082,7 @@ function promoteArtwork({ objectId, name }) {
 }
 
 function loadSongRelationHelpers() {
-  require('tsx/cjs/api').register();
+  ensureTsLoader();
   return require('../../shared/artist2/songRelations.ts');
 }
 
@@ -1059,6 +1151,84 @@ function unlinkRelatedSongs({ fromSongId, toSongId }) {
         relatedSongs: removeSongRelation(
           normalizeSongRelations(to.payload?.relatedSongs),
           fromSongId,
+        ),
+      },
+    });
+  }
+
+  return { from: updatedFrom, to: updatedTo };
+}
+
+function loadAlbumRelationHelpers() {
+  ensureTsLoader();
+  return require('../../shared/artist2/albumRelations.ts');
+}
+
+/**
+ * Link two Albums with a relationship (mirrored both ways).
+ * Default relation is sister — deluxe / reissue / sequels stay separate Albums.
+ */
+function linkRelatedAlbums({ fromAlbumId, toAlbumId, relation = 'sister', note = '' }) {
+  const { normalizeAlbumRelations, upsertAlbumRelation } = loadAlbumRelationHelpers();
+  const from = getObject(fromAlbumId);
+  const to = getObject(toAlbumId);
+  if (!from || from.kind !== 'album') throw new Error('Source Album not found.');
+  if (!to || to.kind !== 'album') throw new Error('Target Album not found.');
+  if (from.id === to.id) throw new Error('An Album cannot relate to itself.');
+  if (from.artistId !== to.artistId) {
+    throw new Error('Related Albums must belong to the same Artist.');
+  }
+
+  const relationKind = typeof relation === 'string' && relation.trim() ? relation.trim() : 'sister';
+  const noteText = typeof note === 'string' ? note : '';
+
+  const fromList = normalizeAlbumRelations(from.payload?.relatedAlbums);
+  const toList = normalizeAlbumRelations(to.payload?.relatedAlbums);
+
+  const updatedFrom = updateObject(from.id, {
+    payload: {
+      relatedAlbums: upsertAlbumRelation(fromList, {
+        albumId: to.id,
+        relation: relationKind,
+        note: noteText || undefined,
+      }),
+    },
+  });
+  const updatedTo = updateObject(to.id, {
+    payload: {
+      relatedAlbums: upsertAlbumRelation(toList, {
+        albumId: from.id,
+        relation: relationKind,
+        note: noteText || undefined,
+      }),
+    },
+  });
+
+  return { from: updatedFrom, to: updatedTo };
+}
+
+function unlinkRelatedAlbums({ fromAlbumId, toAlbumId }) {
+  const { normalizeAlbumRelations, removeAlbumRelation } = loadAlbumRelationHelpers();
+  const from = getObject(fromAlbumId);
+  const to = getObject(toAlbumId);
+  if (!from || from.kind !== 'album') throw new Error('Source Album not found.');
+
+  const updatedFrom = updateObject(from.id, {
+    payload: {
+      relatedAlbums: removeAlbumRelation(
+        normalizeAlbumRelations(from.payload?.relatedAlbums),
+        toAlbumId,
+      ),
+    },
+  });
+
+  let updatedTo = to;
+  if (to && to.kind === 'album') {
+    updatedTo = updateObject(to.id, {
+      payload: {
+        relatedAlbums: removeAlbumRelation(
+          normalizeAlbumRelations(to.payload?.relatedAlbums),
+          fromAlbumId,
         ),
       },
     });
@@ -1144,4 +1314,6 @@ module.exports = {
   promoteArtwork,
   linkRelatedSongs,
   unlinkRelatedSongs,
+  linkRelatedAlbums,
+  unlinkRelatedAlbums,
 };

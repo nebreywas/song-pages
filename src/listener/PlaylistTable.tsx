@@ -27,6 +27,7 @@ import { IconClock } from './PlayerIcons';
 import { SortableColumnHeader } from './SortableColumnHeader';
 import type { SortColumn, SortDirection } from './sortPlaylist';
 import type { usePlaylistDragReorder } from './usePlaylistDragReorder';
+import type { PlaylistYearColumnMode } from '@shared/listener/playlistTableView';
 
 type PlaylistDrag = ReturnType<typeof usePlaylistDragReorder>;
 
@@ -44,6 +45,9 @@ type PlaylistTableProps = {
   sortDirection: SortDirection;
   onSort: (column: SortColumn) => void;
   hasCustomOrder: boolean;
+  yearColumnMode: PlaylistYearColumnMode;
+  playCountsBySongId: ReadonlyMap<number, number>;
+  onToggleYearPlaysColumn: () => void;
   resizeBetween: (
     leftId: PlaylistColumnId,
     rightId: PlaylistColumnId,
@@ -83,6 +87,9 @@ type PlaylistTableBodyProps = {
   runtimeDurations: Record<number, number>;
   isPlaying?: boolean;
   onDeckSongId?: number | null;
+  /** Force body refresh when Year↔Plays mode or counts change (memo ignores column defs). */
+  yearColumnMode: PlaylistYearColumnMode;
+  playCountsBySongId: ReadonlyMap<number, number>;
   playlistDrag: PlaylistDrag;
   onRowClick: (song: SongRow) => void;
   onRowDoubleClick: (song: SongRow) => void;
@@ -92,6 +99,8 @@ type PlaylistTableBodyProps = {
 function playlistBodyPropsEqual(prev: PlaylistTableBodyProps, next: PlaylistTableBodyProps): boolean {
   return (
     prev.table.options.data === next.table.options.data &&
+    // Column defs carry Year↔Plays cell renderers — must invalidate when they change.
+    prev.table.options.columns === next.table.options.columns &&
     prev.emptyMessage === next.emptyMessage &&
     prev.gridStyle.gridTemplateColumns === next.gridStyle.gridTemplateColumns &&
     prev.playingSongId === next.playingSongId &&
@@ -101,6 +110,8 @@ function playlistBodyPropsEqual(prev: PlaylistTableBodyProps, next: PlaylistTabl
     prev.playlistLengthSettings === next.playlistLengthSettings &&
     prev.sessionSkippedIds === next.sessionSkippedIds &&
     prev.runtimeDurations === next.runtimeDurations &&
+    prev.yearColumnMode === next.yearColumnMode &&
+    prev.playCountsBySongId === next.playCountsBySongId &&
     prev.playlistDrag.draggingSongId === next.playlistDrag.draggingSongId &&
     prev.onRowClick === next.onRowClick &&
     prev.onRowDoubleClick === next.onRowDoubleClick &&
@@ -189,7 +200,15 @@ const PlaylistTableBody = memo(function PlaylistTableBody({
 
 function renderHeaderCell(
   columnId: PlaylistColumnId,
-  props: Pick<PlaylistTableProps, 'sortColumn' | 'sortDirection' | 'onSort' | 'hasCustomOrder'>,
+  props: Pick<
+    PlaylistTableProps,
+    | 'sortColumn'
+    | 'sortDirection'
+    | 'onSort'
+    | 'hasCustomOrder'
+    | 'yearColumnMode'
+    | 'onToggleYearPlaysColumn'
+  >,
 ) {
   switch (columnId) {
     case 'order':
@@ -243,16 +262,22 @@ function renderHeaderCell(
           onSort={props.onSort}
         />
       );
-    case 'year':
+    case 'year': {
+      const playsMode = props.yearColumnMode === 'plays';
       return (
         <SortableColumnHeader
-          label="Year"
-          column="year"
+          label={playsMode ? 'Plays' : 'Year'}
+          column={playsMode ? 'plays' : 'year'}
           activeColumn={props.sortColumn}
           direction={props.sortDirection}
           onSort={props.onSort}
+          onDoubleClickAction={props.onToggleYearPlaysColumn}
+          doubleClickTitle={
+            playsMode ? 'Double-click to show Year' : 'Double-click to show Plays'
+          }
         />
       );
+    }
     case 'source':
       return (
         <SortableColumnHeader
@@ -297,6 +322,9 @@ export function PlaylistTable({
   sortDirection,
   onSort,
   hasCustomOrder,
+  yearColumnMode,
+  playCountsBySongId,
+  onToggleYearPlaysColumn,
   resizeBetween,
   playingSongId,
   previewSongId,
@@ -346,6 +374,9 @@ export function PlaylistTable({
         playingSongId,
         isPlaying,
         onDeckSongId,
+        yearColumnMode,
+        playCountsBySongId,
+        onToggleYearPlaysColumn,
       }),
     [
       profile,
@@ -363,6 +394,9 @@ export function PlaylistTable({
       playingSongId,
       isPlaying,
       onDeckSongId,
+      yearColumnMode,
+      playCountsBySongId,
+      onToggleYearPlaysColumn,
       startDrag,
       setRowRef,
     ],
@@ -427,6 +461,8 @@ export function PlaylistTable({
                 sortDirection,
                 onSort,
                 hasCustomOrder,
+                yearColumnMode,
+                onToggleYearPlaysColumn,
               })}
             </div>
           );
@@ -444,6 +480,8 @@ export function PlaylistTable({
         playlistLengthSettings={playlistLengthSettings}
         sessionSkippedIds={sessionSkippedIds}
         runtimeDurations={runtimeDurations}
+        yearColumnMode={yearColumnMode}
+        playCountsBySongId={playCountsBySongId}
         playlistDrag={playlistDrag}
         onRowClick={onRowClick}
         onRowDoubleClick={onRowDoubleClick}

@@ -56,6 +56,7 @@
 | [playback-session-architecture.md](./playback-session-architecture.md) | **Canonical** — PlaybackSession, adapters, projections, phase completion |
 | [audio-pipeline.md](./audio-pipeline.md) | **Canonical** — main/mirror/VC audio, Discord capture, AnalyserBus |
 | [audio-systems-baseline.md](./audio-systems-baseline.md) | Effect vocabulary, transport vs graph, encapsulation |
+| [web-voice-and-macos-tts.md](./web-voice-and-macos-tts.md) | Chromium vs native `say`, Enhanced Samantha twins, curated TTS product direction |
 | [playback-refactor/FINAL-REPORT.md](./playback-refactor/FINAL-REPORT.md) | Refactor completion summary, metrics, TODOs |
 
 ### VC Mode, visualizers, lyrics

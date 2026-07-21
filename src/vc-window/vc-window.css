@@ -216,6 +216,24 @@
   transition: transform 0.35s linear;
 }
 
+/* Host Direct Scroll — a real scroll container (mouse wheel / grab-drag /
+   bindable scroll commands) instead of the playback-driven transform. Reuses
+   the edge-fade overlays via .vc-lyrics-scroll--edge-fade. */
+.vc-lyrics-host-scroll {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 1rem 1.25rem;
+  cursor: grab;
+  scrollbar-width: thin;
+  --vc-lyrics-feather-size: 2rem;
+}
+
+.vc-lyrics-host-scroll.is-grabbing {
+  cursor: grabbing;
+}
+
 /* ALARE vertical multi-line lyrics */
 .vc-alare-lyrics {
   width: 100%;
@@ -1392,6 +1410,22 @@
 
 .vc-transport-time-remaining {
   text-align: right;
+}
+
+/* Right-hand time is a click-to-toggle button (remaining ↔ total); strip the
+   native button chrome so it reads as plain text like the left elapsed time. */
+.vc-transport-time-toggle {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.vc-transport-time-toggle:hover {
+  color: #fff;
 }
 
 .vc-transport-scrub {

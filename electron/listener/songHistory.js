@@ -1,6 +1,8 @@
 const { getDatabase } = require('../database');
 
 const MAX_ENTRIES = 1000;
+/** Ignore tiny seek deltas (noise from scrub pointer jitter). */
+const MIN_SEEK_DELTA_SECONDS = 0.5;
 
 function initSongHistorySchema(db) {
   db.exec(`
@@ -24,6 +26,25 @@ function initSongHistorySchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_song_history_started_at
       ON song_history(started_at DESC);
+
+    -- Seek interactions attached to a history start. Denormalized song/playlist
+    -- ids let us aggregate after playlist deletion without joining live tables.
+    CREATE TABLE IF NOT EXISTS song_history_seeks (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      history_entry_id   INTEGER NOT NULL,
+      song_id            INTEGER NOT NULL,
+      playlist_id        INTEGER,
+      direction          TEXT NOT NULL,
+      from_seconds       REAL NOT NULL,
+      to_seconds         REAL NOT NULL,
+      created_at         TEXT NOT NULL,
+      FOREIGN KEY (history_entry_id) REFERENCES song_history(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_song_history_seeks_entry
+      ON song_history_seeks(history_entry_id);
+    CREATE INDEX IF NOT EXISTS idx_song_history_seeks_song
+      ON song_history_seeks(song_id);
   `);
 }
 
@@ -32,6 +53,16 @@ function pruneOldEntries(db) {
   if (count <= MAX_ENTRIES) return;
 
   const excess = count - MAX_ENTRIES;
+  // Delete seeks for pruned rows first (SQLite FK cascade may be off).
+  db.prepare(
+    `DELETE FROM song_history_seeks
+     WHERE history_entry_id IN (
+       SELECT id FROM song_history
+       ORDER BY started_at ASC, id ASC
+       LIMIT ?
+     )`,
+  ).run(excess);
+
   db.prepare(
     `DELETE FROM song_history
      WHERE id IN (
@@ -59,6 +90,19 @@ function mapRow(row) {
     playbackType: row.playback_type,
     vcMode: row.vc_mode === 1,
     vcModeLabel: row.vc_mode_label,
+  };
+}
+
+function mapSeekRow(row) {
+  return {
+    id: row.id,
+    historyEntryId: row.history_entry_id,
+    songId: row.song_id,
+    playlistId: row.playlist_id,
+    direction: row.direction === 'back' ? 'back' : 'forward',
+    fromSeconds: row.from_seconds ?? 0,
+    toSeconds: row.to_seconds ?? 0,
+    createdAt: row.created_at,
   };
 }
 
@@ -131,6 +175,86 @@ function updateSongHistoryEntry(entryId, patch) {
   return { ok: true, data: mapRow(row) };
 }
 
+/**
+ * Record a seekbar interaction against the active history start.
+ * Stores from→to so we can later refine play estimates without re-deriving
+ * continuous listen time from wall clocks.
+ */
+function recordSongHistorySeek(input) {
+  if (!input || typeof input.historyEntryId !== 'number' || !Number.isFinite(input.historyEntryId)) {
+    return { ok: false, error: 'Invalid history entry id.' };
+  }
+  const fromSeconds = Number(input.fromSeconds);
+  const toSeconds = Number(input.toSeconds);
+  if (!Number.isFinite(fromSeconds) || !Number.isFinite(toSeconds)) {
+    return { ok: false, error: 'Invalid seek positions.' };
+  }
+  if (Math.abs(toSeconds - fromSeconds) < MIN_SEEK_DELTA_SECONDS) {
+    return { ok: true, data: null, skipped: true };
+  }
+
+  const db = getDatabase();
+  const entry = db.prepare('SELECT * FROM song_history WHERE id = ?').get(input.historyEntryId);
+  if (!entry) return { ok: false, error: 'History entry not found.' };
+
+  const direction =
+    input.direction === 'forward' || input.direction === 'back'
+      ? input.direction
+      : toSeconds >= fromSeconds
+        ? 'forward'
+        : 'back';
+
+  const createdAt = new Date().toISOString();
+  const result = db
+    .prepare(
+      `INSERT INTO song_history_seeks (
+        history_entry_id, song_id, playlist_id, direction,
+        from_seconds, to_seconds, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      entry.id,
+      entry.song_id,
+      entry.playlist_id,
+      direction,
+      fromSeconds,
+      toSeconds,
+      createdAt,
+    );
+
+  const row = db.prepare('SELECT * FROM song_history_seeks WHERE id = ?').get(result.lastInsertRowid);
+  return { ok: true, data: mapSeekRow(row) };
+}
+
+/** History entry ids that have at least one seek (for play-estimate math). */
+function listSongHistorySeekHitEntryIds(limit = MAX_ENTRIES) {
+  const safeLimit = Math.min(Math.max(1, Math.trunc(limit)), MAX_ENTRIES);
+  const rows = getDatabase()
+    .prepare(
+      `SELECT DISTINCT history_entry_id AS id
+       FROM song_history_seeks
+       WHERE history_entry_id IN (
+         SELECT id FROM song_history
+         ORDER BY started_at DESC, id DESC
+         LIMIT ?
+       )`,
+    )
+    .all(safeLimit);
+  return rows.map((row) => row.id);
+}
+
+function listSongHistorySeeksForEntry(historyEntryId) {
+  if (typeof historyEntryId !== 'number' || !Number.isFinite(historyEntryId)) return [];
+  return getDatabase()
+    .prepare(
+      `SELECT * FROM song_history_seeks
+       WHERE history_entry_id = ?
+       ORDER BY created_at ASC, id ASC`,
+    )
+    .all(historyEntryId)
+    .map(mapSeekRow);
+}
+
 function listSongHistory(limit = MAX_ENTRIES) {
   const safeLimit = Math.min(Math.max(1, Math.trunc(limit)), MAX_ENTRIES);
   const rows = getDatabase()
@@ -144,7 +268,9 @@ function listSongHistory(limit = MAX_ENTRIES) {
 }
 
 function clearSongHistory() {
-  getDatabase().prepare('DELETE FROM song_history').run();
+  const db = getDatabase();
+  db.prepare('DELETE FROM song_history_seeks').run();
+  db.prepare('DELETE FROM song_history').run();
   return { ok: true };
 }
 
@@ -152,6 +278,9 @@ module.exports = {
   initSongHistorySchema,
   recordSongHistoryStart,
   updateSongHistoryEntry,
+  recordSongHistorySeek,
+  listSongHistorySeekHitEntryIds,
+  listSongHistorySeeksForEntry,
   listSongHistory,
   clearSongHistory,
 };

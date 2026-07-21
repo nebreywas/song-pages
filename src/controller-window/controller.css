@@ -106,6 +106,18 @@
   color: var(--text-muted);
 }
 
+.controller-submission-select {
+  width: 100%;
+  max-width: 100%;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-sizing: border-box;
+}
+
 .controller-submission-input {
   width: 100%;
   font-size: 0.85rem;
@@ -242,6 +254,11 @@
 .controller-kudo-btn {
   min-width: 0;
   width: 100%;
+  /* Keep long preset names on one line and truncate ("Depeche M…") so the
+     button never overflows or reflows the 3-up grid; full name is in `title`. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .controller-empty {

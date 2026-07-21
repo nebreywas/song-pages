@@ -5,10 +5,52 @@
 
 import type { Artist2SongRecording } from './songRecordings.ts';
 import type { Artist2SongRelation } from './songRelations.ts';
+import type { Artist2AlbumRelation } from './albumRelations.ts';
+import type {
+  Artist2MusicalEnsemble,
+  Artist2PrimaryVocalPresentation,
+} from './songPresentation.ts';
+import type { Artist2AdaptedWork } from './adaptedWork.ts';
 
 export type { Artist2SongRecording };
 export type { Artist2SongRelation, Artist2SongRelationKind } from './songRelations.ts';
 export { ARTIST2_SONG_RELATION_KINDS, songRelationLabel } from './songRelations.ts';
+export type { Artist2AlbumRelation, Artist2AlbumRelationKind } from './albumRelations.ts';
+export { ARTIST2_ALBUM_RELATION_KINDS, albumRelationLabel } from './albumRelations.ts';
+export type {
+  Artist2MusicalEnsemble,
+  Artist2PrimaryVocalPresentation,
+} from './songPresentation.ts';
+export {
+  MUSICAL_ENSEMBLE_LABELS,
+  MUSICAL_ENSEMBLES,
+  PRIMARY_VOCAL_PRESENTATION_LABELS,
+  PRIMARY_VOCAL_PRESENTATIONS,
+  coerceMusicalEnsemble,
+  coercePrimaryVocalPresentation,
+} from './songPresentation.ts';
+export type {
+  Artist2AdaptationType,
+  Artist2AdaptedPartyRole,
+  Artist2AdaptedWork,
+  Artist2OriginalCopyrightStatus,
+  Artist2SourceMaterialKind,
+} from './adaptedWork.ts';
+export {
+  ADAPTATION_TYPE_LABELS,
+  ADAPTATION_TYPES,
+  ADAPTED_PARTY_ROLE_LABELS,
+  ADAPTED_PARTY_ROLES,
+  emptyAdaptedWork,
+  ORIGINAL_COPYRIGHT_STATUS_LABELS,
+  ORIGINAL_COPYRIGHT_STATUSES,
+  patchAdaptedWork,
+  songAdaptedWork,
+  SOURCE_MATERIAL_HELP,
+  SOURCE_MATERIAL_KINDS,
+  SOURCE_MATERIAL_LABELS,
+  toggleAdaptedWorkListValue,
+} from './adaptedWork.ts';
 
 export type Artist2CatalogKind = 'song' | 'album' | 'playlist' | 'content';
 
@@ -37,7 +79,9 @@ export type Artist2ArtworkEntry = {
   id: string;
   role: Artist2ArtworkRole;
   source: Artist2ArtworkRef;
-  /** Concise descriptor — soft max ~60 chars. */
+  /** Optional display name for this image entry. */
+  name?: string;
+  /** Caption / short description — soft max ~120 chars. */
   description?: string;
   /** Longer commentary — soft max ~500 chars; Markdown later. */
   commentary?: string;
@@ -210,12 +254,51 @@ export type Artist2SongPayload = {
   /** Extra freeform genre tags (should not duplicate primary). */
   additionalGenres?: string[];
   /**
+   * Primary language of the lyrics (freeform text).
+   * Special values authors may type: `Instrumental`, `Multiple Languages`, `Other`.
+   */
+  primaryLanguage?: string;
+  /**
+   * @deprecated Prefer primaryLanguage. Migrated on read via songPrimaryLanguage().
+   */
+  language?: string;
+  /** Extra lyric languages (freeform tags; should not duplicate primary). */
+  additionalLanguages?: string[];
+  /**
+   * Author-declared explicit lyrics flag. We do not detect or decide — the
+   * checkbox is optional. Suno import can seed this from Studio’s explicit flag.
+   */
+  explicit?: boolean | null;
+  /**
+   * How the primary vocal line is presented (solo, duet, spoken word, …).
+   * Empty string / omitted = unset.
+   */
+  primaryVocalPresentation?: Artist2PrimaryVocalPresentation | '';
+  /** Freeform catch-all for backing / guest / additional vocal notes. */
+  additionalVocals?: string;
+  /**
+   * Performing ensemble framing (band, orchestra, DJ / producer, …).
+   * Empty string / omitted = unset.
+   */
+  musicalEnsemble?: Artist2MusicalEnsemble | '';
+  /**
+   * Themes / keywords — subjects, concepts, narrative ideas, recurring motifs,
+   * and practical search terms (freeform tags). Feeds sidebar filtering,
+   * discovery, and smart views.
+   */
+  themes?: string[];
+  /**
    * @deprecated Slice A starts fresh — use caption. Not read by compile.
    */
   description?: string;
   /** Private editor notes — never published / never compiled. */
   notes?: string;
   lyrics?: string;
+  /**
+   * Short artist-chosen lyric excerpt for Song Cards / publisher “Lyric quote”
+   * surfaces. Hard max 500 chars — we don’t auto-pick a chorus.
+   */
+  lyricQuote?: string;
   /** Optional freeform tags (manual). Suno import maps Studio tags into stylePrompt, not here. */
   tags?: string;
   /**
@@ -272,6 +355,27 @@ export type Artist2SongPayload = {
    * Different creative mixes belong here — not as extra recordings on this Song.
    */
   relatedSongs?: Artist2SongRelation[];
+  /**
+   * Public-facing catch-all copyright line (e.g. `© 2026 Sawyer House. All
+   * rights reserved.`). Soft max ~250 chars. Kept as one free line for MVP;
+   * later expandable into composition/recording rights, publishers, PROs, etc.
+   */
+  copyrightNotice?: string;
+  /**
+   * Public catch-all credit for musical composition / arrangement / production
+   * (e.g. `Music by Ben Sawyer`). Soft max ~300 chars.
+   */
+  musicCredit?: string;
+  /**
+   * Public catch-all credit for lyrics / textual adaptation (e.g. `Lyrics by Ben
+   * Sawyer`). Soft max ~300 chars.
+   */
+  lyricsCredit?: string;
+  /**
+   * Adapted Work & Provenance — covers, remixes, public-domain adaptations, etc.
+   * Nested blob so catalog provenance stays together. See adaptedWork.ts.
+   */
+  adaptedWork?: Artist2AdaptedWork | null;
 };
 
 /** Prefer creationDate; fall back to legacy year. */
@@ -279,6 +383,13 @@ export function songCreationDate(payload: Artist2SongPayload): string {
   const primary = payload.creationDate?.trim();
   if (primary) return primary;
   return payload.year?.trim() ?? '';
+}
+
+/** Prefer primaryLanguage; fall back to legacy language. */
+export function songPrimaryLanguage(payload: Artist2SongPayload): string {
+  const primary = payload.primaryLanguage?.trim();
+  if (primary) return primary;
+  return payload.language?.trim() ?? '';
 }
 
 /** Best-effort year for compile / display — from creationDate or legacy year. */
@@ -296,22 +407,146 @@ export function songYearForCompile(payload: Artist2SongPayload): string {
 }
 
 export type Artist2AlbumPayload = {
+  /** Optional secondary line (edition, feature, …). */
+  subtitle?: string;
+  /** Short public line for cards / featured. Soft max ~120. */
+  caption?: string;
+  /** Primary public description (Markdown). Soft max ~1000. */
+  about?: string;
+  /**
+   * Themes / keywords — subjects, concepts, and search terms (freeform tags).
+   */
+  themes?: string[];
+  /**
+   * Creation / release date — free text (YYYY or DD/MM/YYYY). Prefer this over
+   * legacy `releaseDate`.
+   */
+  creationDate?: string;
+  /**
+   * @deprecated Prefer creationDate. Migrated on read in the editor.
+   */
   releaseDate?: string;
+  /**
+   * @deprecated Prefer about. Migrated on read in the editor.
+   */
   description?: string;
+  /** Private editor notes — never published / never compiled. */
   notes?: string;
+  /**
+   * Structured link table (same shape as Song). Album-specific destinations —
+   * not shared with member Songs.
+   */
+  linkEntries?: Artist2SongLink[];
+  /**
+   * Multi-image Artwork list. Exactly zero or one Primary Cover — same model
+   * as Song. Genre / vocal / creation process are derived from member Songs later.
+   */
+  artworkEntries?: Artist2ArtworkEntry[];
+  /**
+   * Legacy single cover — mirrored from the Primary Cover for promote / rename.
+   * Prefer artworkEntries.
+   */
   artwork?: Artist2ArtworkRef;
+  /** Links to other Albums (sister / deluxe / reissue / …). */
+  relatedAlbums?: Artist2AlbumRelation[];
+  /**
+   * Public catch-all credit for album production (e.g. `Produced by Ben Sawyer`).
+   * Soft max ~300 chars.
+   */
+  producerCredit?: string;
+  /**
+   * Public-facing copyright line (e.g. `© 2026 Sawyer House. All rights reserved.`).
+   * Soft max ~250 chars.
+   */
+  copyrightNotice?: string;
 };
 
-/** Playlist — same membership model as Album; different editorial fields. */
+/** Prefer creationDate; fall back to legacy releaseDate. */
+export function albumCreationDate(payload: Artist2AlbumPayload): string {
+  const primary = payload.creationDate?.trim();
+  if (primary) return primary;
+  return payload.releaseDate?.trim() ?? '';
+}
+
+/** Prefer about; fall back to legacy description. */
+export function albumAbout(payload: Artist2AlbumPayload): string {
+  const primary = payload.about?.trim();
+  if (primary) return primary;
+  return payload.description?.trim() ?? '';
+}
+
+
+/** Playlist — informal collection; may hold Songs and Albums (not nested Playlists). */
 export type Artist2PlaylistPayload = {
-  description?: string;
-  curator?: string;
-  purpose?: string;
-  /** Freeform “last updated” note for the curator (not filesystem mtime). */
+  /** Optional secondary line (edition, feature, …). */
+  subtitle?: string;
+  /** Short public line for cards / featured. Soft max ~120. */
+  caption?: string;
+  /** Primary public description (Markdown). Soft max ~1000. */
+  about?: string;
+  /**
+   * Themes / keywords — subjects, concepts, and search terms (freeform tags).
+   */
+  themes?: string[];
+  /**
+   * When the playlist was first put together — free text (YYYY or DD/MM/YYYY).
+   */
+  creationDate?: string;
+  /**
+   * Freeform “last updated” note — playlists tend to grow over time.
+   * Prefer the same date sanitizer as creationDate.
+   */
   updateDate?: string;
+  /**
+   * @deprecated Prefer about. Migrated on read in the editor.
+   */
+  description?: string;
+  /**
+   * @deprecated Prefer producerCredit in Credits. Migrated on read.
+   */
+  curator?: string;
+  /**
+   * @deprecated Removed from the editor — kept so old payloads don’t explode.
+   */
+  purpose?: string;
+  /** Private editor notes — never published / never compiled. */
   notes?: string;
+  /**
+   * Structured link table — Song Pages + Web + Social only (no streaming /
+   * distribution). Same row shape as Song / Album.
+   */
+  linkEntries?: Artist2SongLink[];
+  /**
+   * Multi-image Artwork list. Exactly zero or one Primary Cover — same model
+   * as Song / Album.
+   */
+  artworkEntries?: Artist2ArtworkEntry[];
+  /**
+   * Legacy single cover — mirrored from the Primary Cover for promote / rename.
+   * Prefer artworkEntries.
+   */
   artwork?: Artist2ArtworkRef;
+  /**
+   * Public catch-all credit for who put the playlist together (e.g. curated /
+   * produced by). Soft max ~300 chars. Replaces the old Overview “Curator” field.
+   */
+  producerCredit?: string;
 };
+
+/** Prefer about; fall back to legacy description. */
+export function playlistAbout(payload: Artist2PlaylistPayload): string {
+  const primary = payload.about?.trim();
+  if (primary) return primary;
+  return payload.description?.trim() ?? '';
+}
+
+/** Prefer producerCredit; fall back to legacy curator. */
+export function playlistProducerCredit(payload: Artist2PlaylistPayload): string {
+  const primary = payload.producerCredit?.trim();
+  if (primary) return primary;
+  return payload.curator?.trim() ?? '';
+}
+
 
 export type Artist2ContentPayload = {
   filePath?: string | null;
@@ -386,7 +621,26 @@ export type Artist2CatalogObject = {
   payload: Artist2ObjectPayload;
 };
 
-export type Artist2LibraryFilter = 'all' | 'songs' | 'containers' | 'content';
+/**
+ * Catalog sidebar kind filter. `all` is a convenience mode (every kind visible);
+ * otherwise any non-empty subset of songs / containers / content may be on.
+ */
+export type Artist2LibraryFilter = {
+  all: boolean;
+  songs: boolean;
+  containers: boolean;
+  content: boolean;
+};
+
+export type Artist2LibraryFilterKey = keyof Artist2LibraryFilter;
+
+/** Default catalog filter — show everything. */
+export const ARTIST2_LIBRARY_FILTER_ALL: Artist2LibraryFilter = {
+  all: true,
+  songs: false,
+  containers: false,
+  content: false,
+};
 
 /** One parent relationship removed because the deleted object was referenced elsewhere. */
 export type Artist2BrokenReference = {
@@ -445,11 +699,14 @@ export type Artist2Membership = {
   payload: Record<string, unknown>;
 };
 
-/** Shared detail for Album / Playlist editors (ordered song memberships). */
+/** Shared detail for Album / Playlist editors (ordered memberships). */
 export type Artist2ContainerDetail = Artist2CatalogObject & {
   kind: 'album' | 'playlist';
   memberships: Artist2Membership[];
-  /** Resolved song rows for the track list UI. */
+  /**
+   * Resolved member rows for the list UI.
+   * Albums: songs only. Playlists: songs and albums (never nested playlists).
+   */
   tracks: Artist2CatalogObject[];
 };
 
@@ -461,6 +718,8 @@ export type Artist2AlbumTrackSummaries = Record<string, Artist2TrackSummary[]>;
 export type Artist2TrackSummary = {
   id: string;
   name: string;
+  /** Defaults to song for older callers; playlists may nest albums. */
+  kind?: 'song' | 'album';
 };
 
 export type Artist2EditorSelection =
@@ -514,7 +773,32 @@ export function albumIncompleteHints(
   if (!isSongContainerKind(album.kind)) return [];
   const hints: Artist2IncompleteHint[] = [];
   if (trackCount < 1) {
-    hints.push({ code: 'no-tracks', label: 'No tracks yet' });
+    hints.push({
+      code: 'no-tracks',
+      label: album.kind === 'playlist' ? 'No music yet' : 'No tracks yet',
+    });
+  }
+  // Artwork completeness for Album + Playlist multi-image model.
+  if (album.kind !== 'album' && album.kind !== 'playlist') return hints;
+
+  const payload = album.payload as Artist2AlbumPayload | Artist2PlaylistPayload;
+  const hasEntries = Array.isArray(payload.artworkEntries) && payload.artworkEntries.length > 0;
+  if (hasEntries) {
+    const primary =
+      payload.artworkEntries!.find((e) => e.role === 'primary_cover') ?? payload.artworkEntries![0];
+    const src = primary?.source;
+    if (
+      !src ||
+      (src.mode === 'inline' && !src.path) ||
+      (src.mode === 'contentRef' && !src.contentId)
+    ) {
+      hints.push({ code: 'no-artwork', label: 'No artwork yet' });
+    }
+  } else {
+    const art = payload.artwork;
+    if (!art || (art.mode === 'inline' && !art.path) || (art.mode === 'contentRef' && !art.contentId)) {
+      hints.push({ code: 'no-artwork', label: 'No artwork yet' });
+    }
   }
   return hints;
 }

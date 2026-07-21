@@ -5,6 +5,7 @@ import {
   accumulateAlareSpeedNudgeLines,
   applyAlareSpeedNudge,
   clampAlareSpeedNudge,
+  formatAlareSpeedNudgePercent,
   ALARE_SPEED_NUDGE_MAX,
   ALARE_SPEED_NUDGE_STEP,
 } from './speedNudge';
@@ -33,4 +34,15 @@ test('clampAlareSpeedNudge respects step range', () => {
   assert.equal(clampAlareSpeedNudge(ALARE_SPEED_NUDGE_MAX + 1), ALARE_SPEED_NUDGE_MAX);
   assert.equal(clampAlareSpeedNudge(-ALARE_SPEED_NUDGE_MAX - 1), -ALARE_SPEED_NUDGE_MAX);
   assert.equal(ALARE_SPEED_NUDGE_MAX, 0.5);
+});
+
+test('formatAlareSpeedNudgePercent renders a signed one-decimal percent', () => {
+  // Two +2.5% presses read as the "+5.0%" the controller message shows.
+  assert.equal(formatAlareSpeedNudgePercent(ALARE_SPEED_NUDGE_STEP * 2), '+5.0%');
+  assert.equal(formatAlareSpeedNudgePercent(ALARE_SPEED_NUDGE_STEP), '+2.5%');
+  assert.equal(formatAlareSpeedNudgePercent(-ALARE_SPEED_NUDGE_STEP), '-2.5%');
+  assert.equal(formatAlareSpeedNudgePercent(0), '0.0%');
+  // Clamps before formatting so the readout can't exceed the real ±50% range.
+  assert.equal(formatAlareSpeedNudgePercent(1), '+50.0%');
+  assert.equal(formatAlareSpeedNudgePercent(-1), '-50.0%');
 });

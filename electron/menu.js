@@ -1,5 +1,6 @@
 /**
- * Application menu — Listener, Artist, Developer, Pretty Lyrics Lab, About modes.
+ * Application menu — Listener, Artist, Developer, Pretty Lyrics Lab,
+ * Web Voice Demo, About modes.
  */
 const { app, BrowserWindow, Menu, shell, clipboard, dialog } = require('electron');
 const path = require('path');
@@ -159,6 +160,11 @@ function buildAppMenu(isDev) {
         label: 'Pretty Lyrics Lab',
         accelerator: 'CmdOrCtrl+4',
         click: () => sendNavigate('pretty-lyrics'),
+      },
+      {
+        label: 'Web Voice Demo',
+        accelerator: 'CmdOrCtrl+5',
+        click: () => sendNavigate('web-voice'),
       },
       {
         label: 'About',

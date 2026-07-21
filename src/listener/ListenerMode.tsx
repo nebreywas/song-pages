@@ -40,6 +40,20 @@ import {
 } from './ListenerSidebar';
 import { SubscribeArtistModal } from './SubscribeArtistModal';
 import { useListenerPlayerSettings } from './useListenerPlayerSettings';
+import { useZenInterlude } from './useZenInterlude';
+import { useRadioBreak } from './useRadioBreak';
+import { fetchRadioWeatherSnapshot } from './fetchRadioWeather';
+import {
+  pickZenSilenceSeconds,
+  shouldStartZenInterlude,
+} from '@shared/listener/zenMode';
+import {
+  buildRadioAnnouncementText,
+  buildRadioBreakSegments,
+  pickRadioAnnouncementKind,
+  shouldStartRadioBreak,
+} from '@shared/listener/radioMode';
+import { resolveRadioVoiceProfile } from '@shared/listener/radioVoices';
 import { usePlaylistLengthSettings } from './usePlaylistLengthSettings';
 import { useLiveDebugSettings } from '../live-debug/useLiveDebugSettings';
 import { persistPlaylistSongSkipped } from './playlistSongSkip';
@@ -48,6 +62,11 @@ import { useListenerLyricsDisplaySettings } from './useListenerLyricsDisplaySett
 import { useListenerSidebarLibraryLayout } from './useListenerSidebarLibraryLayout';
 import { probeSongDurationSeconds, songNeedsDurationProbe } from './probeSongDuration';
 import { sortPlaylistSongs, type SortColumn, type SortDirection } from './sortPlaylist';
+import { usePlaylistTableView } from './usePlaylistTableView';
+import {
+  aggregatePlaylistSongPlayStats,
+  displayPlayCount,
+} from '@shared/listener/playStats';
 import {
   applyCustomPlaylistOrder,
   buildCatalogOrderMap,
@@ -78,8 +97,26 @@ import {
   type TrackEndAdvanceAction,
 } from '@shared/playback/detours/state';
 import { isSongSkipped, isSongUnavailable } from '@shared/listener/playlistKinds';
+import { pickSuperShuffleEntry, type SuperShuffleEntry } from '@shared/listener/superShuffle';
+import {
+  ACTIVE_SHUFFLE_STRATEGY,
+  clearShuffleBag,
+  createEmptyShuffleBag,
+  type ShuffleBagState,
+} from '@shared/playback/queue/shuffleStrategy';
+import {
+  isNowPlayingLibraryEntry,
+  isNowPlayingSong,
+  NOW_PLAYING_ARTIST_REMOVE_TOAST,
+  NOW_PLAYING_PLAYLIST_REMOVE_TOAST,
+  NOW_PLAYING_SONG_REMOVE_TOAST,
+} from '@shared/listener/nowPlayingGuards';
 import { isVcPlayLockBlockingSongRemoval } from '@shared/playback';
-import { loadOrderedPlaylistSongs, pickNextPrimarySongId } from './playbackDetourHelpers';
+import {
+  loadOrderedPlaylistSongs,
+  loadSuperShufflePool,
+  pickNextPrimarySongId,
+} from './playbackDetourHelpers';
 import { OnDeckReplaceDialog } from './OnDeckReplaceDialog';
 import { ClearSongHistoryDialog } from './ClearSongHistoryDialog';
 import {
@@ -217,6 +254,17 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [artists, setArtists] = useState<ArtistRow[]>([]);
   const [songs, setSongs] = useState<SongRow[]>([]);
   const [selectedArtistId, setSelectedArtistId] = useState<number | null>(null);
+  const playlistKey = useMemo(
+    () => (selectedArtistId != null ? playlistKeyForArtistId(selectedArtistId) : null),
+    [selectedArtistId],
+  );
+  // Per-playlist Year↔Plays mode + sort — survives playlist switches.
+  const tableView = usePlaylistTableView(playlistKey);
+  const sortColumn = tableView.sortColumn as SortColumn;
+  const sortDirection = tableView.sortDirection as SortDirection;
+  const setSortColumn = tableView.setSortColumn as (column: SortColumn) => void;
+  const setSortDirection = tableView.setSortDirection as (direction: SortDirection) => void;
+  const setSort = tableView.setSort as (column: SortColumn, direction: SortDirection) => void;
   const [mainContentView, setMainContentView] = useState<MainContentView>('welcome');
   const [siteUrl, setSiteUrl] = useState('');
   const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
@@ -228,7 +276,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toasts, addToast, dismissToast } = useToasts();
-  const { settings: playerSettings, toggleSeekLabel } = useListenerPlayerSettings();
+  const {
+    settings: playerSettings,
+    toggleSeekLabel,
+    setZenModeEnabled,
+    setRadioModeEnabled,
+  } = useListenerPlayerSettings();
   const { settings: playlistLengthSettings } = usePlaylistLengthSettings();
   const liveDebug = useLiveDebugSettings();
   const { settings: lyricsDisplaySettings, setRemoveBrackets: setLyricsRemoveBrackets, setViewMode: setLyricsViewMode } =
@@ -264,8 +317,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [chromeMinified, setChromeMinified] = useState(false);
   const [contentHeight, setContentHeight] = useState(DEFAULT_CONTENT_HEIGHT);
   const [runtimeDurations, setRuntimeDurations] = useState<Record<number, number>>({});
-  const [sortColumn, setSortColumn] = useState<SortColumn>('order');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   /** Duration values frozen at last explicit sort — avoids live reorder as probes finish. */
   const [sortDurationsSnapshot, setSortDurationsSnapshot] = useState<Record<number, number>>({});
   const [customOrderIds, setCustomOrderIds] = useState<number[] | null>(null);
@@ -318,13 +369,44 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const [onDeckInfo, setOnDeckInfo] = useState<PlayerOnDeckInfo | null>(null);
   const [songHistoryOpen, setSongHistoryOpen] = useState(false);
   const [songHistoryEntries, setSongHistoryEntries] = useState<SongHistoryEntry[]>([]);
+  /** Playlist-scoped play counts for the Year↔Plays column (History-backed). */
+  const [playCountsBySongId, setPlayCountsBySongId] = useState<Map<number, number>>(
+    () => new Map(),
+  );
+  const [playCountsNonce, setPlayCountsNonce] = useState(0);
   const [songHistoryLoading, setSongHistoryLoading] = useState(false);
   const [clearSongHistoryOpen, setClearSongHistoryOpen] = useState(false);
   const [scrollToSongId, setScrollToSongId] = useState<number | null>(null);
   const [scrollToSongNonce, setScrollToSongNonce] = useState(0);
   /** Sidebar + title-click: playlist that currently owns/supplies transport playback. */
   const [playingSourcePlaylistId, setPlayingSourcePlaylistId] = useState<number | null>(null);
+  /**
+   * Super Shuffle — library-wide random advance.
+   * Session-only. Double-tap the shuffle button to toggle.
+   * Eligible pool is snapshotted when the session starts; library edits apply
+   * the next time Super Shuffle is turned on.
+   */
+  const [superShuffleEnabled, setSuperShuffleEnabled] = useState(false);
+  /** Frozen eligible pool for the active Super Shuffle session (null when off). */
+  const superShuffleSessionPoolRef = useRef<SuperShuffleEntry<SongRow>[] | null>(null);
+  /** In-flight snapshot build so an early Next can await the same capture. */
+  const superShuffleSnapshotPromiseRef = useRef<Promise<SuperShuffleEntry<SongRow>[]> | null>(
+    null,
+  );
+  /** Without-replacement bags — song ids only (cheap even for large libraries). */
+  const playlistShuffleBagRef = useRef<ShuffleBagState>(createEmptyShuffleBag());
+  const superShuffleBagRef = useRef<ShuffleBagState>(createEmptyShuffleBag());
+  const advancePrimaryPlaylistRef = useRef<
+    (anchorSongId: number, consumedSongIds: readonly number[]) => Promise<void>
+  >(async () => {});
   const activeHistoryEntryIdRef = useRef<number | null>(null);
+  /** Coalesce scrub pointer-moves into one from→to seek event per gesture. */
+  const pendingHistorySeekRef = useRef<{
+    fromSeconds: number;
+    toSeconds: number;
+    timer: number | null;
+  } | null>(null);
+  const commitHistorySeekRef = useRef<(fromSeconds: number, toSeconds: number) => void>(() => {});
   const songHistoryOpenRef = useRef(false);
   const pendingHistoryNavigationRef = useRef<{ song: SongRow; playlistId: number } | null>(null);
   const pendingRevealSongRef = useRef<{ songId: number; playlistId: number } | null>(null);
@@ -355,6 +437,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const suppressPlaybackEndedRef = useRef(false);
   /** Serialize natural track-end auto-advance — stale `ended` must not call playSong twice. */
   const advancingFromEndedRef = useRef(false);
+  /** Counts natural song completions since Zen was enabled / last interlude. */
+  const zenCompletedSongsRef = useRef(0);
   const playingSongIdRef = useRef<number | null>(null);
   /** Song page currently in the main pane (preview browse or playing track). */
   const activeSongPageIdRef = useRef<number | null>(null);
@@ -454,10 +538,6 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const canToggleLike =
     previewSong != null &&
     (previewSong.id > 0 || isSunoDemoSong(previewSong) || isUserPlaylistSongId(previewSong.id));
-  const playlistKey = useMemo(
-    () => (selectedArtistId != null ? playlistKeyForArtistId(selectedArtistId) : null),
-    [selectedArtistId],
-  );
   const songIdsSignature = useMemo(() => songs.map((song) => song.id).join(','), [songs]);
   const hasCustomOrder = customOrderIds != null && customOrderIds.length > 0;
 
@@ -472,8 +552,14 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       return applyCustomPlaylistOrder(songs, customOrderIds);
     }
     const column = sortColumn === 'custom' ? 'order' : sortColumn;
-    return sortPlaylistSongs(songs, column, sortDirection, sortDurationsSnapshot);
-  }, [customOrderIds, songs, sortColumn, sortDirection, sortDurationsSnapshot]);
+    return sortPlaylistSongs(
+      songs,
+      column,
+      sortDirection,
+      sortDurationsSnapshot,
+      playCountsBySongId,
+    );
+  }, [customOrderIds, playCountsBySongId, songs, sortColumn, sortDirection, sortDurationsSnapshot]);
 
   const sortedSongsRef = useRef(sortedSongs);
   sortedSongsRef.current = sortedSongs;
@@ -671,20 +757,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
       // # = catalog order; * = saved personal order (handled separately).
       if (column === 'order' || column === 'custom') {
-        setSortColumn(column);
-        setSortDirection('asc');
+        setSort(column, 'asc');
         return;
       }
 
       if (sortColumn === column) {
-        setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
         return;
       }
 
-      setSortColumn(column);
-      setSortDirection('asc');
+      setSort(column, 'asc');
     },
-    [buildDurationSnapshot, sortColumn],
+    [buildDurationSnapshot, setSort, setSortDirection, sortColumn, sortDirection],
   );
 
   const loadLibrary = useCallback(async () => {
@@ -841,8 +925,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       void app.listener.listSongs(selectedArtistId).then(setSongs);
     }
 
-    setSortColumn('order');
-    setSortDirection('asc');
+    // Sort / Year↔Plays mode come from per-playlist persisted table view.
     setSortDurationsSnapshot({});
   }, [selectedArtistId]);
 
@@ -872,7 +955,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     if (sortColumn === 'custom' && !hasCustomOrder) {
       setSortColumn('order');
     }
-  }, [hasCustomOrder, sortColumn]);
+  }, [hasCustomOrder, setSortColumn, sortColumn]);
 
   const handlePlaylistReorder = useCallback(
     async (fromIndex: number, toIndex: number) => {
@@ -883,8 +966,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         toIndex,
       );
       setCustomOrderIds(reordered);
-      setSortColumn('custom');
-      setSortDirection('asc');
+      setSort('custom', 'asc');
       const app = getApp();
       if (!app?.listener.savePlaylistCustomOrder) return;
       const result = await app.listener.savePlaylistCustomOrder(playlistKey, reordered);
@@ -896,7 +978,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         await loadLibrary();
       }
     },
-    [loadLibrary, playlistKey],
+    [loadLibrary, playlistKey, setSort],
   );
 
   const playlistDrag = usePlaylistDragReorder({
@@ -991,18 +1073,57 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   };
 
   const pickNextSongId = useCallback(
-    (currentSongId: number): number | null =>
-      pickNextPlayableSongId(sortedSongs, currentSongId, {
+    (currentSongId: number): number | null => {
+      // Peek with a bag copy — must not consume the real without-replacement bag.
+      const bag = playlistShuffleBagRef.current;
+      const primary = detoursRef.current.primary;
+      return pickNextPlayableSongId(sortedSongs, currentSongId, {
         shuffle,
         repeatMode,
         sessionSkippedIds: vcSessionSkippedIds,
-      }),
-    [repeatMode, shuffle, sortedSongs, vcSessionSkippedIds],
+        shuffleStrategy: ACTIVE_SHUFFLE_STRATEGY,
+        shuffleBag: {
+          scopeKey: bag.scopeKey,
+          remainingIds: bag.remainingIds.slice(),
+          exhausted: bag.exhausted,
+        },
+        shuffleScopeKey:
+          primary != null
+            ? `playlist:${primary.artistId}`
+            : selectedArtistId != null
+              ? `playlist:${selectedArtistId}`
+              : 'playlist',
+      });
+    },
+    [repeatMode, selectedArtistId, shuffle, sortedSongs, vcSessionSkippedIds],
   );
 
   const specialPlay = useSpecialPlayPause({
     onPlayNext: () => resumeAfterSpecialPauseRef.current(),
   });
+  const zen = useZenInterlude({
+    // Zen defers the same natural-end advance as VC special pauses; using the
+    // shared resume path preserves detours, repeat, history, and queue policy.
+    onComplete: () => resumeAfterSpecialPauseRef.current(),
+  });
+  const radio = useRadioBreak({
+    onComplete: () => resumeAfterSpecialPauseRef.current(),
+  });
+  const zenInterludeActive = zen.interlude != null;
+  const radioBreakActive = radio.breakState != null;
+  const betweenTrackBreakActive = zenInterludeActive || radioBreakActive;
+
+  useEffect(() => {
+    if (playerSettings.zenModeEnabled) return;
+    // Disabling Zen starts the next opt-in from a fresh three-song cycle.
+    zenCompletedSongsRef.current = 0;
+  }, [playerSettings.zenModeEnabled]);
+
+  // Warm the weather cache while Radio is on so the first break isn't cold.
+  useEffect(() => {
+    if (!playerSettings.radioModeEnabled) return;
+    void fetchRadioWeatherSnapshot();
+  }, [playerSettings.radioModeEnabled]);
 
   /** Main-pane embed is the playing track (not a single-click browse preview). */
   const isMainPanePlayingWidget = useCallback(() => {
@@ -1092,7 +1213,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     playbackSession.syncTransport({
       activeTrackId: playingSongId,
       isPlaying,
-      waitingForHost: specialPlay.specialPlayPause?.active === true,
+      waitingForHost:
+        specialPlay.specialPlayPause?.active === true || betweenTrackBreakActive,
       currentTime,
       duration: transportDuration,
       mediaSource:
@@ -1126,6 +1248,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     showingYoutubePage,
     specialPlay.specialPlayPause?.active,
     transportDuration,
+    betweenTrackBreakActive,
   ]);
 
   const persistSongDuration = useCallback(async (songId: number, seconds: number) => {
@@ -1400,6 +1523,10 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       }
     },
     onToggleLiveDebug: () => liveDebug.toggle(),
+    onHistorySeekRelative: (fromSeconds, toSeconds) => {
+      // Keyboard relative seeks bypass session SEEK — record immediately.
+      commitHistorySeekRef.current(fromSeconds, toSeconds);
+    },
     playLockVc: {
       setPlayLockEnabled: vc.setPlayLockEnabled,
       setPlayLockReleaseOnNextSong: vc.setPlayLockReleaseOnNextSong,
@@ -1626,6 +1753,57 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     return audioRef.current?.currentTime ?? currentTime;
   }, [currentTime, playingSongId, showingSoundcloudPage, showingYoutubePage]);
 
+  const commitHistorySeek = useCallback(async (fromSeconds: number, toSeconds: number) => {
+    const entryId = activeHistoryEntryIdRef.current;
+    if (entryId == null) return;
+    const app = getApp();
+    if (!app?.listener?.recordSongHistorySeek) return;
+    await app.listener.recordSongHistorySeek({
+      historyEntryId: entryId,
+      fromSeconds,
+      toSeconds,
+      direction: toSeconds >= fromSeconds ? 'forward' : 'back',
+    });
+  }, []);
+  commitHistorySeekRef.current = (fromSeconds, toSeconds) => {
+    void commitHistorySeek(fromSeconds, toSeconds);
+  };
+
+  /** Record seekbar interactions against the active history start (coalesced for scrubbing). */
+  const noteHistorySeek = useCallback(
+    (toSeconds: number, options?: { immediate?: boolean }) => {
+      if (activeHistoryEntryIdRef.current == null) return;
+
+      const existing = pendingHistorySeekRef.current;
+      const fromSeconds = existing?.fromSeconds ?? getPlaybackPositionSeconds();
+
+      if (options?.immediate) {
+        if (existing?.timer != null) window.clearTimeout(existing.timer);
+        pendingHistorySeekRef.current = null;
+        void commitHistorySeek(fromSeconds, toSeconds);
+        return;
+      }
+
+      if (existing?.timer != null) window.clearTimeout(existing.timer);
+      const timer = window.setTimeout(() => {
+        const pending = pendingHistorySeekRef.current;
+        pendingHistorySeekRef.current = null;
+        if (!pending) return;
+        void commitHistorySeek(pending.fromSeconds, pending.toSeconds);
+      }, 350);
+      pendingHistorySeekRef.current = { fromSeconds, toSeconds, timer };
+    },
+    [commitHistorySeek, getPlaybackPositionSeconds],
+  );
+
+  const flushPendingHistorySeek = useCallback(() => {
+    const pending = pendingHistorySeekRef.current;
+    if (!pending) return;
+    if (pending.timer != null) window.clearTimeout(pending.timer);
+    pendingHistorySeekRef.current = null;
+    void commitHistorySeek(pending.fromSeconds, pending.toSeconds);
+  }, [commitHistorySeek]);
+
   const finalizeActiveHistoryEntry = useCallback(
     async (patch: {
       completed?: boolean;
@@ -1633,6 +1811,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       durationSeconds?: number | null;
       interrupted?: boolean;
     }) => {
+      // Flush any in-flight scrub onto this start before we close it out.
+      flushPendingHistorySeek();
+
       const entryId = activeHistoryEntryIdRef.current;
       if (entryId == null) return;
 
@@ -1641,12 +1822,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
       await app.listener.updateSongHistoryEntry(entryId, patch);
       activeHistoryEntryIdRef.current = null;
+      setPlayCountsNonce((n) => n + 1);
 
       if (songHistoryOpenRef.current) {
         void loadSongHistoryRef.current();
       }
     },
-    [],
+    [flushPendingHistorySeek],
   );
 
   const loadSongHistory = useCallback(async () => {
@@ -1664,6 +1846,38 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   const loadSongHistoryRef = useRef(loadSongHistory);
   loadSongHistoryRef.current = loadSongHistory;
+
+  // Refresh playlist play counts from History (playlist-scoped, not Suno).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const app = getApp();
+      if (!app?.listener?.listSongHistory) return;
+      try {
+        const [rows, seekHitIds] = await Promise.all([
+          app.listener.listSongHistory(),
+          app.listener.listSongHistorySeekHitEntryIds
+            ? app.listener.listSongHistorySeekHitEntryIds()
+            : Promise.resolve([] as number[]),
+        ]);
+        if (cancelled) return;
+        const entries = normalizeSongHistoryRows(rows);
+        const seekHits = new Set(Array.isArray(seekHitIds) ? seekHitIds : []);
+        const byPlaylist = aggregatePlaylistSongPlayStats(entries, seekHits);
+        const map = new Map<number, number>();
+        for (const stats of byPlaylist.values()) {
+          if (stats.playlistId !== selectedArtistId) continue;
+          map.set(stats.songId, displayPlayCount(stats, playerSettings.playCountDisplay));
+        }
+        setPlayCountsBySongId(map);
+      } catch {
+        if (!cancelled) setPlayCountsBySongId(new Map());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [playerSettings.playCountDisplay, playCountsNonce, selectedArtistId]);
 
   useEffect(() => {
     songHistoryOpenRef.current = songHistoryOpen;
@@ -1702,6 +1916,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       if (result?.ok && result.data) {
         const entry = normalizeSongHistoryEntry(result.data);
         activeHistoryEntryIdRef.current = entry?.id ?? null;
+        setPlayCountsNonce((n) => n + 1);
       }
 
       if (songHistoryOpenRef.current) {
@@ -1746,6 +1961,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           return;
         }
       }
+
+      // A direct playback action supersedes silent / radio pseudo-tracks. Cancel
+      // their clocks without auto-advancing — this playSong call owns the next
+      // trajectory already.
+      zen.cancel();
+      radio.cancel();
 
       if (!detour) {
         interruptReturnSongRef.current = null;
@@ -1900,16 +2121,138 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         onError: onAudioError,
       });
     },
-    [beginPlaybackHistory, markSongAvailability, probeLikedSongAvailability, selectedArtistId, vcSessionSkippedIds],
+    [
+      beginPlaybackHistory,
+      markSongAvailability,
+      probeLikedSongAvailability,
+      selectedArtistId,
+      vcSessionSkippedIds,
+      zen.cancel,
+      radio.cancel,
+    ],
   );
 
   const primaryQueueOptions = useCallback(
-    (): { shuffle: boolean; repeatMode: RepeatMode; sessionSkippedIds: Set<number> } => ({
-      shuffle,
-      repeatMode,
-      sessionSkippedIds: vcSessionSkippedIds,
-    }),
+    (): {
+      shuffle: boolean;
+      repeatMode: RepeatMode;
+      sessionSkippedIds: Set<number>;
+      shuffleStrategy: typeof ACTIVE_SHUFFLE_STRATEGY;
+      shuffleBag: ShuffleBagState;
+      shuffleScopeKey: string;
+    } => {
+      const primary = detoursRef.current.primary;
+      return {
+        shuffle,
+        repeatMode,
+        sessionSkippedIds: vcSessionSkippedIds,
+        shuffleStrategy: ACTIVE_SHUFFLE_STRATEGY,
+        shuffleBag: playlistShuffleBagRef.current,
+        shuffleScopeKey:
+          primary != null ? `playlist:${primary.artistId}` : 'playlist',
+      };
+    },
     [repeatMode, shuffle, vcSessionSkippedIds],
+  );
+
+  // Fresh without-replacement cycle when playlist shuffle is toggled off.
+  useEffect(() => {
+    if (!shuffle) {
+      clearShuffleBag(playlistShuffleBagRef.current);
+    }
+  }, [shuffle]);
+
+  /**
+   * Super Shuffle session lifecycle: snapshot the eligible library once on start.
+   * Do not rebuild when sidebar membership changes mid-session — that waits until
+   * the user turns Super Shuffle off and on again.
+   */
+  useEffect(() => {
+    if (!superShuffleEnabled) {
+      clearShuffleBag(superShuffleBagRef.current, 'super');
+      superShuffleSessionPoolRef.current = null;
+      superShuffleSnapshotPromiseRef.current = null;
+      return;
+    }
+
+    clearShuffleBag(superShuffleBagRef.current, 'super');
+    let cancelled = false;
+    const playlistIds = sidebarLibrary.displayArtists.map((artist) => artist.id);
+    const snapshotPromise = loadSuperShufflePool(playlistIds).then((entries) => {
+      if (!cancelled) {
+        superShuffleSessionPoolRef.current = entries;
+      }
+      return entries;
+    });
+    superShuffleSnapshotPromiseRef.current = snapshotPromise;
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- capture displayArtists only at session start
+  }, [superShuffleEnabled]);
+
+  /** Await the session snapshot (built at Super Shuffle start). */
+  const getSuperShuffleSessionPool = useCallback(async (): Promise<SuperShuffleEntry<SongRow>[]> => {
+    if (superShuffleSessionPoolRef.current) return superShuffleSessionPoolRef.current;
+    if (superShuffleSnapshotPromiseRef.current) {
+      return superShuffleSnapshotPromiseRef.current;
+    }
+    return [];
+  }, []);
+
+  /**
+   * Play a Super Shuffle pick after confirming it still exists in its playlist.
+   * Returns false when the song was deleted / missing so the caller can skip ahead.
+   */
+  const tryPlaySuperShuffleEntry = useCallback(
+    async (entry: SuperShuffleEntry<SongRow>): Promise<boolean> => {
+      const app = getApp();
+      if (!app) return false;
+
+      const { playlistId } = entry;
+      const songRows = await app.listener.listSongs(playlistId);
+      const liveSong = songRows.find((row) => row.id === entry.song.id) ?? null;
+      // Deleted or removed from the playlist since the session snapshot — skip.
+      if (!liveSong) return false;
+
+      const primary = detoursRef.current.primary;
+      const needsPlaylistUiSwitch = selectedArtistId !== playlistId;
+      const needsPrimaryPlaylistSwitch = primary?.artistId !== playlistId;
+
+      if (needsPlaylistUiSwitch) {
+        const nextPlaylistKey = playlistKeyForArtistId(playlistId);
+        const orderState = app.listener.getPlaylistOrderState
+          ? await app.listener.getPlaylistOrderState(
+              nextPlaylistKey,
+              songRows.map((row) => row.id),
+            )
+          : null;
+        const nextCustomOrderIds =
+          orderState?.ok && orderState.data?.hasCustomOrder ? orderState.data.songIds : null;
+
+        skipNextPlaylistReloadRef.current = true;
+        setSelectedArtistId(playlistId);
+        setSongs(songRows);
+        setCustomOrderIds(nextCustomOrderIds);
+        setSort(nextCustomOrderIds ? 'custom' : 'order', 'asc');
+        setSortDurationsSnapshot({});
+      }
+
+      if (needsPrimaryPlaylistSwitch) {
+        // Crossing playlists resets consumed On Deck ids for the new traversal.
+        playbackSession.setPrimaryContext(playlistId, liveSong.id);
+      }
+
+      playbackSession.setActiveRole('primary');
+      playbackSession.updatePrimaryAnchor(liveSong.id);
+      await playSong(liveSong, {
+        detour: true,
+        role: 'primary',
+      });
+      return true;
+    },
+    [playSong, playbackSession, selectedArtistId, setSort],
   );
 
   const ensurePrimaryPlaybackContext = useCallback(() => {
@@ -1931,7 +2274,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         ordered = await loadOrderedPlaylistSongs(primary.artistId);
         song = ordered.find((row) => row.id === songId) ?? null;
       }
-      if (!song) return;
+      if (!song) {
+        // Song disappeared — skip forward rather than stalling transport.
+        await advancePrimaryPlaylistRef.current(songId, primary.consumedSongIds);
+        return;
+      }
       await playSong(song, {
         ...options,
         detour: options.detour ?? true,
@@ -1946,31 +2293,88 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       const primary = detoursRef.current.primary;
       if (!primary) return;
 
+      // Super Shuffle: draw from the session snapshot; skip deleted picks.
+      if (superShuffleEnabled) {
+        const pool = await getSuperShuffleSessionPool();
+        const excludeSongIds = new Set<number>([
+          ...vcSessionSkippedIds,
+          ...consumedSongIds,
+        ]);
+        let currentId: number | null = anchorSongId;
+
+        for (let attempt = 0; attempt < 32; attempt += 1) {
+          const pick = pickSuperShuffleEntry(pool, {
+            currentSongId: currentId,
+            excludeSongIds,
+            repeatMode,
+            shuffleStrategy: ACTIVE_SHUFFLE_STRATEGY,
+            shuffleBag: superShuffleBagRef.current,
+          });
+          if (!pick) return;
+
+          const played = await tryPlaySuperShuffleEntry(pick);
+          if (played) return;
+
+          // Missing since snapshot — treat like a skip and draw again.
+          excludeSongIds.add(pick.song.id);
+          currentId = pick.song.id;
+        }
+        return;
+      }
+
       const ordered =
         primary.artistId === selectedArtistId
           ? sortedSongsRef.current
           : await loadOrderedPlaylistSongs(primary.artistId);
-      const nextSongId = pickNextPrimarySongId(
-        ordered,
-        anchorSongId,
-        primaryQueueOptions(),
-        consumedSongIds,
-      );
-      if (nextSongId == null) return;
-      const nextSong = ordered.find((row) => row.id === nextSongId);
-      if (!nextSong) return;
-      playbackSession.setActiveRole('primary');
-      playbackSession.updatePrimaryAnchor(nextSong.id);
-      const restartCurrent =
-        nextSong.id === playingSongIdRef.current && primaryQueueOptions().repeatMode === 'one';
-      await playSong(nextSong, {
-        detour: true,
-        role: 'primary',
-        startAt: restartCurrent ? 0 : undefined,
-      });
+
+      let cursorId = anchorSongId;
+      let consumed = [...consumedSongIds];
+
+      for (let attempt = 0; attempt < 32; attempt += 1) {
+        const nextSongId = pickNextPrimarySongId(
+          ordered,
+          cursorId,
+          primaryQueueOptions(),
+          consumed,
+        );
+        if (nextSongId == null) return;
+
+        const nextSong = ordered.find((row) => row.id === nextSongId);
+        if (!nextSong) {
+          // Id was in the pick set but row is gone — skip and continue.
+          consumed = [...consumed, nextSongId];
+          cursorId = nextSongId;
+          continue;
+        }
+
+        playbackSession.setActiveRole('primary');
+        playbackSession.updatePrimaryAnchor(nextSong.id);
+        const restartCurrent =
+          nextSong.id === playingSongIdRef.current && primaryQueueOptions().repeatMode === 'one';
+        await playSong(nextSong, {
+          detour: true,
+          role: 'primary',
+          startAt: restartCurrent ? 0 : undefined,
+        });
+        return;
+      }
     },
-    [playSong, playbackSession, primaryQueueOptions, selectedArtistId],
+    [
+      getSuperShuffleSessionPool,
+      playSong,
+      tryPlaySuperShuffleEntry,
+      playbackSession,
+      primaryQueueOptions,
+      selectedArtistId,
+      superShuffleEnabled,
+      vcSessionSkippedIds,
+      repeatMode,
+    ],
   );
+
+  useEffect(() => {
+    advancePrimaryPlaylistRef.current = advancePrimaryPlaylist;
+  }, [advancePrimaryPlaylist]);
 
   const handleDetourPlaybackFailure = useCallback(async () => {
     const role = detoursRef.current.activeRole;
@@ -1994,6 +2398,15 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       const primary = detoursRef.current.primary;
       if (!primary) return;
       await advancePrimaryPlaylist(primary.anchorSongId, primary.consumedSongIds);
+      return;
+    }
+
+    // Primary (including Super Shuffle): missing / failed track → force next.
+    if (role === 'primary') {
+      const primary = detoursRef.current.primary;
+      const currentSongId = playingSongIdRef.current;
+      if (!primary || currentSongId == null) return;
+      await advancePrimaryPlaylist(currentSongId, primary.consumedSongIds);
     }
   }, [advancePrimaryPlaylist, playSong, playbackSession]);
 
@@ -2185,6 +2598,66 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       }
     }
 
+    // Listener-only between-track breaks. VC has its own host-directed pause
+    // policy — do not stack independent clocks on top of it.
+    const canInsertListeningBreak = !vc.vcOpen && repeatMode !== 'one';
+    const detours = detoursRef.current;
+    const hasFollowingTrack = canInsertListeningBreak
+      ? detours.activeRole === 'play-now'
+        ? detours.interrupt != null
+        : detours.activeRole === 'on-deck'
+          ? Boolean(
+              detours.primary && pickNextSongId(detours.primary.anchorSongId) != null,
+            )
+          : Boolean(
+              detours.onDeck ||
+                (detours.primary && pickNextSongId(currentSongId) != null),
+            )
+      : false;
+
+    // Zen: every three completed songs → silence (or half-silence around Radio).
+    let zenSilenceSeconds: number | null = null;
+    if (playerSettings.zenModeEnabled && canInsertListeningBreak) {
+      zenCompletedSongsRef.current += 1;
+      if (shouldStartZenInterlude(zenCompletedSongsRef.current)) {
+        zenCompletedSongsRef.current = 0;
+        if (hasFollowingTrack) {
+          zenSilenceSeconds = pickZenSilenceSeconds();
+        }
+      }
+    }
+
+    // Radio: coin-flip announcement after a finished song (compatible with Zen).
+    const wantRadio =
+      playerSettings.radioModeEnabled &&
+      canInsertListeningBreak &&
+      hasFollowingTrack &&
+      shouldStartRadioBreak();
+
+    if (wantRadio) {
+      // Composite breaks run entirely on the radio sequencer so Zen's half
+      // silences bookend the announcement without two clocks fighting.
+      zen.cancel();
+      const weather = await fetchRadioWeatherSnapshot();
+      const kind = pickRadioAnnouncementKind();
+      const text = buildRadioAnnouncementText(kind, weather);
+      const profile = resolveRadioVoiceProfile(playerSettings.radioVoiceId);
+      radio.begin(
+        buildRadioBreakSegments({
+          announcementText: text,
+          announcementKind: kind,
+          zenSilenceSeconds,
+        }),
+        profile,
+      );
+      return;
+    }
+
+    if (zenSilenceSeconds != null) {
+      zen.begin(zenSilenceSeconds);
+      return;
+    }
+
     advancingFromEndedRef.current = true;
     try {
       playbackSession.handleTrackEnded(currentSongId, {
@@ -2195,11 +2668,19 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     }
   }, [
     isCurrentTrackRepeatable,
+    pickNextSongId,
     playbackSession,
+    playerSettings.radioModeEnabled,
+    playerSettings.radioVoiceId,
+    playerSettings.zenModeEnabled,
+    radio.begin,
     releaseScheduledPlayLock,
+    repeatMode,
     specialPlay,
     vc.activeConfig.specialPlayStyle,
     vc.vcOpen,
+    zen.begin,
+    zen.cancel,
   ]);
 
   useEffect(() => {
@@ -2462,6 +2943,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     if (!app?.listener?.clearSongHistory) return;
     await app.listener.clearSongHistory();
     setSongHistoryEntries([]);
+    setPlayCountsNonce((n) => n + 1);
     setClearSongHistoryOpen(false);
   }, []);
 
@@ -2531,8 +3013,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         setSelectedArtistId(artistId);
         setSongs(songRows);
         setCustomOrderIds(customOrderIds);
-        setSortColumn(customOrderIds ? 'custom' : 'order');
-        setSortDirection('asc');
+        setSort(customOrderIds ? 'custom' : 'order', 'asc');
         setSortDurationsSnapshot({});
         await showSongPage(song);
         return true;
@@ -2726,6 +3207,11 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
   const handleRemove = async () => {
     if (selectedArtistId === null || isLikedSongsArtist(selectedArtistId)) {
+      return;
+    }
+    // Soft guard — don't unsubscribe the artist that owns what's in the transport.
+    if (isNowPlayingLibraryEntry(playingSongId, playingSourcePlaylistId, selectedArtistId)) {
+      addToast(NOW_PLAYING_ARTIST_REMOVE_TOAST);
       return;
     }
     setBusy(true);
@@ -2945,10 +3431,18 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     [playingSong?.artist_id, previewSong?.artist_id, selectedArtistId],
   );
 
-  const handleRequestRemoveLibraryPlaylist = useCallback((artist: ArtistRow) => {
-    setLibraryPlaylistRemoveTarget(artist);
-    setLibrarySidebarContextMenu(null);
-  }, []);
+  const handleRequestRemoveLibraryPlaylist = useCallback(
+    (artist: ArtistRow) => {
+      if (isNowPlayingLibraryEntry(playingSongId, playingSourcePlaylistId, artist.id)) {
+        addToast(NOW_PLAYING_PLAYLIST_REMOVE_TOAST);
+        setLibrarySidebarContextMenu(null);
+        return;
+      }
+      setLibraryPlaylistRemoveTarget(artist);
+      setLibrarySidebarContextMenu(null);
+    },
+    [addToast, playingSongId, playingSourcePlaylistId],
+  );
 
   const handleConfirmRemoveLibraryPlaylist = useCallback(async () => {
     const target = libraryPlaylistRemoveTarget;
@@ -2956,6 +3450,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
     const entryType = sidebarEntryType(target);
     if (entryType !== 'playlist') return;
+
+    if (isNowPlayingLibraryEntry(playingSongId, playingSourcePlaylistId, target.id)) {
+      addToast(NOW_PLAYING_PLAYLIST_REMOVE_TOAST);
+      setLibraryPlaylistRemoveTarget(null);
+      return;
+    }
 
     const app = getApp();
     if (!app) return;
@@ -3001,6 +3501,8 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     clearPlaybackForRemovedPlaylist,
     libraryPlaylistRemoveTarget,
     loadLibrary,
+    playingSongId,
+    playingSourcePlaylistId,
     vc.activeConfig.defaultSubmissionPlaylistId,
     vc.vcOpen,
   ]);
@@ -3089,7 +3591,15 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         const nextSongId = pickNextPlayableSongId(
           sortedSongsRef.current.filter((row) => row.id !== songId),
           songId,
-          { shuffle, repeatMode, sessionSkippedIds: vcSessionSkippedIds },
+          {
+            shuffle,
+            repeatMode,
+            sessionSkippedIds: vcSessionSkippedIds,
+            shuffleStrategy: ACTIVE_SHUFFLE_STRATEGY,
+            shuffleBag: playlistShuffleBagRef.current,
+            shuffleScopeKey:
+              selectedArtistId != null ? `playlist:${selectedArtistId}` : 'playlist',
+          },
         );
         if (nextSongId != null) {
           const nextSong = sortedSongsRef.current.find((row) => row.id === nextSongId);
@@ -3108,12 +3618,17 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         setMainContentView('artist');
       }
     },
-    [playingSongId, previewSongId, repeatMode, shuffle, vcSessionSkippedIds],
+    [playingSongId, previewSongId, repeatMode, selectedArtistId, shuffle, vcSessionSkippedIds],
   );
 
   const handlePlaylistSongRemove = useCallback(
     async (song: SongRow) => {
       setPlaylistContextMenu(null);
+      // Soft guard — don't pull the transport track out from under itself.
+      if (isNowPlayingSong(playingSongId, song.id)) {
+        addToast(NOW_PLAYING_SONG_REMOVE_TOAST);
+        return;
+      }
       if (isVcPlayLockBlockingSongRemoval(playbackSession.isPlayLockActive(), playingSongId, song.id)) {
         setError('Cannot remove the currently playing song while Play Lock is on.');
         return;
@@ -3160,7 +3675,14 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         await loadLibrary();
       }
     },
-    [clearPlaybackForRemovedSong, loadLibrary, playingSongId, selectedArtistId],
+    [
+      addToast,
+      clearPlaybackForRemovedSong,
+      loadLibrary,
+      playbackSession,
+      playingSongId,
+      selectedArtistId,
+    ],
   );
 
   const handlePlaylistSongSkip = useCallback(
@@ -3252,6 +3774,12 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       const modal = songToPlaylistModal;
       if (!modal) return;
 
+      // Moving off the source playlist removes the row — block when it's playing.
+      if (isNowPlayingSong(playingSongId, modal.song.id)) {
+        addToast(NOW_PLAYING_SONG_REMOVE_TOAST);
+        return;
+      }
+
       const app = getApp();
       if (!app?.listener.moveSongToUserPlaylist) {
         setError('Restart the app to move songs between playlists.');
@@ -3301,7 +3829,14 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         setBusy(false);
       }
     },
-    [addToast, clearPlaybackForRemovedSong, loadLibrary, selectedArtistId, songToPlaylistModal],
+    [
+      addToast,
+      clearPlaybackForRemovedSong,
+      loadLibrary,
+      playingSongId,
+      selectedArtistId,
+      songToPlaylistModal,
+    ],
   );
 
   const handlePlaylistSongRestore = useCallback(
@@ -3423,7 +3958,13 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
           ordered = applyCustomPlaylistOrder(songRows, customOrderIds);
         } else {
           const column = sortColumn === 'custom' ? 'order' : sortColumn;
-          ordered = sortPlaylistSongs(songRows, column, sortDirection, sortDurationsSnapshot);
+          ordered = sortPlaylistSongs(
+            songRows,
+            column,
+            sortDirection,
+            sortDurationsSnapshot,
+            playCountsBySongId,
+          );
         }
       } else {
         ordered = sortPlaylistSongs(songRows, 'order', 'asc', {});
@@ -3437,6 +3978,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
     },
     [
       customOrderIds,
+      playCountsBySongId,
       playSong,
       playingSongId,
       selectedArtistId,
@@ -3450,6 +3992,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const handleSeek = (time: number) => {
     if (showingYoutubePage && playingSongId != null && activeSongPage?.id === playingSongId) {
       const clamped = duration > 0 ? Math.min(duration, Math.max(0, time)) : Math.max(0, time);
+      noteHistorySeek(clamped);
       if (vcYoutubeCaptureActive) {
         setCurrentTime(clamped);
         return;
@@ -3461,6 +4004,7 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
     if (showingSoundcloudPage && playingSongId != null && activeSongPage?.id === playingSongId) {
       const clamped = duration > 0 ? Math.min(duration, Math.max(0, time)) : Math.max(0, time);
+      noteHistorySeek(clamped);
       if (vcSoundcloudCaptureActive) {
         setCurrentTime(clamped);
         return;
@@ -3472,7 +4016,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
 
     const audio = audioRef.current;
     if (!audio || duration <= 0) return;
-    audio.currentTime = Math.min(duration, Math.max(0, time));
+    const clamped = Math.min(duration, Math.max(0, time));
+    noteHistorySeek(clamped);
+    audio.currentTime = clamped;
     setCurrentTime(audio.currentTime);
   };
 
@@ -3518,6 +4064,69 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
   const playerBarTransport = useMemo(
     () => createPlayerBarTransportHandlers(playbackSession),
     [playbackSession],
+  );
+
+  const handleToggleZenMode = useCallback(() => {
+    const nextEnabled = !playerSettings.zenModeEnabled;
+    zenCompletedSongsRef.current = 0;
+    setZenModeEnabled(nextEnabled);
+    if (!nextEnabled && zenInterludeActive) {
+      // Turning Zen off from either the menu or its Now Playing popover also
+      // removes the current silence and resumes the deferred queue advance.
+      zen.removeAndContinue();
+    }
+  }, [
+    playerSettings.zenModeEnabled,
+    setZenModeEnabled,
+    zen.removeAndContinue,
+    zenInterludeActive,
+  ]);
+
+  const handleToggleRadioMode = useCallback(() => {
+    const nextEnabled = !playerSettings.radioModeEnabled;
+    setRadioModeEnabled(nextEnabled);
+    if (!nextEnabled && radioBreakActive) {
+      radio.removeAndContinue();
+    }
+  }, [
+    playerSettings.radioModeEnabled,
+    radio.removeAndContinue,
+    radioBreakActive,
+    setRadioModeEnabled,
+  ]);
+
+  const handleBetweenTrackPrevious = useCallback(() => {
+    // Previous takes over the trajectory, so cancel without auto-advancing.
+    zen.cancel();
+    radio.cancel();
+    playerBarTransport.onPrevious();
+  }, [playerBarTransport, radio.cancel, zen.cancel]);
+
+  const handleBetweenTrackTogglePlayPause = useCallback(() => {
+    if (radioBreakActive) {
+      radio.togglePlaying();
+      return;
+    }
+    zen.togglePlaying();
+  }, [radio.togglePlaying, radioBreakActive, zen.togglePlaying]);
+
+  const handleBetweenTrackNext = useCallback(() => {
+    if (radioBreakActive) {
+      radio.removeAndContinue();
+      return;
+    }
+    zen.removeAndContinue();
+  }, [radio.removeAndContinue, radioBreakActive, zen.removeAndContinue]);
+
+  const handleBetweenTrackSeek = useCallback(
+    (seconds: number) => {
+      if (radioBreakActive) {
+        radio.seek(seconds);
+        return;
+      }
+      zen.seek(seconds);
+    },
+    [radio.seek, radioBreakActive, zen.seek],
   );
 
   // --- YouTube mini-player compliance -------------------------------------
@@ -3691,6 +4300,17 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
       const app = getApp();
       if (!app) return;
 
+      // Unliking while viewing Liked Songs removes the row — block if it's playing.
+      const currentlyLiked = likedSongIds.has(song.id) || song.liked_id != null;
+      if (
+        currentlyLiked &&
+        isLikedPlaylist &&
+        isNowPlayingSong(playingSongId, song.id)
+      ) {
+        addToast(NOW_PLAYING_SONG_REMOVE_TOAST);
+        return;
+      }
+
       setLikeBusy(true);
       const result = await app.listener.toggleLikeSong(song.id);
       setLikeBusy(false);
@@ -3719,7 +4339,15 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         setSongs((prev) => prev.filter((row) => row.id !== song.id));
       }
     },
-    [addToast, canLikeSong, isLikedPlaylist, loadLibrary, previewSongId],
+    [
+      addToast,
+      canLikeSong,
+      isLikedPlaylist,
+      likedSongIds,
+      loadLibrary,
+      playingSongId,
+      previewSongId,
+    ],
   );
 
   const handleToggleLike = async () => {
@@ -3950,23 +4578,60 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
         <section ref={listenerControlsRef} className="listener-controls panel">
           <PlayerBar
             disabled={!songs.length || activeSongPage == null}
-            isPlaying={playingSongId != null && isPlaying}
-            nowPlayingTitle={playingSong?.title ?? activeSongPage?.title ?? ''}
-            nowPlayingArtist={nowPlayingArtistName}
+            isPlaying={
+              radio.breakState?.running ??
+              zen.interlude?.running ??
+              (playingSongId != null && isPlaying)
+            }
+            nowPlayingTitle={
+              radio.breakState?.title ??
+              (zen.interlude
+                ? `${zen.interlude.durationSeconds} seconds of Silence…`
+                : (playingSong?.title ?? activeSongPage?.title ?? ''))
+            }
+            nowPlayingArtist={betweenTrackBreakActive ? '' : nowPlayingArtistName}
             nowPlayingCoverUrl={playingSong?.cover_url ?? activeSongPage?.cover_url ?? null}
-            onRevealNowPlaying={playingSongId != null ? handleRevealNowPlaying : undefined}
+            onRevealNowPlaying={
+              !betweenTrackBreakActive && playingSongId != null
+                ? handleRevealNowPlaying
+                : undefined
+            }
             shuffle={shuffle}
+            superShuffle={superShuffleEnabled}
             repeatMode={repeatMode}
             volume={volume}
-            currentTime={playingSongId != null ? currentTime : 0}
-            duration={transportDuration}
+            currentTime={
+              radio.breakState?.elapsedSeconds ??
+              zen.interlude?.elapsedSeconds ??
+              (playingSongId != null ? currentTime : 0)
+            }
+            duration={
+              radio.breakState?.durationSeconds ??
+              zen.interlude?.durationSeconds ??
+              transportDuration
+            }
             onToggleShuffle={playerBarTransport.onToggleShuffle}
-            onPrevious={playerBarTransport.onPrevious}
-            onTogglePlayPause={playerBarTransport.onTogglePlayPause}
-            onNext={playerBarTransport.onNext}
+            onToggleSuperShuffle={() => {
+              setSuperShuffleEnabled((enabled) => !enabled);
+            }}
+            onPrevious={
+              betweenTrackBreakActive
+                ? handleBetweenTrackPrevious
+                : playerBarTransport.onPrevious
+            }
+            onTogglePlayPause={
+              betweenTrackBreakActive
+                ? handleBetweenTrackTogglePlayPause
+                : playerBarTransport.onTogglePlayPause
+            }
+            onNext={
+              betweenTrackBreakActive
+                ? handleBetweenTrackNext
+                : playerBarTransport.onNext
+            }
             onCycleRepeat={playerBarTransport.onCycleRepeat}
             onVolumeChange={setVolume}
-            onSeek={playerBarTransport.onSeek}
+            onSeek={betweenTrackBreakActive ? handleBetweenTrackSeek : playerBarTransport.onSeek}
             embeddedVisualizerActive={visualizer.embeddedActive}
             canUseVisualizer={visualizer.canVisualize && !vc.vcOpen}
             onToggleEmbeddedVisualizer={visualizer.toggleEmbedded}
@@ -3980,6 +4645,10 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
             onVcLiveClick={() => setVcCloseConfirmOpen(true)}
             vcLive={vc.vcOpen}
             vcDisabled={!songs.length}
+            zenModeActive={playerSettings.zenModeEnabled}
+            onToggleZenMode={handleToggleZenMode}
+            radioModeActive={playerSettings.radioModeEnabled}
+            onToggleRadioMode={handleToggleRadioMode}
             audioEffectsOpen={effectsLab.panelVisible}
             onToggleAudioEffects={toggleAudioEffects}
             seekTimeDisplay={playerSettings.seekTimeDisplay}
@@ -4054,6 +4723,9 @@ export function ListenerMode({ onOpenSettings }: { onOpenSettings: () => void })
               sortDirection={sortDirection}
               onSort={toggleSort}
               hasCustomOrder={hasCustomOrder}
+              yearColumnMode={tableView.yearColumnMode}
+              playCountsBySongId={playCountsBySongId}
+              onToggleYearPlaysColumn={tableView.toggleYearPlaysColumn}
               emptyMessage={
                 isLikedPlaylist
                   ? 'No liked songs yet.'

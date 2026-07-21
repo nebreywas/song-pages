@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { PlayerOnDeckTitleSuffix, type PlayerOnDeckInfo } from './PlayerOnDeckIndicator';
+import { PlayerRadioIndicator } from './PlayerRadioIndicator';
+import { PlayerZenIndicator } from './PlayerZenIndicator';
 
 type ScrollingNowPlayingProps = {
   title: string;
@@ -7,6 +9,10 @@ type ScrollingNowPlayingProps = {
   coverUrl: string | null;
   onDeck?: PlayerOnDeckInfo | null;
   onClearOnDeck?: () => void;
+  zenModeActive?: boolean;
+  onRemoveZenMode?: () => void;
+  radioModeActive?: boolean;
+  onRemoveRadioMode?: () => void;
   onCoverDoubleActivate?: () => void;
   /** Single click/press on the song title — jump playlist view to the playing row. */
   onTitleActivate?: () => void;
@@ -21,6 +27,10 @@ export function ScrollingNowPlaying({
   coverUrl,
   onDeck = null,
   onClearOnDeck,
+  zenModeActive = false,
+  onRemoveZenMode,
+  radioModeActive = false,
+  onRemoveRadioMode,
   onCoverDoubleActivate,
   onTitleActivate,
   onRevealOnDeck,
@@ -110,6 +120,23 @@ export function ScrollingNowPlaying({
       <div className="player-now-playing-meta">
         <div className="player-now-playing-label-row">
           <span className="player-now-playing-label">Now playing</span>
+          {/* Active modes read as "Now playing • zen • radio". */}
+          {zenModeActive && onRemoveZenMode ? (
+            <>
+              <span className="player-now-playing-mode-sep" aria-hidden="true">
+                •
+              </span>
+              <PlayerZenIndicator onRemove={onRemoveZenMode} />
+            </>
+          ) : null}
+          {radioModeActive && onRemoveRadioMode ? (
+            <>
+              <span className="player-now-playing-mode-sep" aria-hidden="true">
+                •
+              </span>
+              <PlayerRadioIndicator onRemove={onRemoveRadioMode} />
+            </>
+          ) : null}
           {onDeck && onClearOnDeck ? (
             <PlayerOnDeckTitleSuffix
               onDeck={onDeck}
@@ -142,6 +169,8 @@ export function ScrollingNowPlaying({
       <span className="sr-only">
         Now playing: {displayTitle}
         {displayArtist ? ` by ${displayArtist}` : ''}
+        {zenModeActive ? '; Zen mode active' : ''}
+        {radioModeActive ? '; Radio mode active' : ''}
         {onDeck ? `; on deck: ${onDeck.songTitle}` : ''}
       </span>
     </div>

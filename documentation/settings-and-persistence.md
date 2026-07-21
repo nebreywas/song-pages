@@ -18,10 +18,15 @@ Registry of where Song Pages stores configuration, library data, and media on di
 |-----|----------|------------|---------|
 | `ui.theme` | `THEME_SETTING_KEY` in `src/lib/themes.ts` | `useAppTheme` | App light/dark theme |
 | `ui.listenerSidebarCollapsed` | `SIDEBAR_COLLAPSED_KEY` in `ListenerSidebar.tsx` | `ListenerMode` | Listener sidebar collapsed state |
+| `ui.artist2.songSectionCollapse` | `SONG_SECTION_COLLAPSE_SETTINGS_KEY` in `shared/artist2/songEditorSectionCollapse.ts` | `useSongSectionCollapse` | Per-song Song Editor section collapse flags |
+| `ui.artist2.albumSectionCollapse` | `ALBUM_SECTION_COLLAPSE_SETTINGS_KEY` in `shared/artist2/albumEditorSectionCollapse.ts` | `useAlbumSectionCollapse` | Per-album Album Editor section collapse flags |
+| `ui.artist2.playlistSectionCollapse` | `PLAYLIST_SECTION_COLLAPSE_SETTINGS_KEY` in `shared/artist2/playlistEditorSectionCollapse.ts` | `usePlaylistSectionCollapse` | Per-playlist Playlist Editor section collapse flags |
 | `ui.listenerSidebarWidth` | `SIDEBAR_WIDTH_KEY` in `ListenerSidebar.tsx` | `ListenerMode` | Listener sidebar width (px) |
 | `ui.listenerSidebarOrder` | `SIDEBAR_LIBRARY_ORDER_KEY` in `shared/listener/sidebarLibraryOrder.ts` | `useListenerSidebarLibraryLayout` | Manual sidebar row order (artist ids) |
 | `ui.listenerSidebarSort` | `SIDEBAR_LIBRARY_SORT_KEY` in `shared/listener/sidebarLibraryOrder.ts` | `useListenerSidebarLibraryLayout` | Sidebar sort column + direction |
-| `ui.listenerPlayer` | `LISTENER_PLAYER_SETTINGS_KEY` in `shared/listener/playerSettings.ts` | `useListenerPlayerSettings` | Listener player chrome (seek time label mode) |
+| `ui.listenerPlaylistColumns` | `PLAYLIST_COLUMN_LAYOUT_KEY` in `shared/listener/playlistColumnLayout.ts` | `usePlaylistColumnWidths` | Global playlist column width ratios by layout profile |
+| `ui.listenerPlaylistTableView` | `PLAYLIST_TABLE_VIEW_SETTINGS_KEY` in `shared/listener/playlistTableView.ts` | `usePlaylistTableView` | Per-playlist Year↔Plays column mode + sort column/direction |
+| `ui.listenerPlayer` | `LISTENER_PLAYER_SETTINGS_KEY` in `shared/listener/playerSettings.ts` | `useListenerPlayerSettings` | Listener player preferences (seek label, Zen, Radio, voice, song-page display, play-count display mode) |
 | `ui.listenerLyrics` | `LISTENER_LYRICS_DISPLAY_SETTINGS_KEY` in `shared/listener/lyricsDisplaySettings.ts` | `useListenerLyricsDisplaySettings` | Lyrics display options (e.g. remove brackets) |
 | `ui.liveDebug` | `LIVE_DEBUG_SETTINGS_KEY` in `shared/liveDebug/settings.ts` | `useLiveDebugSettings` | Live Debug HUD toggle (mirrored to VC state) |
 | `vc.lastConfig` | `VC_SETTINGS_KEY` in `shared/vcModeTypes.ts` | `useAutoSaveVcConfig`, designer flush on close | Active VC surface layout, assignments, grid design |

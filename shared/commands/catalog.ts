@@ -85,6 +85,27 @@ export const BUILTIN_COMMAND_CATALOG: CommandDefinition[] = [
     legacyAction: 'alareSpeedReset',
   },
   {
+    id: 'lyric-scroll-forward',
+    label: 'Lyric Scroll Forward',
+    category: 'lyrics',
+    availability: { vcMode: true },
+    legacyAction: 'lyricScrollForward',
+  },
+  {
+    id: 'lyric-scroll-back',
+    label: 'Lyric Scroll Back',
+    category: 'lyrics',
+    availability: { vcMode: true },
+    legacyAction: 'lyricScrollBack',
+  },
+  {
+    id: 'lyric-scroll-reset',
+    label: 'Lyric Scroll Reset',
+    category: 'lyrics',
+    availability: { vcMode: true },
+    legacyAction: 'lyricScrollReset',
+  },
+  {
     id: 'change-visualizer',
     label: 'Change Visualizer',
     description: 'Randomize the active visualizer plugin on the VC surface.',
